@@ -54,6 +54,11 @@ public class PseSignalDbContext : DbContext
             entity.Property(e => e.CompanyName).HasMaxLength(160).IsRequired();
             entity.Property(e => e.Sector).HasMaxLength(80).IsRequired();
             entity.Property(e => e.RecentDisclosuresJson).IsRequired();
+
+            // Robust liquidity columns. Decimal precision is explicit because SQLite ignores it
+            // but a future PostgreSQL target will not.
+            entity.Property(e => e.AvgTurnover20dPhp).HasPrecision(18, 2);
+            entity.Property(e => e.MedianTurnover20dPhp).HasPrecision(18, 2);
             entity.Property(e => e.WeinsteinStage).HasMaxLength(16);
             entity.HasIndex(e => new { e.TradeDate, e.Ticker }).IsUnique();
             entity.HasIndex(e => e.Ticker);
@@ -173,6 +178,7 @@ public class PseSignalDbContext : DbContext
             entity.Property(e => e.Horizon).HasConversion<string>().HasMaxLength(16).IsRequired();
             entity.Property(e => e.WeightsJson).IsRequired();
             entity.Property(e => e.FeatureStatsJson).IsRequired();
+            entity.Property(e => e.LiveDrift).HasConversion<string>().HasMaxLength(16).IsRequired();
             entity.HasIndex(e => e.Horizon).IsUnique();
         });
     }

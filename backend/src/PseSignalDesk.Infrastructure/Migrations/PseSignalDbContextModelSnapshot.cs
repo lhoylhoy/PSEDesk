@@ -579,6 +579,9 @@ namespace PseSignalDesk.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("ActiveTradingDays20d")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("Atr14")
                         .HasColumnType("TEXT");
 
@@ -586,6 +589,7 @@ namespace PseSignalDesk.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("AvgTurnover20dPhp")
+                        .HasPrecision(18, 2)
                         .HasColumnType("TEXT");
 
                     b.Property<decimal?>("Beta252d")
@@ -630,6 +634,10 @@ namespace PseSignalDesk.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<decimal?>("MaxDrawdown252dPct")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("MedianTurnover20dPhp")
+                        .HasPrecision(18, 2)
                         .HasColumnType("TEXT");
 
                     b.Property<decimal?>("NetForeignTodayPhp")
@@ -742,6 +750,14 @@ namespace PseSignalDesk.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LiveDrift")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LiveDriftGradedPicks")
                         .HasColumnType("INTEGER");
 
                     b.Property<decimal>("OptimalKellyFractionMultiplier")

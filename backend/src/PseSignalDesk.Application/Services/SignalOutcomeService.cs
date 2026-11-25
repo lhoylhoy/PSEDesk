@@ -399,6 +399,92 @@ public sealed class SignalOutcomeService
     /// <summary>Minimum graded forecasts before the ledger may nudge the live odds.</summary>
     public const int MinimumCalibrationSamples = 20;
 
+    /// <summary>
+    /// The live drift governor's read on this horizon's book. It compares the **rolling**
+    /// record of the last <see cref="LiveDriftSnapshot.WindowPicks"/> graded picks with the
+    /// record the promoted model was accepted on, throttles new risk when the gap clears
+    /// <see cref="LiveDriftPolicy"/>'s two-sigma band, and persists the verdict so a released
+    /// throttle cannot flap back on one lucky week.
+    /// <para>
+    /// A book priced off the structural prior has no promoted record to drift from, so it
+    /// stays <see cref="LiveDriftStatus.STABLE"/>; the calibration offset already handles the
+    /// prior's own forecast error. The read is deliberately cheap enough to run on every
+    /// ticket build: one ledger pass and, only when the verdict or the graded count changed,
+    /// one write.
+    /// </para>
+    /// </summary>
+    public async Task<LiveDriftSnapshot> EvaluateLiveDriftAsync(
+        SignalHorizon horizon,
+        CancellationToken cancellationToken = default)
+    {
+        var runs = await _repository.GetAllRunsAsync(horizon, cancellationToken);
+
+        // Recent form, not a lifetime average: the window is ordered by the session the pick
+        // resolved on, so a book that has just turned is judged on what it did since.
+        var graded = runs
+            .SelectMany(run => run.Items)
+            .Where(item => item.OutcomeStatus != SignalOutcomeStatus.OPEN && item.RealizedNetR is decimal)
+            .OrderByDescending(item => item.OutcomeDate ?? DateOnly.MinValue)
+            .ThenByDescending(item => item.Id)
+            .Take(LiveDriftSnapshot.WindowPicks)
+            .ToList();
+
+        if (graded.Count == 0)
+        {
+            return LiveDriftSnapshot.Stable();
+        }
+
+        var wins = graded.Count(item =>
+            item.OutcomeStatus is SignalOutcomeStatus.WIN_TARGET or SignalOutcomeStatus.EXPIRED_WIN);
+        var realizedWinRate = decimal.Round((decimal)wins / graded.Count, 4, MidpointRounding.AwayFromZero);
+        var rollingExpectancyR = decimal.Round(
+            graded.Average(item => item.RealizedNetR!.Value),
+            4,
+            MidpointRounding.AwayFromZero);
+
+        var model = await _repository.GetTrainedModelAsync(horizon, cancellationToken);
+        if (model is null || !model.IsActive)
+        {
+            return LiveDriftSnapshot.Stable(graded.Count);
+        }
+
+        var status = LiveDriftPolicy.Classify(
+            graded.Count,
+            realizedWinRate,
+            model.ValidationWinRate,
+            rollingExpectancyR,
+            model.ValidationExpectancyR,
+            model.LiveDrift);
+
+        if (model.LiveDrift != status || model.LiveDriftGradedPicks != graded.Count)
+        {
+            model.LiveDrift = status;
+            model.LiveDriftGradedPicks = graded.Count;
+            await _repository.SaveTrainedModelAsync(model, cancellationToken);
+        }
+
+        // A positive gap means the live book is behind the record it was promoted on.
+        var winRateGapPct = decimal.Round(
+            (model.ValidationWinRate - realizedWinRate) * 100m,
+            2,
+            MidpointRounding.AwayFromZero);
+        var expectancyGapR = decimal.Round(
+            model.ValidationExpectancyR - rollingExpectancyR,
+            4,
+            MidpointRounding.AwayFromZero);
+
+        return new LiveDriftSnapshot(
+            status,
+            graded.Count,
+            realizedWinRate,
+            model.ValidationWinRate,
+            rollingExpectancyR,
+            model.ValidationExpectancyR,
+            winRateGapPct,
+            expectancyGapR,
+            LiveDriftPolicy.Describe(status, graded.Count, winRateGapPct, expectancyGapR));
+    }
+
     /// <summary>Pseudo-observations that shrink a small calibration sample toward zero.</summary>
     public const int CalibrationPseudoSamples = 20;
 

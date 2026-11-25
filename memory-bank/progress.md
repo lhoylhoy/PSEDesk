@@ -1,44 +1,51 @@
 # Progress — PSE Signal Desk
 
-**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion, deterministic screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate), server-sized order tickets, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
+**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion, deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **390 backend / 49 frontend tests green**, `tsc --noEmit` + `vite build` green (2026-11-26). Everything feed-dependent is unverified live in this environment (Yahoo/PSE answered 404/429 here); the open security remediation is listed under *Remaining*.
+**Latest verification:** **416 backend / 49 frontend tests green, `npm run build` green** (2026-11-26, accuracy pass + live-drift wiring). Everything feed-dependent is unverified live in this environment (Yahoo/PSE answered 404/429 here); the open security remediation is listed under *Remaining*.
 
-## Latest verification — documentation pass (2026-11-26)
+## Latest verification (2026-11-26 — accuracy pass + live-drift wiring)
 
 | Command | Result |
 | --- | --- |
-| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Failed: 0, Passed: 390, Skipped: 0, Total: 390` (~1 s) |
-| `cd frontend && npm test` | `tests 49 · pass 49 · fail 0` |
-| `cd frontend && npm run build` | `tsc --noEmit && vite build` exit 0, `✓ 129 modules transformed`, `✓ built in <350ms` |
-| `sqlite3 …/pse_signals.db "select slug, chunkcount …"` | 8 built-in documents / 46 chunks |
-| `git ls-files \| wc -l` | 230 tracked, 5531 ignored, clean tree before the doc edits |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 416, Skipped: 0, Total: 416` (~1 s, exit 0) |
+| `cd frontend && npm test` | `tests 49 · pass 49 · fail 0` (≈0.2 s) |
+| `cd frontend && npm run build` | `✓ built in 248ms` (`tsc --noEmit` + Vite, exit 0) |
+| `ls backend/src/PseSignalDesk.Infrastructure/Migrations` | eleven migrations; `20261125212733_AddRobustLiquidityColumns` and `20261125214041_AddLiveDriftState` both present with the expected `Up`/`Down` |
+| `dotnet ef migrations script 20261125212733_AddRobustLiquidityColumns` | `ALTER TABLE "TrainedHorizonModels" ADD "LiveDrift" TEXT NOT NULL DEFAULT 'STABLE'` + `LiveDriftGradedPicks INTEGER NOT NULL DEFAULT 0` |
+| `sqlite3` on a **copy** of `pse_signals.db` | both columns added cleanly; `PRAGMA table_info` ends `LiveDrift TEXT 1 'STABLE'`, `LiveDriftGradedPicks INTEGER 1 0` |
+| `dotnet run` against a throwaway `Data Source=/tmp/psedesk-smoke.db` | all eleven migrations applied on a fresh database; `/health`, `/api/portfolio`, `/api/signals/latest?horizon=WEEK` and `/api/portfolio/order-ticket` each answered `200`; the only logged failure is the expected offline bootstrap refit (`HTTP 404` on every `*.PS` chart) |
+| `dotnet test … --list-tests` | 416 rows over 27 test files |
 
-No source, config, knowledge-base, dependency or migration changed in this pass — only `README.md` and `memory-bank/*.md`.
+Not run: `dotnet ef database update` (startup applies migrations), any network call.
 
 ## What works
 
 ### Platform and invariants
 - [x] Clean Architecture solution (`PseSignalDesk.slnx`) on .NET 10: Domain → Application → Infrastructure → WebApi, plus one xUnit test project with no network access.
 - [x] Domain model (`DailyMarketSnapshot`, `StockDailyMetric`, `SignalRun`, `SignalItem`, `SignalDrop`, `KnowledgeDocument`, `KnowledgeChunk`, `PortfolioAccount`, `PortfolioTrade`, `TrainedHorizonModel`) and enums serialized as strings.
-- [x] `PseBoardLotService`: the official 15-tier PSE board-lot/tick table, bracket-crossing re-rounding, the static `+50%/-30%` band, `target > entry > stop` repair, per-leg fees (`BuyLegFeeRate` 0.295%, `SellLegFeeRate` 0.395%, round trip 0.690%), the expectancy layer (net risk/reward, break-even rate, EV, Quarter-Kelly, risk-budget sizing), tick spread, ADV participation and estimated slippage.
-- [x] `HorizonProfile` holds every per-horizon parameter (mission, `MinHistoryBars`, RSI band, ATR multiples, disclosure lookback, hysteresis, net-R:R requirement, EV minimum, preferred knowledge categories). All four horizons require net R:R ≥ 2.0; EV minima are 0.20 / 0.15 / 0.20 / 0.25.
-- [x] EF Core + SQLite with nine migrations (`InitialCreate` → `AddPyramidCountToPortfolioTrades`), unique indexes, cascade deletes, replace-on-rerun semantics and no-tracking reads.
+- [x] `PseBoardLotService`: the official 15-tier PSE board-lot/tick table, bracket-crossing re-rounding, the static `+50%/-30%` band, `target > entry > stop` repair, **dated** per-leg fees (`BuyLegFeeRate` 0.295%, `StockTransactionTaxRate(date)` 0.60% pre-CMEPA / 0.10% from 2025-07-01, `RoundTripFeeRateOn(date)`), the PHP 20 + 12% VAT commission floor through `ComputeLegFeePhp`, settled-peso risk/reward (`ComputeNetRiskPhp`, `ComputeNetRewardPhp`, `ComputeNetRiskRewardPeso`), the expectancy layer (break-even rate, EV, Quarter-Kelly, risk-budget sizing), gap-aware `ResolveStopFillPrice`, tick spread, ADV participation and estimated slippage.
+- [x] `PseTradingSessionRules.TradingSessionsBetween` — the exchange calendar (weekends **and** PSE holidays) behind `WeekdaySessionsBetween`, embargo lengths and forward windows.
+- [x] `HorizonProfile` holds every per-horizon parameter (mission, `MinHistoryBars`, RSI band, ATR multiples, disclosure lookback, hysteresis, net-R:R requirement, EV minimum, `MinimumVolumeRatio` 1.2/1.2/1.1/1.0, preferred knowledge categories). All four horizons require net R:R ≥ 2.0; EV minima are 0.20 / 0.15 / 0.20 / 0.25.
+- [x] EF Core + SQLite with eleven migrations (`InitialCreate` → `AddLiveDriftState`), unique indexes, cascade deletes, replace-on-rerun semantics and no-tracking reads.
+- [x] Point-in-time discipline: `EvaluateStock(..., includeLiveForeignFlow: false)` for every replay/training call, `ScopeToSession` / `IsAvailableBy` / `ScopeDisclosures` honouring the filing date and the 15:00 PHT `MarketClose` cutoff (`StockDisclosure.FiledAtPht`).
 
 ### Signal pipeline and pricing
 - [x] Live market data: Yahoo v8 charts with a mirror-host retry, index resolution plus an equal-weight heavyweight proxy, USD/PHP staleness guard, 10-ticker minimum, tick-rounded candles, zero-volume echo removal, row-aware PSE Edge disclosure attribution, best-effort macro dials and an optional official DQR.
-- [x] Quantitative filter: Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, RS63d, ATR%, VCP ratio, up/down volume, Chaikin money flow, Kaufman efficiency, beta, max drawdown, realized volatility, 20-day turnover/volume, support/resistance, weighted pre-score (85-point technical total rescaled when foreign flow is unreported), PHP 5M floor and top-25 cap.
+- [x] Quantitative filter: Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, RS63d, ATR%, VCP ratio, up/down volume, Chaikin money flow, Kaufman efficiency, beta, max drawdown, realized volatility, 20-day turnover/volume (mean **and** median + active-session count), support/resistance, weighted pre-score (85-point technical total rescaled when foreign flow is unreported), the PHP 5M floor plus `MinimumActiveTradingDays20d = 16`, and the top-25 cap.
 - [x] `PseDisclosureClassifier`: headline → `DisclosureCategory`, trap flags (hard `SRO_DILUTION`, `TENDER_OFFER_PIN`, `TRADING_HALT_RISK`; soft overhang, ex-dividend, static-band chases) and UI copy.
 - [x] Defensive `SignalJsonParser`: outermost balanced JSON, fences/prose, braces in strings, numeric strings, contract validation and human-readable retry errors.
 - [x] Pipeline: market-data reuse/fetch, horizon-aware candidate selection, knowledge retrieval, previous-run context, one Ollama call with a corrective retry, unknown-ticker/thesis-less/hard-trap discard, resolved-position exclusion, the `DAY` static-band clamp and net-R:R gate, board-lot sizing, citation verification, server-side drift and drop classification, atomic persist, and `502` when nothing tradeable remains.
 - [x] `ProbabilisticEdgeService`: shrunk empirical base rate (prior 0.42, 12 pseudo-observations, null under 60 bars) blended with barrier geometry, bounded tilts (stage, RS, VCP, breadth, regime, traps, dividend yield, conviction), clamp `[0.05, 0.95]`, verdict gates (`TRADE` / `SMALL_SIZE` / `WATCH_ONLY`), run-level cash posture and per-horizon hit rates in one pass.
 - [x] Mandatory pre-mortem: the model's `bear_case` is kept when usable, otherwise a deterministic stop/resistance/probability fallback is written.
 - [x] `MarketDirectionService` (five weighted pillars onto a 50 base, clamped 10–90; bearish regime override; unreported dials omitted) and `WaveTradePlanCalculator` (ideal buy / cut-loss / fee-paid break-even / target, chase ceiling, entry status, holding ladder, legal trim size).
-- [x] `OrderTicketCalculator`: one ticket per pick from `BookSizingSnapshot` (risk budget, cash, heat room, position cap, 2% ADV, sector room, governor multipliers, slippage, execution guidance), zero shares for `WATCH_ONLY`, and the **seven legal-pyramid rules** (above entry, break-even stop, ≥ +1R, under two adds, below target, 0.50x/0.25x risk, sector-name exemption).
+- [x] `OrderTicketCalculator`: one ticket per pick from `BookSizingSnapshot` (risk budget, cash, heat room, position cap, 2% ADV, sector room, governor multipliers, slippage, execution guidance), settled-peso `NetRiskPhp`/`NetRewardPhp` with a whole-lot step-down loop that fits the risk budget (refusing `"cannot carry a {lot}-share lot"` when one lot is already too big), zero shares for `WATCH_ONLY`, and the **seven legal-pyramid rules** (above entry, break-even stop, ≥ +1R, under two adds, below target, 0.50x/0.25x risk, sector-name exemption). The `LiveDriftPolicy` multiplier is applied **after** the `[0.50, 1.50]` governor clamp, fed by the book's own `LiveDrift` snapshot.
 
 ### Learning loop
 - [x] `LogisticModelTrainer`: L2 IRLS with a Gaussian-elimination solver over a per-trial **offset** (the structural prior), so the weights learn only the residual.
-- [x] `MoneyManagerTrainingService`: trials replay the desk's own execution (tick-grid plan, effective fee, +1R break-even ratchet, +1.5R causal EMA20 trail, causal index regime) on liquid names only, with a chronological 70/30 split that is purged and embargoed, train-only standardisation, sample weights `1/√(signals that date) × clamp(0.5 + 0.5·|R|, 0.5, 2)`, a λ scan by held-out Brier (log-loss tie-break), a Kelly grid `[0.15, 0.35]`, and a promotion gate of ≥25 held-out trades, Brier **and** log-loss better than the prior, plus `policyExpectancyR > 0`.
+- [x] `MoneyManagerTrainingService`: trials replay the desk's own execution (tick-grid plan, the trade's own dating for fees, the +1R break-even ratchet, the +1.5R causal EMA20 trail, the causal index regime, gap-aware stop fills) on liquid names only, with a chronological 70/30 split that is purged and embargoed in **trading sessions**, train-only standardisation, sample weights `1/√(signals that date) × clamp(0.5 + 0.5·|R|, 0.5, 2)`, a λ scan on a **nested inner 80/20 split** (`SelectLambda`, no peeking at the held-out slice), a Kelly grid `[0.15, 0.35]`, and a promotion gate of ≥25 held-out trades, Brier **and** log-loss better than the prior, plus `policyExpectancyR > 0`. Lookback default is now five years (1820 calendar days).
+- [x] `LiveDriftPolicy` (Domain, pure): `Classify(gradedPicks, realizedWinRate, expectedWinRate, rollingExpectancyR, baselineExpectancyR, previous)` → `STABLE` / `WARNING` / `DEGRADED` / `HALTED` with `MinimumGradedPicks = 15`, gaps of `max(20pp, 2·SE)` and `max(0.60R, 2·SE/√n)`, hysteresis on release, `MultiplierFor` 1.00 / 0.65 / 0.35 / 0.00 and a `Describe` warning printed into the ticket.
+- [x] **The drift throttle is wired.** `SignalOutcomeService.EvaluateLiveDriftAsync(horizon)` compares the rolling window of the last 30 graded picks against the promoted record (`ValidationWinRate` / `ValidationExpectancyR`), persists `TrainedHorizonModel.LiveDrift` + `LiveDriftGradedPicks` when the verdict changes, and returns a `LiveDriftSnapshot`. `PortfolioService.GetBookSizingSnapshotAsync(ct, horizon)` evaluates it once per book and every `BookSizingSnapshot.For(ticker)` ticket carries it; the daily run, the terminal envelope and the research endpoint pass their horizon. A prior-priced book (no active model) and the horizon-less portfolio ticket stay `STABLE`.
 - [x] `LearnedEdgeModel.FromActive` refuses any inactive row, so a `PRIOR_FALLBACK` can never price; a promoted fit adds at most ±6pp and rescales the Kelly stake.
 - [x] Live calibration offset (≥20 graded picks, 20 pseudo-samples, ±10pp) and desk memory (realized record, sectors that paid/bled, recent stop-outs, ranked factors) computed from the stored ledger only.
 - [x] Prompt feedback: `DESK_TRACK_RECORD_AND_LEARNED_EDGE` + `RECENT_STOP_OUTS`, with a rule that the record never overrides the server's levels, sizes, odds or verdicts.
@@ -55,7 +62,7 @@ No source, config, knowledge-base, dependency or migration changed in this pass 
 
 ### Research, replay and scorecard
 - [x] `TickerResearchService`: live single-symbol chart or stored-session fallback, catalog membership, tick-valid plan (static-band clamped for `DAY`), the same edge assessment and ticket as the run, causal regime from the fetched PSEi bars, the same `WavePlan` and a held-position `PositionAdvice` (`averageCost`, optional `shares`).
-- [x] `BacktestService`: prefix-only evaluation, multi-slot book (`MaxOpenPositions` 5, 6% heat, 2 names / 35% equity per sector), equity-based sizing with cash as a funding check, drawdown governor, board-lot slippage, break-even/EMA20 exit ladder, causal index regime gate, PSEi benchmark, alpha, CAGR, Sharpe, Calmar, total slippage and every trade.
+- [x] `BacktestService`: prefix-only evaluation with `includeLiveForeignFlow: false` and session-scoped disclosures, the median turnover/active-day liquidity gate, multi-slot book (`MaxOpenPositions` 5, 6% heat, 2 names / 35% equity per sector), equity-based sizing with cash as a funding check, drawdown governor, board-lot slippage, break-even/EMA20 exit ladder, gap-open stop fills, **dated fees per trade**, the PSEi benchmark, alpha, CAGR, Sharpe, Calmar, total slippage and every trade.
 - [x] `WalkForwardEdge`: the replay's own residual model, refitted every 60 sessions on already-resolved candidates, used only when it beats the neutral base rate on its own trades; it never writes `TrainedHorizonModels` and its acceptance is deliberately in-sample.
 - [x] `SignalOutcomeService`: entry-fill gate, `UNFILLED` terminal rows, conservative same-bar tie to the stop, realized net R after per-leg fees, scorecard aggregation, live calibration offset and desk memory.
 - [x] `GET /api/signals/scorecard`, `GET /api/signals/backtest`, `GET /api/research/catalog`, `GET /api/research/{query}`.
@@ -90,22 +97,23 @@ No source, config, knowledge-base, dependency or migration changed in this pass 
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 390 backend + 49 frontend
+## Test inventory — 416 backend + 49 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
-### Backend — `backend/tests/PseSignalDesk.Tests` (26 files)
+### Backend — `backend/tests/PseSignalDesk.Tests` (27 files)
 
 | Layer | Suite | Cases |
 | --- | --- | --- |
-| Domain | `PseBoardLotServiceTests` — 15 tier/tick rows, bracket crossing, static band, plan repair, per-leg fees, net R:R, break-even, EV, Quarter-Kelly, risk budget, ADV, slippage | 73 |
-| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring | 32 |
-| Application | `OrderTicketCalculatorTests` — sizing, verdicts, governor band, heat/sector/cash caps, slippage, execution guidance, all seven pyramid rules | 27 |
-| Application | `PortfolioServiceTests` — open/close/stop rules, pyramiding, trims, drawdown posture, exposure, alert dedupe | 27 |
+| Domain | `PseBoardLotServiceTests` — 15 tier/tick rows, bracket crossing, static band, plan repair, dated per-leg fees + commission floor, net R:R in pesos, break-even, EV, Quarter-Kelly, risk budget, gap fills, ADV, slippage | 78 |
+| Domain | `LiveDriftPolicyTests` — standard errors, required gaps, multipliers, classification thresholds, hysteresis, `Describe` copy | 8 |
+| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, mean+median liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring, point-in-time scoping | 36 |
+| Application | `OrderTicketCalculatorTests` — sizing, verdicts, governor band, drift multiplier (incl. `HALTED` → 0), lot step-down and the risk-budget refusal, heat/sector/cash caps, slippage, execution guidance, all seven pyramid rules | 31 |
+| Application | `PortfolioServiceTests` — open/close/stop rules, pyramiding, trims, drawdown posture, exposure, alert dedupe, drift-throttled tickets | 29 |
 | Application | `ProbabilisticEdgeServiceTests` — base rate, barrier geometry, tilts, clamps, verdict gates, hit rates, learned edge, calibration | 22 |
 | Application | `PseDisclosureClassifierTests` — categories, hard/soft traps, priority order, copy | 20 |
 | Application | `TickerResearchServiceTests` — live/stored paths, plan validity, `DAY` clamp, ticket/edge parity, regime, holding advice | 17 |
-| Application | `SignalOutcomeServiceTests` — entry gate, `UNFILLED`, stop tie, net R, scorecard, calibration, desk memory | 16 |
+| Application | `SignalOutcomeServiceTests` — entry gate, `UNFILLED`, stop tie, net R, scorecard, calibration, live-drift verdict + persistence, desk memory | 19 |
 | Application | `BacktestServiceTests` — prefix causality, book limits, governor, slippage, exits, benchmark metrics, walk-forward | 13 |
 | Application | `WaveTradePlanCalculatorTests` — plan levels, chase ceiling, entry status, ladder, trim size | 12 |
 | Application | `SignalPipelineServiceTests` — discards, gates, drift, drops, persistence, `502` | 12 |
@@ -135,10 +143,19 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 
 ## Remaining
 
+### Accuracy pillars — remainder (next up)
+
+- [ ] **Show the drift verdict in the UI.** The throttle changes sizing and prints `LiveDriftPolicy.Describe` into the ticket warnings, but no DTO surfaces `LiveDriftStatus` itself, so the Signals/Portfolio pages cannot show a badge or a "halved until the book recovers" explanation. An additive `liveDrift` field on the ticket/book payloads plus a `types/signals.ts` union is the cheap next step.
+- [ ] **Pillar 1 remainder** — `CorporateActionAdjuster` (`events=div,split` + `adjclose`; adjusted history for indicators and barriers, raw prices for levels), listing/delisting dates in `PseTickerInfo` for a point-in-time universe, and retention of the macro series (`^TNX`, `PHP=X`) instead of overwrite.
+- [ ] **Pillar 2 remainder** — `TrainedHorizonModel.FeatureKeysJson` (+ loader refusal on schema mismatch) so a book cannot price a feature vector it was not trained on.
+- [ ] **Pillar 5 remainder** — `InvalidationFirstPlanBuilder`, pipeline inversion (invalidation before target), `TradeExitLadderPolicy` as the single ladder, `OllamaTopPick` audit-only fields.
+- [ ] **Pillar 4 remainder** — real walk-forward folds (disjoint rolling windows + fold report); today the replay refits one rolling model.
+- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 416 / 49). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+
 ### Security remediation (`security_audit_report.md`, 2026-11-26 — 15 findings)
 
 - **Done** — F-01/F-02 partly: `ComplianceGuardMiddleware` (loopback-only `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`), loopback `AllowedHosts`, `/health` bypass.
-- **P0/P1 open** — F-03 prompt fencing for retrieved text; F-04 lookback ceiling; F-05 price bounds in `PseBoardLotService`; F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings.
+- **P0/P1 open** — F-03 prompt fencing for retrieved text; F-04 lookback ceiling; F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings; F-05 mostly closed (`IsTradablePrice` bounds every peso identity, `GetBracket` itself still unguarded).
 - **P2 open** — F-08 security headers/HSTS, F-09 unbounded free text, F-10 regex timeout/response caps, F-11 SQLite file mode, F-12 committed lock files + `NuGetAudit` + `PdfPig` bump, F-13 rate limiting / run gate, F-14 `GET` mutating state, F-15 raw model response persistence.
 - **Auth** — no user authentication, no origin check on unsafe methods, no rate limiter: keep the desk on `127.0.0.1`.
 
@@ -172,6 +189,9 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 
 ## Known issues and limitations
 
+- **The drift verdict is invisible in the UI.** Sizing changes and the ticket carries the `Describe` warning, but no DTO exposes `LiveDriftStatus`, so the pages cannot badge it.
+- **The drift read costs one full ledger pass.** `EvaluateLiveDriftAsync` loads the horizon's runs *with* their items on every book build (so `GET /api/signals/latest` pays for it too) and writes only when the verdict or the graded count changed. That is one query per book, not per ticket, but it is the expensive part of a list render; a `LIMIT 30` projection over graded rows is the obvious next optimisation.
+- **Prices are unadjusted.** History is raw OHLC; a split inside a lookback still distorts ATR/RS/barriers until `CorporateActionAdjuster` lands.
 - **Unverified live feeds.** Yahoo/PSE answered `404`/`429` from this environment, so ingestion, the model calls, DQR live templates and the replay's PSEi benchmark have never been observed end-to-end here. By design a failure is a `503`, never synthetic data.
 - **No UI automation.** Responsiveness and the Simple/Pro switch are verified by reading code and by `tsc`, not by a test.
 - **Deliberately in-sample walk-forward.** `WalkForwardEdge` accepts its residual model by comparing it to the base rate on its own trades; it is a replay aid, not a validated out-of-sample result — and it never writes `TrainedHorizonModels`.
@@ -185,7 +205,44 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 
 ## Verification log (newest first, observed output)
 
-**2026-11-26 — documentation pass (this pass; docs only).**
+**2026-11-26 — live-drift throttle wiring (five new tests, 411 → 416).**
+
+```
+cd backend && dotnet test PseSignalDesk.slnx --nologo
+  -> Passed! - Failed: 0, Passed: 416, Skipped: 0, Total: 416 (net10.0), exit 0
+cd frontend && npm test            -> tests 49 · pass 49 · fail 0
+cd frontend && npm run build       -> ✓ built in 248ms (exit 0)
+dotnet ef migrations script 20261125212733_AddRobustLiquidityColumns
+  -> ALTER TABLE "TrainedHorizonModels" ADD "LiveDrift" TEXT NOT NULL DEFAULT 'STABLE';
+     ALTER TABLE "TrainedHorizonModels" ADD "LiveDriftGradedPicks" INTEGER NOT NULL DEFAULT 0;
+cp pse_signals.db /tmp/... && sqlite3 (apply both ALTERs)
+  -> PRAGMA table_info ends 22|LiveDrift|TEXT|1|'STABLE'|0, 23|LiveDriftGradedPicks|INTEGER|1|0|0
+dotnet run with ConnectionStrings__DefaultConnection='Data Source=/tmp/psedesk-smoke.db'
+  -> fresh DB: 11 migrations applied, ... 'AddLiveDriftState' applied
+     GET /health 200, /api/portfolio 200, /api/signals/latest?horizon=WEEK 200,
+     /api/portfolio/order-ticket 200 (unthrottled, no warnings)
+     only failure: Bootstrap money-manager refit -> MarketDataUnavailableException (offline, by design)
+```
+
+The smoke run is what proves the real container binds the new constructor: `PortfolioService` gained an optional `SignalOutcomeService`, and `Program.cs` `AddScoped<PortfolioService>()` resolves it because `SignalOutcomeService` is registered too, so the throttle is live in production rather than only in tests.
+
+Suite growth: 411 → 416 (+3 `SignalOutcomeServiceTests`: `HALTED` with exact gaps and a persisted verdict, prior-priced book stays `STABLE` without writing, 30-pick window cap; +2 `PortfolioServiceTests`: a halted book sizes zero shares with the `HALTED` warning, and a horizon-less ticket stays unthrottled). The `PortfolioServiceTests` fake `ISignalRepository` had to grow `GetTrainedModelAsync`/`SaveTrainedModelAsync`/`GetAllRunsAsync` backing lists — the previous stub answered `null`/empty, which silently made every drift check a no-op.
+
+**2026-11-26 — accuracy pass (five pillars, 21 new tests).**
+
+```
+cd backend && dotnet test PseSignalDesk.slnx --nologo
+  -> Passed! - Failed: 0, Passed: 411, Skipped: 0, Total: 411 (net10.0), exit 0
+ls backend/src/PseSignalDesk.Infrastructure/Migrations
+  -> 20261125212733_AddRobustLiquidityColumns.cs + .Designer.cs present
+     Up: AddColumn MedianTurnover20dPhp TEXT(18,2) default 0, ActiveTradingDays20d INTEGER default 0
+     Down: drops both
+cd frontend && npm test            -> ℹ tests 49 · ℹ pass 49 · ℹ fail 0
+```
+
+Suite growth: 390 → 411 (+5 `PseBoardLotServiceTests`, +8 new `LiveDriftPolicyTests`, +4 `QuantitativeFilterServiceTests`, +4 `OrderTicketCalculatorTests`). Two mid-pass suites failed on the first attempt and drove real changes rather than test edits: the per-horizon `MinimumVolumeRatio` relaxations (MONTH/YEAR left too few eligible names for the replay and training fixtures) and the `NetRiskPhp` re-pin (9,979.73 → 9,979.64 once the commission floor was charged).
+
+**2026-11-26 — documentation pass.**
 
 ```
 cd backend && dotnet test PseSignalDesk.slnx --nologo

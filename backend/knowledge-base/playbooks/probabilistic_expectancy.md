@@ -9,9 +9,13 @@ categories: RISK, POSITION_SIZING, PROBABILITY
 ## A win rate without its break-even rate is decoration
 
 Every PSE plan has three prices, and those three prices already imply the win rate the
-trade needs just to break even. After the 0.690% round-trip friction (0.295% on the buy
-leg, 0.395% on the sell leg because the 0.10% stock transaction tax is charged on sales
-only):
+trade needs just to break even. Friction is charged per leg and **per trade date**: 0.295%
+on the buy leg, and on the sell leg 0.295% plus the stock transaction tax in force —
+0.10% under RA 12214 (CMEPA) from 1 July 2025, 0.60% before that, i.e. 1.190% round trip
+for any history dated before the cut. A fixed **PHP 20 broker commission plus 12% VAT**
+sits on top of the percentage, so a clip whose gross is under roughly PHP 8,000 pays
+proportionally more than the headline rate; the desk therefore sizes and grades in
+**settled pesos**, never as `shares × per-share spread`.
 
 `net R:R = (target - entry - fees) / (entry - stop + fees)` where the two legs are costed
 separately, not at a single symmetric rate.
@@ -21,8 +25,10 @@ separately, not at a single symmetric rate.
 The consequence is uncomfortable and must be stated honestly: a textbook 1:2.0 gross swing
 with a 5% stop is only about 1:1.63 net, so it needs roughly a 38% hit rate, not the naive
 33%. Any thesis that says "it only has to work one time in three" is arithmetic that
-ignores the exchange. The desk publishes the break-even rate beside every plan and treats
-a plan whose estimated probability does not clear break-even as a watch-only idea.
+ignores the exchange — and any backtest that charged today's 0.10% tax on a 2023 trade
+manufactured about 0.2R of phantom edge per trade. The desk publishes the break-even rate
+beside every plan and treats a plan whose estimated probability does not clear break-even
+as a watch-only idea.
 
 ## Where the probability comes from
 

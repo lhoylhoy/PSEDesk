@@ -26,13 +26,16 @@ public sealed class OrderTicketCalculatorTests
         var ticket = OrderTicketCalculator.Build(Capital, 100m, 95m, 110m, EdgeVerdict.TRADE, 25_000_000m);
 
         // PHP 10,000 of risk over PHP 5.67025 of fee-paid risk per share = 1,763 shares,
-        // floored to 176 ten-share board lots.
+        // floored to 176 ten-share board lots. The published risk is the *settled* peso figure
+        // (all-in buy cash minus the stop-out proceeds, each leg's commission floored at PHP 20
+        // and VAT'd), not shares * the per-share estimate, which is why it differs by centavos.
         Assert.Equal(10, ticket.BoardLotSize);
         Assert.Equal(176, ticket.Lots);
         Assert.Equal(1_760, ticket.Shares);
         Assert.Equal(10_000m, ticket.RiskBudgetPhp);
         Assert.Equal(PseBoardLotService.ComputeBuyTotalCostPhp(1_760, 100m), ticket.BuyOutlayPhp);
-        Assert.Equal(9_979.73m, ticket.NetRiskPhp);
+        Assert.Equal(PseBoardLotService.ComputeNetRiskPhp(1_760, 100m, 95m), ticket.NetRiskPhp);
+        Assert.Equal(9_979.64m, ticket.NetRiskPhp);
         Assert.Equal(16_316.08m, ticket.NetRewardPhp);
         Assert.Equal(PseBoardLotService.ComputeBreakEvenStopPrice(100m), ticket.BreakEvenStopPrice);
         Assert.False(ticket.LiquidityCapped);
@@ -532,5 +535,95 @@ public sealed class OrderTicketCalculatorTests
         Assert.True(ticket.SlippageRatePct >= 3m);
         Assert.Equal(ExecutionGuidance.LimitOnly, ticket.ExecutionGuidance);
         Assert.Contains(ticket.Warnings, warning => warning.Contains("slippage", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_steps_down_whole_lots_so_the_minimum_commission_cannot_breach_the_risk_budget()
+    {
+        // PHP 4.00 trades in 1,000-share board lots, so one lot is only PHP 4,000 of gross per
+        // leg: below the PHP 8,000 where 0.25% of the clip stops being larger than the PHP 20
+        // minimum commission. With a wide PHP 1.50 stop the per-share estimate funds two lots
+        // while the settled risk of two lots (each leg paying the floor, VAT'd) is over budget.
+        var smallBook = Capital with
+        {
+            EquityPhp = 305_000m,
+            CashPhp = 305_000m
+        };
+
+        var ticket = OrderTicketCalculator.Build(smallBook, 4.00m, 2.50m, 6.00m, EdgeVerdict.TRADE, 25_000_000m);
+
+        Assert.Equal(3_050m, ticket.RiskBudgetPhp);
+        Assert.Equal(1_000, ticket.BoardLotSize);
+        Assert.Equal(1, ticket.Lots);
+        Assert.Equal(1_000, ticket.Shares);
+        Assert.Equal(PseBoardLotService.ComputeNetRiskPhp(1_000, 4.00m, 2.50m), ticket.NetRiskPhp);
+        Assert.True(
+            ticket.NetRiskPhp <= ticket.RiskBudgetPhp,
+            $"settled risk {ticket.NetRiskPhp} breached the PHP {ticket.RiskBudgetPhp} budget");
+        Assert.Contains(
+            ticket.Warnings,
+            warning => warning.Contains("minimum commission", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_refuses_a_lot_whose_fee_paid_risk_exceeds_the_whole_budget()
+    {
+        var tinyBook = Capital with
+        {
+            EquityPhp = 100_000m,
+            CashPhp = 100_000m
+        };
+
+        // PHP 1,000 of risk cannot carry a 1,000-share lot of a PHP 4.00 name stopped 37% lower:
+        // the settled risk of that single lot is about PHP 1,548.
+        var ticket = OrderTicketCalculator.Build(tinyBook, 4.00m, 2.50m, 6.00m, EdgeVerdict.TRADE, 25_000_000m);
+
+        Assert.Equal(0, ticket.Shares);
+        Assert.Equal(0, ticket.Lots);
+        Assert.Contains(
+            ticket.Warnings,
+            warning => warning.Contains("cannot carry a 1000-share lot", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_sizes_nothing_once_live_drift_halts_the_model()
+    {
+        var halted = Capital with
+        {
+            LiveDrift = LiveDriftStatus.HALTED,
+            LiveDriftGradedPicks = 22,
+            LiveDriftExpectancyGapR = 0.9m
+        };
+
+        var ticket = OrderTicketCalculator.Build(halted, 100m, 95m, 110m, EdgeVerdict.TRADE, 25_000_000m);
+
+        Assert.Equal(0, ticket.Shares);
+        Assert.Equal(0m, ticket.RiskBudgetPhp);
+        Assert.Contains(ticket.Warnings, warning => warning.Contains("HALTED", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_cuts_the_risk_unit_hard_when_live_drift_warns()
+    {
+        var full = OrderTicketCalculator.Build(Capital, 100m, 95m, 110m, EdgeVerdict.TRADE, 25_000_000m);
+        var warned = OrderTicketCalculator.Build(
+            Capital with
+            {
+                LiveDrift = LiveDriftStatus.WARNING,
+                LiveDriftGradedPicks = 20,
+                LiveDriftWinRateGapPct = 24m,
+                LiveDriftExpectancyGapR = 0.7m
+            },
+            100m,
+            95m,
+            110m,
+            EdgeVerdict.TRADE,
+            25_000_000m);
+
+        // 0.65x of the same budget, and the drift throttle is applied outside the governor clamp
+        // so its 0.65x is not rounded back up to 1.00x.
+        Assert.Equal(decimal.Round(Capital.EquityPhp * 0.01m * 0.65m, 2, MidpointRounding.AwayFromZero), warned.RiskBudgetPhp);
+        Assert.True(warned.Shares < full.Shares);
+        Assert.Contains(warned.Warnings, warning => warning.Contains("WARNING", StringComparison.Ordinal));
     }
 }

@@ -100,9 +100,9 @@ public sealed class WaveTradePlanCalculatorTests
     {
         var lockPrice = WaveTradePlanCalculator.ComputeTriggerPrice(100m, 92.5m, 115m, 1m);
         var netRisk = PseBoardLotService.ComputeNetRiskPerShare(100m, 92.5m);
-        var gainAtLock = PseBoardLotService.ComputeRealizedNetPnlPhp(1, 100m, lockPrice);
+        var gainAtLock = PseBoardLotService.ComputeNetPerSharePnl(100m, lockPrice);
         var oneTickBelow = lockPrice - PseBoardLotService.GetTickSize(lockPrice);
-        var gainBelow = PseBoardLotService.ComputeRealizedNetPnlPhp(1, 100m, oneTickBelow);
+        var gainBelow = PseBoardLotService.ComputeNetPerSharePnl(100m, oneTickBelow);
 
         Assert.True(
             gainAtLock >= netRisk,
@@ -148,7 +148,10 @@ public sealed class WaveTradePlanCalculatorTests
         Assert.Equal(92.5m, advice.SuggestedStopPrice);
         Assert.Equal(100.70m, advice.BreakEvenPrice);
         Assert.Equal(115m, advice.SuggestedTargetPrice);
-        Assert.Equal(2.29m, advice.NetReturnPct);
+        // 2.29815 pesos a share after both legs, i.e. 2.30% of the 100 average cost. The
+        // rounded peso figure below (2,298.15) is the same number at 1,000 shares, so the two
+        // agree to the centavo instead of drifting by a rounding artefact.
+        Assert.Equal(2.30m, advice.NetReturnPct);
         Assert.Equal(2_298.15m, advice.UnrealizedNetPnlPhp!.Value);
         Assert.Equal(0.28m, advice.UnrealizedR);
         Assert.Equal(500, advice.RecommendedTrimShares);

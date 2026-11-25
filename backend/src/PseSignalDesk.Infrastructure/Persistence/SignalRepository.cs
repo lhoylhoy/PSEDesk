@@ -351,6 +351,8 @@ public sealed class SignalRepository : ISignalRepository
             stored.WeightsJson = model.WeightsJson;
             stored.FeatureStatsJson = model.FeatureStatsJson;
             stored.IsActive = model.IsActive;
+            stored.LiveDrift = model.LiveDrift;
+            stored.LiveDriftGradedPicks = model.LiveDriftGradedPicks;
         }
 
         await _db.SaveChangesAsync(cancellationToken);

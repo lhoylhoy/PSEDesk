@@ -164,4 +164,46 @@ public static class PseTradingSessionRules
         IsTradingDay(date) &&
         timePht >= PreOpenStart &&
         timePht < EndOfDaySettlement;
+
+    /// <summary>
+    /// The next session on or after the day following <paramref name="date"/>. Used by the
+    /// disclosure cutoff: a filing published after the close is only knowable on the next
+    /// trading session, which is not necessarily the next calendar day.
+    /// </summary>
+    public static DateOnly NextTradingDay(DateOnly date)
+    {
+        var cursor = date.AddDays(1);
+
+        for (var guard = 0; guard < 30 && !IsTradingDay(cursor); guard++)
+        {
+            cursor = cursor.AddDays(1);
+        }
+
+        return cursor;
+    }
+
+    /// <summary>
+    /// Sessions strictly between two dates, holidays excluded. The walk-forward embargo needs
+    /// real sessions: counting weekdays overstates the gap by every PSE holiday, and an
+    /// overstated embargo silently deletes usable training trades.
+    /// </summary>
+    public static int TradingSessionsBetween(DateOnly fromExclusive, DateOnly toExclusive)
+    {
+        if (toExclusive <= fromExclusive)
+        {
+            return 0;
+        }
+
+        var sessions = 0;
+
+        for (var cursor = fromExclusive.AddDays(1); cursor < toExclusive; cursor = cursor.AddDays(1))
+        {
+            if (IsTradingDay(cursor))
+            {
+                sessions++;
+            }
+        }
+
+        return sessions;
+    }
 }

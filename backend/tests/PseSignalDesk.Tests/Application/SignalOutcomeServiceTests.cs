@@ -463,6 +463,89 @@ public sealed class SignalOutcomeServiceTests
         Assert.Empty(memory.RecentStopOuts);
     }
 
+    [Fact]
+    public async Task EvaluateLiveDriftAsync_halts_a_promoted_book_whose_rolling_expectancy_turned_negative()
+    {
+        var repository = new FakeSignalRepository();
+        repository.TrainedModel = BuildActiveModel();
+        repository.Runs.Add(BuildRunWithLosses(15));
+
+        var drift = await new SignalOutcomeService(repository).EvaluateLiveDriftAsync(SignalHorizon.WEEK);
+
+        Assert.Equal(LiveDriftStatus.HALTED, drift.Status);
+        Assert.Equal(15, drift.GradedPicks);
+        Assert.Equal(0m, drift.RealizedWinRate);
+        Assert.Equal(0.50m, drift.ExpectedWinRate);
+        Assert.Equal(-1m, drift.RollingExpectancyR);
+        Assert.Equal(0.60m, drift.BaselineExpectancyR);
+
+        // Positive gaps mean the live book is behind the record it was promoted on.
+        Assert.Equal(50m, drift.WinRateGapPct);
+        Assert.Equal(1.60m, drift.ExpectancyGapR);
+        Assert.Contains("HALTED", drift.Reason, StringComparison.Ordinal);
+
+        // The verdict is persisted, because the release hysteresis has to survive a restart.
+        var saved = Assert.Single(repository.SavedModels);
+        Assert.Equal(LiveDriftStatus.HALTED, saved.LiveDrift);
+        Assert.Equal(15, saved.LiveDriftGradedPicks);
+    }
+
+    [Fact]
+    public async Task EvaluateLiveDriftAsync_leaves_a_prior_priced_book_unthrottled()
+    {
+        var repository = new FakeSignalRepository();
+        repository.Runs.Add(BuildRunWithLosses(15));
+
+        var drift = await new SignalOutcomeService(repository).EvaluateLiveDriftAsync(SignalHorizon.WEEK);
+
+        // No promoted model means no promoted record to drift from: the prior is priced by the
+        // structural odds and corrected by the calibration offset, so nothing is throttled.
+        Assert.Equal(LiveDriftStatus.STABLE, drift.Status);
+        Assert.Equal(15, drift.GradedPicks);
+        Assert.Null(drift.Reason);
+        Assert.Empty(repository.SavedModels);
+    }
+
+    [Fact]
+    public async Task EvaluateLiveDriftAsync_reads_only_the_most_recent_graded_window()
+    {
+        var repository = new FakeSignalRepository();
+        repository.TrainedModel = BuildActiveModel();
+        repository.Runs.Add(BuildRunWithLosses(40));
+
+        var drift = await new SignalOutcomeService(repository).EvaluateLiveDriftAsync(SignalHorizon.WEEK);
+
+        Assert.Equal(LiveDriftSnapshot.WindowPicks, drift.GradedPicks);
+        Assert.Equal(LiveDriftStatus.HALTED, drift.Status);
+    }
+
+    private static TrainedHorizonModel BuildActiveModel() => new()
+    {
+        Horizon = SignalHorizon.WEEK,
+        TrainedAtUtc = DateTime.UtcNow,
+        ValidationWinRate = 0.50m,
+        ValidationExpectancyR = 0.60m,
+        IsActive = true,
+        LiveDrift = LiveDriftStatus.STABLE
+    };
+
+    private static SignalRun BuildRunWithLosses(int count) => new()
+    {
+        Id = 1,
+        RunDate = RunDate,
+        Horizon = SignalHorizon.WEEK,
+        CreatedAtUtc = DateTime.UtcNow,
+        Items = Enumerable.Range(0, count)
+            .Select(index => BuildGradedItem(
+                $"LOSER{index}",
+                0.5m,
+                SignalOutcomeStatus.LOSS_STOP,
+                -1m,
+                EdgeVerdict.TRADE,
+                RunDate.AddDays(index + 1)))
+            .ToList()
+    };
+
     private static SignalItem BuildItem() =>
         new()
         {
@@ -550,6 +633,25 @@ public sealed class SignalOutcomeServiceTests
         public List<StockDailyMetric> Metrics { get; } = new();
 
         public List<SignalItem> Updated { get; } = new();
+
+        public TrainedHorizonModel? TrainedModel { get; set; }
+
+        public List<TrainedHorizonModel> SavedModels { get; } = new();
+
+        public Task<TrainedHorizonModel?> GetTrainedModelAsync(
+            SignalHorizon horizon,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                TrainedModel is not null && TrainedModel.Horizon == horizon ? TrainedModel : null);
+
+        public Task SaveTrainedModelAsync(
+            TrainedHorizonModel model,
+            CancellationToken cancellationToken = default)
+        {
+            SavedModels.Add(model);
+            TrainedModel = model;
+            return Task.CompletedTask;
+        }
 
         public Task<DailyMarketSnapshot?> GetSnapshotAsync(
             DateOnly tradeDate,

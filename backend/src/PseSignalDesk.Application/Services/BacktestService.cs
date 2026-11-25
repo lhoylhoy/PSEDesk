@@ -182,14 +182,17 @@ public sealed class BacktestService
                     stock with { Bars = prefix },
                     bars[index].Date,
                     indexPrefix,
-                    computeEmpiricalBaseRate: false);
+                    computeEmpiricalBaseRate: false,
+                    // A replay may not read the live session's foreign print or a filing published
+                    // after this bar's close.
+                    includeLiveForeignFlow: false);
 
                 if (metric is null || !IsEligible(metric, profile))
                 {
                     continue;
                 }
 
-                var candidate = BuildCandidate(metric, profile, stock.Sector, regime);
+                var candidate = BuildCandidate(metric, profile, stock.Sector, regime, bars[index].Date);
                 if (candidate is null)
                 {
                     continue;
@@ -198,7 +201,7 @@ public sealed class BacktestService
                 // The label is the desk's own graded outcome for this setup, and it is the only
                 // thing that lets a walk-forward refit learn. A window that has not resolved yet
                 // yields no label, so the candidate is left out instead of being half-labelled.
-                var label = LabelOutcome(bars, index, ema20, candidate, profile);
+                var label = LabelOutcome(bars, index, ema20, candidate, profile, bars[index].Date);
                 if (label is null)
                 {
                     continue;
@@ -230,7 +233,10 @@ public sealed class BacktestService
     /// </summary>
     private static bool IsEligible(StockDailyMetric metric, HorizonProfile profile)
     {
-        if (metric.AvgTurnover20dPhp < QuantitativeFilterService.LiquidityFloorPhp)
+        if (!QuantitativeFilterService.MeetsLiquidityFloor(
+                metric.AvgTurnover20dPhp,
+                metric.MedianTurnover20dPhp,
+                metric.ActiveTradingDays20d))
         {
             return false;
         }
@@ -245,7 +251,7 @@ public sealed class BacktestService
             return false;
         }
 
-        if (metric.VolumeRatioVs20d < 1.2m)
+        if (metric.VolumeRatioVs20d < profile.MinimumVolumeRatio)
         {
             return false;
         }
@@ -277,7 +283,8 @@ public sealed class BacktestService
         StockDailyMetric metric,
         HorizonProfile profile,
         string? sector,
-        MarketRegime? regime)
+        MarketRegime? regime,
+        DateOnly tradeDate)
     {
         if (metric.Atr14 <= 0m)
         {
@@ -289,11 +296,15 @@ public sealed class BacktestService
             metric.ClosePrice - (profile.AtrStopMultiplier * metric.Atr14),
             metric.ClosePrice + (profile.AtrTargetMultiplier * metric.Atr14));
 
+        // Point-in-time friction: the round-trip rate charged on this session's own date. Before
+        // 1 July 2025 the sale carried 0.60% STT, not the 0.10% in force today, and pricing a 2023
+        // trade with today's rate flatters every historical R.
         var feeRate = PseBoardLotService.ComputeEffectiveRoundTripFeeRate(
             plan.Entry,
             MoneyManagerTrainingService.DefaultPositionBudgetPhp,
             metric.AvgTurnover20dPhp,
-            metric.AtrPct);
+            metric.AtrPct,
+            tradeDate);
 
         var netRiskReward = PseBoardLotService.ComputeNetRiskReward(plan.Entry, plan.StopLoss, plan.Target, feeRate);
         if (netRiskReward < 1.2m)
@@ -422,7 +433,8 @@ public sealed class BacktestService
         int entryIndex,
         IReadOnlyList<decimal?> ema20,
         BacktestCandidate candidate,
-        HorizonProfile profile)
+        HorizonProfile profile,
+        DateOnly entryDate)
     {
         var netRiskPerShare = PseBoardLotService.ComputeNetRiskPerShare(
             candidate.EntryPrice,
@@ -434,7 +446,8 @@ public sealed class BacktestService
             return null;
         }
 
-        var (buyRate, sellRate) = PseBoardLotService.SplitRoundTripFee(candidate.FeeRate);
+        // The label pays the tax schedule that was in force when the clip was opened, not today's.
+        var (buyRate, sellRate) = PseBoardLotService.SplitRoundTripFee(candidate.FeeRate, entryDate);
         var breakEvenStop = PseBoardLotService.ComputeBreakEvenStopPrice(candidate.EntryPrice);
         var stop = candidate.StopLoss;
 
@@ -454,9 +467,12 @@ public sealed class BacktestService
 
             var bar = bars[index];
 
-            if (bar.Low <= stop)
+            // A session that opens through the stop fills at the open, which is where a resting
+            // stop order would actually have been executed; grading it at the stop would pay the
+            // label a price the tape never offered.
+            if (PseBoardLotService.ResolveStopFillPrice(stop, bar.Open, bar.Low) is decimal stopFill)
             {
-                var stopR = NetR(stop);
+                var stopR = NetR(stopFill);
                 return (bar.Date, stopR > 0m, stopR);
             }
 
@@ -604,9 +620,10 @@ public sealed class BacktestService
                 decimal? exitPrice = null;
                 var exitReason = "TIME";
 
-                if (session.Low <= position.CurrentStopLoss)
+                if (PseBoardLotService.ResolveStopFillPrice(position.CurrentStopLoss, session.Open, session.Low)
+                    is decimal stopFill)
                 {
-                    exitPrice = position.CurrentStopLoss;
+                    exitPrice = stopFill;
                     exitReason = position.StopMode == StopModes.Initial ? "STOP" : position.StopMode;
                 }
                 else if (session.High >= position.TargetPrice)
@@ -625,13 +642,21 @@ public sealed class BacktestService
                     continue;
                 }
 
-                cash += PseBoardLotService.ComputeSellNetProceedsPhp(position.Shares, exit);
-                feesPaidPhp += ComputeFeesPaidPhp(position.Shares, position.EntryPrice, exit);
+                // Both legs settle at the tax schedule of their own trade date: the sale carries
+                // 0.60% STT before 1 July 2025 and 0.10% after, and the exit may be years after
+                // the entry.
+                cash += PseBoardLotService.ComputeSellNetProceedsPhp(position.Shares, exit, date);
+                feesPaidPhp += ComputeFeesPaidPhp(position.Shares, position.EntryPrice, exit, position.EntryDate, date);
 
                 // The clip's slippage was debited from cash at entry; subtract it from the
                 // trade's own P&L as well so the per-trade R is a net number.
-                var realizedPhp = PseBoardLotService.ComputeRealizedNetPnlPhp(position.Shares, position.EntryPrice, exit)
-                                  - position.SlippagePhp;
+                var realizedPhp = PseBoardLotService.ComputeRealizedNetPnlPhp(
+                                       position.Shares,
+                                       position.EntryPrice,
+                                       exit,
+                                       position.EntryDate,
+                                       date)
+                                   - position.SlippagePhp;
                 trades.Add(new BacktestTradeDto(
                     position.Ticker,
                     position.EntryDate,
@@ -654,7 +679,7 @@ public sealed class BacktestService
             // fractions of equity, not of the cash balance.
             var openValuePhp = open.Sum(position =>
                 lastClose.TryGetValue(position.Ticker, out var mark)
-                    ? PseBoardLotService.ComputeSellNetProceedsPhp(position.Shares, mark)
+                    ? PseBoardLotService.ComputeSellNetProceedsPhp(position.Shares, mark, date)
                     : 0m);
 
             var equityPhp = decimal.Round(cash + openValuePhp, 2, MidpointRounding.AwayFromZero);
@@ -750,7 +775,7 @@ public sealed class BacktestService
                         MaxPositionPct / 100m,
                         roundTripFeeRate: candidate.FeeRate);
 
-                    var costPhp = PseBoardLotService.ComputeBuyTotalCostPhp(sized.Shares, candidate.EntryPrice);
+                    var costPhp = PseBoardLotService.ComputeBuyTotalCostPhp(sized.Shares, candidate.EntryPrice, date);
 
                     // Slippage is a real cash cost of the clip (tick spread plus impact on both legs),
                     // so it is debited from the book at entry instead of being deducted from the
@@ -782,7 +807,7 @@ public sealed class BacktestService
                             (affordableLots / boardLot) * boardLot,
                             int.MaxValue);
 
-                        costPhp = PseBoardLotService.ComputeBuyTotalCostPhp(affordableShares, candidate.EntryPrice);
+                        costPhp = PseBoardLotService.ComputeBuyTotalCostPhp(affordableShares, candidate.EntryPrice, date);
                         slippageCostPhp = ComputeSlippageCostPhp(costPhp, candidate);
                         sized = sized with { Shares = affordableShares };
                     }
@@ -797,7 +822,8 @@ public sealed class BacktestService
                     var netRiskPhp = PseBoardLotService.ComputeInitialNetRiskPhp(
                         sized.Shares,
                         candidate.EntryPrice,
-                        candidate.StopLoss);
+                        candidate.StopLoss,
+                        date);
 
                     if (netRiskPhp <= 0m)
                     {
@@ -832,7 +858,7 @@ public sealed class BacktestService
             // the book and the value of the clips that replaced it.
             openValuePhp = open.Sum(position =>
                 lastClose.TryGetValue(position.Ticker, out var mark)
-                    ? PseBoardLotService.ComputeSellNetProceedsPhp(position.Shares, mark)
+                    ? PseBoardLotService.ComputeSellNetProceedsPhp(position.Shares, mark, date)
                     : 0m);
 
             equityPhp = decimal.Round(cash + openValuePhp, 2, MidpointRounding.AwayFromZero);
@@ -874,10 +900,15 @@ public sealed class BacktestService
             lastDate);
     }
 
-    private static decimal ComputeFeesPaidPhp(int shares, decimal entryPrice, decimal exitPrice)
+    private static decimal ComputeFeesPaidPhp(
+        int shares,
+        decimal entryPrice,
+        decimal exitPrice,
+        DateOnly entryDate,
+        DateOnly exitDate)
     {
-        var buyLeg = shares * entryPrice * PseBoardLotService.BuyLegFeeRate;
-        var sellLeg = shares * exitPrice * PseBoardLotService.SellLegFeeRate;
+        var buyLeg = PseBoardLotService.ComputeLegFeePhp(shares, entryPrice, isSell: false, entryDate);
+        var sellLeg = PseBoardLotService.ComputeLegFeePhp(shares, exitPrice, isSell: true, exitDate);
 
         return decimal.Round(buyLeg + sellLeg, 2, MidpointRounding.AwayFromZero);
     }
@@ -968,7 +999,7 @@ public sealed class BacktestService
             return;
         }
 
-        var markProceedsPhp = PseBoardLotService.ComputeSellNetProceedsPhp(open.Shares, session.Close);
+        var markProceedsPhp = PseBoardLotService.ComputeSellNetProceedsPhp(open.Shares, session.Close, session.Date);
         var unrealizedR = (markProceedsPhp - open.BuyCostPhp) / open.NetRiskPhp;
 
         if (unrealizedR >= 1.0m

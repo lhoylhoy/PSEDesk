@@ -276,4 +276,101 @@ public sealed class PseBoardLotServiceTests
         Assert.Equal(0, position.Shares);
         Assert.Equal(0m, position.NotionalPhp);
     }
+
+    // --- Pillar 4: point-in-time friction ---------------------------------------------------
+
+    [Fact]
+    public void StockTransactionTaxRate_follows_the_cmepa_cut_on_first_july_2025()
+    {
+        Assert.Equal(0.0060m, PseBoardLotService.StockTransactionTaxRate(new DateOnly(2025, 6, 30)));
+        Assert.Equal(0.0010m, PseBoardLotService.StockTransactionTaxRate(PseBoardLotService.CmepaEffectiveDate));
+        Assert.Equal(0.0010m, PseBoardLotService.StockTransactionTaxRate(null));
+        Assert.Equal(0.0010m, PseBoardLotService.StockTransactionTaxRate(new DateOnly(2026, 1, 5)));
+    }
+
+    [Fact]
+    public void ComputeLegFeePhp_charges_the_minimum_commission_floor_and_vat()
+    {
+        // PHP 5,000 of gross: 0.25% is PHP 12.50, so the PHP 20 floor binds and gets VAT'd.
+        var fee = PseBoardLotService.ComputeLegFeePhp(shares: 500, price: 10m, isSell: false);
+        var expectedCommission = PseBoardLotService.MinimumBrokerCommissionPhp * 1.12m;
+        var expectedExchangeFees = 5_000m * (PseBoardLotService.PseTradingFeeRate + PseBoardLotService.SccpFeeRate);
+
+        Assert.Equal(
+            decimal.Round(expectedCommission + expectedExchangeFees, 2, MidpointRounding.AwayFromZero),
+            fee);
+
+        // Above PHP 8,000 the percentage commission is larger than the floor, so the fee scales
+        // with the clip: 0.25% of PHP 20,000 is PHP 50, VAT'd, plus the exchange and SCCP fees.
+        var largeFee = PseBoardLotService.ComputeLegFeePhp(shares: 2_000, price: 10m, isSell: false);
+        Assert.Equal(
+            decimal.Round((50m * 1.12m) + (20_000m * (PseBoardLotService.PseTradingFeeRate + PseBoardLotService.SccpFeeRate)), 2, MidpointRounding.AwayFromZero),
+            largeFee);
+        Assert.True(largeFee > fee);
+
+        // No fee is invented for an unorderable clip.
+        Assert.Equal(0m, PseBoardLotService.ComputeLegFeePhp(shares: 0, price: 10m, isSell: true));
+        Assert.Equal(0m, PseBoardLotService.ComputeLegFeePhp(shares: 500, price: 0m, isSell: true));
+    }
+
+    [Fact]
+    public void ComputeRealizedNetPnlPhp_taxes_a_round_trip_at_each_legs_own_rate()
+    {
+        // The stock transaction tax is charged on the sale only, so a position opened before
+        // CMEPA and closed after it pays the 0.10% schedule — the buy leg carries no tax either
+        // way, while a round trip that both opened and closed before the cut pays 0.60%.
+        var crossesTheCut = PseBoardLotService.ComputeRealizedNetPnlPhp(
+            1_000,
+            entryPrice: 10m,
+            exitPrice: 11m,
+            entryDate: new DateOnly(2025, 6, 2),
+            exitDate: new DateOnly(2025, 8, 1));
+
+        var bothLegsPreCmepa = PseBoardLotService.ComputeRealizedNetPnlPhp(
+            1_000,
+            entryPrice: 10m,
+            exitPrice: 11m,
+            tradeDate: new DateOnly(2025, 6, 2));
+
+        var bothLegsPostCmepa = PseBoardLotService.ComputeRealizedNetPnlPhp(
+            1_000,
+            entryPrice: 10m,
+            exitPrice: 11m,
+            tradeDate: new DateOnly(2025, 8, 1));
+
+        Assert.True(bothLegsPreCmepa < crossesTheCut);
+        Assert.Equal(bothLegsPostCmepa, crossesTheCut);
+
+        // The 0.50% tax difference on a PHP 11,000 sale is PHP 55.
+        Assert.Equal(55m, decimal.Round(bothLegsPostCmepa - bothLegsPreCmepa, 2, MidpointRounding.AwayFromZero));
+    }
+
+    [Fact]
+    public void ResolveStopFillPrice_fills_a_gap_open_through_the_stop_at_the_open()
+    {
+        Assert.Equal(91m, PseBoardLotService.ResolveStopFillPrice(stopLoss: 95m, sessionOpen: 91m, sessionLow: 89m));
+        Assert.Equal(95m, PseBoardLotService.ResolveStopFillPrice(stopLoss: 95m, sessionOpen: 97m, sessionLow: 94.5m));
+        Assert.Null(PseBoardLotService.ResolveStopFillPrice(stopLoss: 95m, sessionOpen: 98m, sessionLow: 96m));
+
+        // Targets are never credited above their own level, so no overload is offered for them.
+        Assert.Null(PseBoardLotService.ResolveStopFillPrice(stopLoss: 0m, sessionOpen: 98m, sessionLow: 96m));
+    }
+
+    [Fact]
+    public void ComputeNetRiskPhp_and_ComputeNetRewardPhp_are_the_settled_peso_figures()
+    {
+        var risk = PseBoardLotService.ComputeNetRiskPhp(1_000, entryPrice: 4.00m, stopLoss: 2.50m);
+        var reward = PseBoardLotService.ComputeNetRewardPhp(1_000, entryPrice: 4.00m, targetPrice: 6.00m);
+
+        Assert.Equal(
+            PseBoardLotService.ComputeBuyTotalCostPhp(1_000, 4.00m) - PseBoardLotService.ComputeSellNetProceedsPhp(1_000, 2.50m),
+            risk);
+        Assert.Equal(
+            PseBoardLotService.ComputeSellNetProceedsPhp(1_000, 6.00m) - PseBoardLotService.ComputeBuyTotalCostPhp(1_000, 4.00m),
+            reward);
+
+        // At a small clip the fee floor makes the settled risk larger than the per-share estimate,
+        // which is exactly why the ticket steps whole lots down instead of trusting the spread.
+        Assert.True(risk > 1_000m * PseBoardLotService.ComputeNetRiskPerShare(4.00m, 2.50m));
+    }
 }

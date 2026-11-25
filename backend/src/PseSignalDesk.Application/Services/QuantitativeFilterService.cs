@@ -76,12 +76,17 @@ public sealed class QuantitativeFilterService
     /// produces the 63-session relative strength versus the PSEi.
     /// <paramref name="computeEmpiricalBaseRate"/> lets the walk-forward backtester skip the
     /// O(n²) barrier study and supply its own causal, cached base rate instead.
+    /// <paramref name="includeLiveForeignFlow"/> must be <c>false</c> on every historical replay:
+    /// <see cref="StockMarketData.NetForeignTodayPhp"/> is the <b>live</b> session's official flow,
+    /// so feeding it into a 2023 prefix hands the scorer today's foreign print and leaks the
+    /// future into both the training labels and the backtest curve.
     /// </summary>
     public StockDailyMetric? EvaluateStock(
         StockMarketData stock,
         DateOnly tradeDate,
         IReadOnlyList<OhlcvBar>? indexBars = null,
-        bool computeEmpiricalBaseRate = true)
+        bool computeEmpiricalBaseRate = true,
+        bool includeLiveForeignFlow = true)
     {
         var bars = stock.Bars.OrderBy(b => b.Date).ToList();
         if (bars.Count < MinBarsRequired)
@@ -94,6 +99,10 @@ public sealed class QuantitativeFilterService
         {
             return null;
         }
+
+        // The live foreign print belongs to today's session only. A replay passes false and gets
+        // the same "unreported" treatment a session without a DQR upload gets.
+        var liveForeignFlow = includeLiveForeignFlow ? stock.NetForeignTodayPhp : null;
 
         var closes = bars.Select(b => b.Close).ToList();
 
@@ -146,7 +155,7 @@ public sealed class QuantitativeFilterService
         // as a breakdown.
         var dividends = ComputeTrailingDividends(stock.Dividends, last.Close, tradeDate);
         var disclosures = BuildDisclosures(
-            stock.Disclosures,
+            ScopeToSession(stock.Disclosures, tradeDate),
             dividends.LastExDate,
             dividends.TrailingPerShare,
             tradeDate);
@@ -161,6 +170,12 @@ public sealed class QuantitativeFilterService
         var avgVolume = window.Average(b => (double)b.Volume);
         var avgTurnover = window.Average(b => b.Close * b.Volume);
         var volumeRatio = avgVolume <= 0d ? 0m : (decimal)(last.Volume / avgVolume);
+
+        // Robust liquidity: the mean turnover of twenty sessions is one block trade away from
+        // passing a floor that most sessions never reach. The median and the count of sessions
+        // that actually printed volume are the numbers a desk can rely on.
+        var medianTurnover = ComputeMedianTurnover20d(window);
+        var activeTradingDays = window.Count(bar => bar.Volume > 0);
 
         var support = PseBoardLotService.RoundToValidTick(window.Min(b => b.Low));
         var resistance = PseBoardLotService.RoundToValidTick(window.Max(b => b.High));
@@ -178,7 +193,7 @@ public sealed class QuantitativeFilterService
             rsiValue,
             volumeRatio,
             avgTurnover,
-            stock.NetForeignTodayPhp,
+            liveForeignFlow,
             atrValue,
             support,
             resistance);
@@ -192,6 +207,8 @@ public sealed class QuantitativeFilterService
             ClosePrice = last.Close,
             ChangePct = changePct,
             AvgTurnover20dPhp = decimal.Round(avgTurnover, 2, MidpointRounding.AwayFromZero),
+            MedianTurnover20dPhp = medianTurnover,
+            ActiveTradingDays20d = activeTradingDays,
             VolumeRatioVs20d = decimal.Round(volumeRatio, 2, MidpointRounding.AwayFromZero),
             Rsi14 = decimal.Round(rsiValue, 2, MidpointRounding.AwayFromZero),
             Ema20 = decimal.Round(ema20Value, 4, MidpointRounding.AwayFromZero),
@@ -200,7 +217,7 @@ public sealed class QuantitativeFilterService
             Atr14 = decimal.Round(atrValue, 4, MidpointRounding.AwayFromZero),
             SupportLevel = support,
             ResistanceLevel = resistance,
-            NetForeignTodayPhp = stock.NetForeignTodayPhp is decimal netForeign
+            NetForeignTodayPhp = liveForeignFlow is decimal netForeign
                 ? decimal.Round(netForeign, 2, MidpointRounding.AwayFromZero)
                 : null,
             RecentDisclosuresJson = MarketDataMapper.SerializeDisclosures(disclosures),
@@ -313,7 +330,7 @@ public sealed class QuantitativeFilterService
         int maxCandidates = MaxCandidates)
     {
         return metrics
-            .Where(m => MeetsLiquidityFloor(m.AvgTurnover20dPhp))
+            .Where(m => MeetsLiquidityFloor(m.AvgTurnover20dPhp, m.MedianTurnover20dPhp, m.ActiveTradingDays20d))
             .OrderByDescending(m => m.QuantPreScore)
             .ThenByDescending(m => m.AvgTurnover20dPhp)
             .ThenBy(m => m.Ticker, StringComparer.Ordinal)
@@ -338,7 +355,7 @@ public sealed class QuantitativeFilterService
 
         foreach (var metric in metrics)
         {
-            if (!MeetsLiquidityFloor(metric.AvgTurnover20dPhp))
+            if (!MeetsLiquidityFloor(metric.AvgTurnover20dPhp, metric.MedianTurnover20dPhp, metric.ActiveTradingDays20d))
             {
                 continue;
             }
@@ -678,12 +695,15 @@ public sealed class QuantitativeFilterService
     /// <summary>
     /// Narrows a disclosure list to one horizon's lookback window without merging or
     /// re-ranking. The pipeline persists the full rolling history but only shows a DAY book the
-    /// last week of filings.
+    /// last week of filings. Filings dated after the session — or dated the same day but
+    /// timestamped after the close — are dropped, so a replay cannot act on a document that had
+    /// not been published yet.
     /// </summary>
     public static IReadOnlyList<StockDisclosure> ScopeDisclosures(
         IReadOnlyList<StockDisclosure>? disclosures,
         DateOnly tradeDate,
-        int lookbackDays)
+        int lookbackDays,
+        TimeOnly? cutoff = null)
     {
         if (disclosures is null || disclosures.Count == 0)
         {
@@ -693,7 +713,7 @@ public sealed class QuantitativeFilterService
         var windowStart = tradeDate.AddDays(-Math.Abs(lookbackDays));
 
         return disclosures
-            .Where(disclosure => disclosure.Date >= windowStart && disclosure.Date <= tradeDate)
+            .Where(disclosure => disclosure.Date >= windowStart && IsAvailableBy(disclosure, tradeDate, cutoff))
             .OrderByDescending(disclosure => disclosure.Date)
             .ToList();
     }
@@ -711,6 +731,98 @@ public sealed class QuantitativeFilterService
     }
 
     public static bool MeetsLiquidityFloor(decimal avgTurnover20dPhp) => avgTurnover20dPhp >= LiquidityFloorPhp;
+
+    /// <summary>A 20-session run of trading days the desk requires before it will call a name liquid.</summary>
+    public const int MinimumActiveTradingDays20d = 16;
+
+    /// <summary>
+    /// The robust liquidity gate: the mean turnover, the <b>median</b> turnover and the number of
+    /// sessions that actually printed volume all have to clear their floors. A single block trade
+    /// can lift the mean of twenty quiet sessions over <c>PHP 5M</c> while the median stays at a
+    /// fraction of it, and a name that did not trade on six of twenty sessions cannot be exited
+    /// in one clip. A session stored before the robust columns existed reports zero for both, and
+    /// falls back to the mean so history is never rejected by a column that did not exist yet.
+    /// </summary>
+    public static bool MeetsLiquidityFloor(
+        decimal avgTurnover20dPhp,
+        decimal medianTurnover20dPhp = 0m,
+        int activeTradingDays20d = 0)
+    {
+        if (avgTurnover20dPhp < LiquidityFloorPhp)
+        {
+            return false;
+        }
+
+        if (medianTurnover20dPhp <= 0m || activeTradingDays20d <= 0)
+        {
+            return true;
+        }
+
+        return medianTurnover20dPhp >= LiquidityFloorPhp && activeTradingDays20d >= MinimumActiveTradingDays20d;
+    }
+
+    /// <summary>Median close-times-volume of the supplied window, rounded to the centavo.</summary>
+    public static decimal ComputeMedianTurnover20d(IReadOnlyList<OhlcvBar> window)
+    {
+        if (window is null || window.Count == 0)
+        {
+            return 0m;
+        }
+
+        var turnovers = window
+            .Select(bar => bar.Close * bar.Volume)
+            .OrderBy(value => value)
+            .ToList();
+
+        var middle = turnovers.Count / 2;
+        var median = turnovers.Count % 2 == 0
+            ? (turnovers[middle - 1] + turnovers[middle]) / 2m
+            : turnovers[middle];
+
+        return decimal.Round(median, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Drops every filing the desk could not have read before the session closed. A filing dated
+    /// after <paramref name="tradeDate"/> is future information outright; a filing dated the same
+    /// day is only usable when its timestamp precedes the cutoff (the 15:00 close by default).
+    /// Without this a 2023 replay could disqualify a trade because of a 2025 rights offering.
+    /// </summary>
+    public static IReadOnlyList<StockDisclosure> ScopeToSession(
+        IReadOnlyList<StockDisclosure>? disclosures,
+        DateOnly tradeDate,
+        TimeOnly? cutoff = null)
+    {
+        if (disclosures is null || disclosures.Count == 0)
+        {
+            return Array.Empty<StockDisclosure>();
+        }
+
+        return disclosures
+            .Where(disclosure => IsAvailableBy(disclosure, tradeDate, cutoff))
+            .ToList();
+    }
+
+    /// <summary>
+    /// True when a filing was on the wire by the cutoff of <paramref name="tradeDate"/>. An
+    /// unreported time on a same-day filing is treated as available: the session's own trading is
+    /// what the metric describes, and refusing every same-day filing would delete the live run's
+    /// own catalysts.
+    /// </summary>
+    public static bool IsAvailableBy(StockDisclosure disclosure, DateOnly tradeDate, TimeOnly? cutoff = null)
+    {
+        if (disclosure.Date > tradeDate)
+        {
+            return false;
+        }
+
+        if (disclosure.Date < tradeDate)
+        {
+            return true;
+        }
+
+        return disclosure.FiledAtPht is not TimeOnly filedAt || filedAt <= (cutoff ?? PseTradingSessionRules.MarketClose);
+    }
 
     /// <summary>
     /// Wilder's RSI. Returns null until <paramref name="period"/> + 1 closes exist.

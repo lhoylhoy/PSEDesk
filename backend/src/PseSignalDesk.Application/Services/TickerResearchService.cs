@@ -200,7 +200,8 @@ public sealed class TickerResearchService
                 plan.Target,
                 assessment.Verdict,
                 cancellationToken,
-                assessment);
+                assessment,
+                horizon);
         }
         catch (PortfolioRuleViolationException)
         {
@@ -241,7 +242,10 @@ public sealed class TickerResearchService
             horizon.ToString(),
             asOfDate,
             InCatalog: _marketData.IsTracked(ticker),
-            PassesLiquidityFloor: metric.AvgTurnover20dPhp >= QuantitativeFilterService.LiquidityFloorPhp,
+            PassesLiquidityFloor: QuantitativeFilterService.MeetsLiquidityFloor(
+                metric.AvgTurnover20dPhp,
+                metric.MedianTurnover20dPhp,
+                metric.ActiveTradingDays20d),
             metric.AvgTurnover20dPhp,
             MarketDataMapper.ToMetricsDto(metric),
             trapFlags.Select(flag => flag.ToString()).ToList(),

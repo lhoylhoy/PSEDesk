@@ -73,7 +73,117 @@ public static class PseBoardLotService
     /// </summary>
     public const decimal SellLegFeeRate = 0.00395m;
 
+    /// <summary>Broker commission on either leg, before VAT: <c>0.25%</c> of gross.</summary>
+    public const decimal BrokerCommissionRate = 0.0025m;
+
+    /// <summary>VAT charged on the broker commission itself: <c>12%</c>.</summary>
+    public const decimal CommissionVatRate = 0.12m;
+
+    /// <summary>The PSE's own trading fee: <c>0.005%</c> of gross on each leg.</summary>
+    public const decimal PseTradingFeeRate = 0.00005m;
+
+    /// <summary>Securities Clearing Corporation of the Philippines fee: <c>0.01%</c> per leg.</summary>
+    public const decimal SccpFeeRate = 0.0001m;
+
+    /// <summary>
+    /// Broker minimum commission. Almost every PSE retail broker charges
+    /// <c>PHP 20</c> when <c>0.25%</c> of the clip is smaller than that, so a small ticket pays a
+    /// fixed cost the flat-rate model cannot see — on a <c>PHP 2,500</c> clip the floor alone is
+    /// <b>0.90% per leg</b>, not the advertised 0.295%.
+    /// </summary>
+    public const decimal MinimumBrokerCommissionPhp = 20m;
+
+    /// <summary>Stock transaction tax on sales under RA 12214 (CMEPA), effective 1 July 2025.</summary>
+    public const decimal StockTransactionTaxRateCurrent = 0.0010m;
+
+    /// <summary>Stock transaction tax on sales before CMEPA took effect: <c>0.60%</c>.</summary>
+    public const decimal StockTransactionTaxRatePreCmepa = 0.0060m;
+
+    /// <summary>First session the <c>0.10%</c> stock transaction tax applied.</summary>
+    public static readonly DateOnly CmepaEffectiveDate = new(2025, 7, 1);
+
+    /// <summary>
+    /// Highest price the desk will accept as orderable. The board lot table is open-ended, but
+    /// <c>shares * price</c> must stay inside <see cref="decimal"/> for every downstream ledger
+    /// figure, and no PSE name has ever traded near this ceiling.
+    /// </summary>
+    public const decimal MaximumTradablePrice = 1_000_000m;
+
     private const decimal LargestTick = 5.00m;
+
+    /// <summary>
+    /// The stock transaction tax that actually applied on <paramref name="tradeDate"/>. Passing
+    /// null means "today", which is the CMEPA <c>0.10%</c> schedule; any date before
+    /// <see cref="CmepaEffectiveDate"/> really paid <c>0.60%</c>, and pricing that history at
+    /// today's tax would manufacture roughly <c>0.2R</c> of phantom edge per 5%-stop trade.
+    /// </summary>
+    public static decimal StockTransactionTaxRate(DateOnly? tradeDate = null) =>
+        tradeDate is DateOnly date && date < CmepaEffectiveDate
+            ? StockTransactionTaxRatePreCmepa
+            : StockTransactionTaxRateCurrent;
+
+    /// <summary>Sell-leg friction as it applied on a date: broker, VAT, exchange, SCCP and the tax.</summary>
+    public static decimal SellLegFeeRateOn(DateOnly? tradeDate = null) =>
+        BuyLegFeeRate + StockTransactionTaxRate(tradeDate);
+
+    /// <summary>Round-trip statutory friction as it applied on a date.</summary>
+    public static decimal RoundTripFeeRateOn(DateOnly? tradeDate = null) =>
+        BuyLegFeeRate + SellLegFeeRateOn(tradeDate);
+
+    /// <summary>
+    /// True when a price can be ordered and priced without breaking the tick table or the
+    /// decimal ledger. Zero, negative and absurd prices are rejected before they can reach
+    /// <see cref="GetBracket"/> (where a zero would size a million-share lot).
+    /// </summary>
+    public static bool IsTradablePrice(decimal price) =>
+        price > 0m && price <= MaximumTradablePrice;
+
+    /// <summary>
+    /// Peso fee charged on one leg, including the broker minimum commission and the
+    /// date-correct stock transaction tax. The commission floor is why this is not simply
+    /// <c>gross * rate</c>: below a <c>PHP 8,000</c> gross the fixed <c>PHP 20</c> dominates.
+    /// </summary>
+    public static decimal ComputeLegFeePhp(int shares, decimal price, bool isSell, DateOnly? tradeDate = null)
+    {
+        if (shares <= 0 || !IsTradablePrice(price))
+        {
+            return 0m;
+        }
+
+        var gross = shares * price;
+        var commission = Math.Max(gross * BrokerCommissionRate, MinimumBrokerCommissionPhp);
+        var fee = (commission * (1m + CommissionVatRate)) +
+                  (gross * (PseTradingFeeRate + SccpFeeRate));
+
+        if (isSell)
+        {
+            fee += gross * StockTransactionTaxRate(tradeDate);
+        }
+
+        return decimal.Round(fee, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Fill price of a resting stop for one session. A session that opens through the stop fills
+    /// at the open (the real, worse, price) instead of at the stop; a session that merely trades
+    /// through it fills at the stop. Returns null when the stop was never touched. Targets are
+    /// deliberately left at the target: crediting a gap-up open as a better exit would make the
+    /// reward look larger than the order would have earned.
+    /// </summary>
+    public static decimal? ResolveStopFillPrice(decimal stopLoss, decimal sessionOpen, decimal sessionLow)
+    {
+        if (!IsTradablePrice(stopLoss))
+        {
+            return null;
+        }
+
+        if (IsTradablePrice(sessionOpen) && sessionOpen <= stopLoss)
+        {
+            return RoundToValidTick(sessionOpen);
+        }
+
+        return sessionLow > 0m && sessionLow <= stopLoss ? stopLoss : null;
+    }
 
     /// <summary>
     /// The complete official PSE Revised Trading Rules board lot and tick table
@@ -231,12 +341,14 @@ public static class PseBoardLotService
         decimal entryPrice,
         decimal orderNotionalPhp,
         decimal avgTurnover20dPhp,
-        decimal? atrPct = null)
+        decimal? atrPct = null,
+        DateOnly? tradeDate = null)
     {
-        var effective = RoundTripFeeRate +
+        var statutory = RoundTripFeeRateOn(tradeDate);
+        var effective = statutory +
                         ComputeEstimatedSlippageRate(entryPrice, orderNotionalPhp, avgTurnover20dPhp, atrPct);
 
-        return decimal.Round(Math.Clamp(effective, RoundTripFeeRate, 0.25m), 6, MidpointRounding.AwayFromZero);
+        return decimal.Round(Math.Clamp(effective, statutory, 0.25m), 6, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>
@@ -350,6 +462,29 @@ public static class PseBoardLotService
     }
 
     /// <summary>
+    /// Date-aware split: the extra friction (slippage) is split evenly on top of the statutory
+    /// schedule that applied on <paramref name="tradeDate"/>, and a rate below it is scaled down
+    /// proportionally. Used by the replay and the trainer, where the tax was higher.
+    /// </summary>
+    public static (decimal BuyRate, decimal SellRate) SplitRoundTripFee(
+        decimal roundTripFeeRate,
+        DateOnly? tradeDate)
+    {
+        var baseline = RoundTripFeeRateOn(tradeDate);
+        var clamped = Math.Clamp(roundTripFeeRate, 0m, 0.5m);
+        var sellLeg = SellLegFeeRateOn(tradeDate);
+
+        if (clamped >= baseline)
+        {
+            var extra = (clamped - baseline) / 2m;
+            return (BuyLegFeeRate + extra, sellLeg + extra);
+        }
+
+        var scale = baseline > 0m ? clamped / baseline : 0m;
+        return (BuyLegFeeRate * scale, sellLeg * scale);
+    }
+
+    /// <summary>
     /// Net reward per share after the round-trip friction on both legs. Returns 0 when
     /// the target is not above the entry or the move cannot pay the fees.
     /// <para>
@@ -428,6 +563,25 @@ public static class PseBoardLotService
         var probability = Math.Clamp(winProbability, 0m, 1m);
         var reward = Math.Max(0m, netRiskReward);
         var expectedValue = (probability * reward) - (1m - probability);
+
+        return decimal.Round(expectedValue, 4, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Expected value of one unit of risk when the two branches pay differently:
+    /// <c>p * averageWinR - (1 - p) * averageLossR</c>. Use this whenever the payoff
+    /// distribution is known, because a win rate alone cannot distinguish a target hit from a
+    /// time-expired scratch.
+    /// </summary>
+    public static decimal ComputeExpectedValueR(
+        decimal winProbability,
+        decimal averageWinR,
+        decimal averageLossR)
+    {
+        var probability = Math.Clamp(winProbability, 0m, 1m);
+        var reward = Math.Max(0m, averageWinR);
+        var loss = Math.Max(0m, averageLossR);
+        var expectedValue = (probability * reward) - ((1m - probability) * loss);
 
         return decimal.Round(expectedValue, 4, MidpointRounding.AwayFromZero);
     }
@@ -526,48 +680,145 @@ public static class PseBoardLotService
     /// All-in cash cost of buying <paramref name="shares"/> at
     /// <paramref name="entryPrice"/>, including the buy-leg fees. This is the amount that
     /// leaves the account, so it is what the cash ledger debits.
+    /// <para>
+    /// The fees are charged at the peso level, not as a flat rate, because the broker's
+    /// <c>PHP 20</c> minimum commission dominates a small clip: a PHP 2,500 buy really costs
+    /// about PHP 22.55 in fees, not PHP 7.38.
+    /// </para>
     /// </summary>
-    public static decimal ComputeBuyTotalCostPhp(int shares, decimal entryPrice)
+    public static decimal ComputeBuyTotalCostPhp(int shares, decimal entryPrice, DateOnly? tradeDate = null)
     {
-        if (shares <= 0 || entryPrice <= 0m)
+        if (shares <= 0 || !IsTradablePrice(entryPrice))
         {
             return 0m;
         }
 
         var gross = shares * entryPrice;
-        return decimal.Round(gross * (1m + BuyLegFeeRate), 2, MidpointRounding.AwayFromZero);
+        var fees = ComputeLegFeePhp(shares, entryPrice, isSell: false, tradeDate);
+
+        return decimal.Round(gross + fees, 2, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>
     /// Cash received from selling <paramref name="shares"/> at
     /// <paramref name="exitPrice"/>, after the sell-leg fees (including the stock
-    /// transaction tax).
+    /// transaction tax that applied on <paramref name="tradeDate"/>).
     /// </summary>
-    public static decimal ComputeSellNetProceedsPhp(int shares, decimal exitPrice)
+    public static decimal ComputeSellNetProceedsPhp(int shares, decimal exitPrice, DateOnly? tradeDate = null)
     {
-        if (shares <= 0 || exitPrice <= 0m)
+        if (shares <= 0 || !IsTradablePrice(exitPrice))
         {
             return 0m;
         }
 
         var gross = shares * exitPrice;
-        return decimal.Round(gross * (1m - SellLegFeeRate), 2, MidpointRounding.AwayFromZero);
+        var fees = ComputeLegFeePhp(shares, exitPrice, isSell: true, tradeDate);
+
+        return decimal.Round(gross - fees, 2, MidpointRounding.AwayFromZero);
     }
+
+    /// <summary>
+    /// Settled peso risk of one clip: the cash that leaves the account minus the cash a stop-out
+    /// returns. Unlike <see cref="ComputeNetRiskPerShare"/> this is exact under the minimum
+    /// commission, because a fixed fee is not divisible across shares.
+    /// </summary>
+    public static decimal ComputeNetRiskPhp(int shares, decimal entryPrice, decimal stopLoss, DateOnly? tradeDate = null)
+    {
+        if (shares <= 0 || !IsTradablePrice(entryPrice) || stopLoss <= 0m || stopLoss >= entryPrice)
+        {
+            return 0m;
+        }
+
+        return decimal.Round(
+            ComputeBuyTotalCostPhp(shares, entryPrice, tradeDate) -
+            ComputeSellNetProceedsPhp(shares, stopLoss, tradeDate),
+            2,
+            MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>Peso reward of one clip, net of both legs' fees.</summary>
+    public static decimal ComputeNetRewardPhp(int shares, decimal entryPrice, decimal targetPrice, DateOnly? tradeDate = null)
+    {
+        if (shares <= 0 || !IsTradablePrice(entryPrice) || targetPrice <= entryPrice)
+        {
+            return 0m;
+        }
+
+        return decimal.Round(
+            ComputeSellNetProceedsPhp(shares, targetPrice, tradeDate) -
+            ComputeBuyTotalCostPhp(shares, entryPrice, tradeDate),
+            2,
+            MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Fee-adjusted reward-to-risk of a clip, measured in pesos so the minimum commission is
+    /// charged once per leg instead of being smeared across the per-share spread.
+    /// </summary>
+    public static decimal ComputeNetRiskRewardPeso(
+        int shares,
+        decimal entryPrice,
+        decimal stopLoss,
+        decimal targetPrice,
+        DateOnly? tradeDate = null)
+    {
+        var risk = ComputeNetRiskPhp(shares, entryPrice, stopLoss, tradeDate);
+        var reward = ComputeNetRewardPhp(shares, entryPrice, targetPrice, tradeDate);
+
+        if (risk <= 0m || reward <= 0m)
+        {
+            return 0m;
+        }
+
+        return decimal.Round(reward / risk, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Settled peso P&amp;L of a round trip whose legs settled on different dates, so the buy leg
+    /// pays the commission schedule of <paramref name="entryDate"/> and the sale pays the stock
+    /// transaction tax that applied on <paramref name="exitDate"/>. A position opened in 2024 and
+    /// closed in 2026 crosses the 1 July 2025 STT cut and must not be taxed at either rate for
+    /// both legs.
+    /// </summary>
+    public static decimal ComputeRealizedNetPnlPhp(
+        int shares,
+        decimal entryPrice,
+        decimal exitPrice,
+        DateOnly? entryDate,
+        DateOnly? exitDate)
+    {
+        if (shares <= 0 || !IsTradablePrice(entryPrice) || !IsTradablePrice(exitPrice))
+        {
+            return 0m;
+        }
+
+        return decimal.Round(
+            ComputeSellNetProceedsPhp(shares, exitPrice, exitDate) -
+            ComputeBuyTotalCostPhp(shares, entryPrice, entryDate),
+            2,
+            MidpointRounding.AwayFromZero);
+    }
+
 
     /// <summary>
     /// Settled peso profit or loss for a completed round trip: sell proceeds net of the
     /// sell leg minus the all-in buy cost. This is the only number the blotter should
     /// present as realized P&amp;L.
     /// </summary>
-    public static decimal ComputeRealizedNetPnlPhp(int shares, decimal entryPrice, decimal exitPrice)
+    public static decimal ComputeRealizedNetPnlPhp(
+        int shares,
+        decimal entryPrice,
+        decimal exitPrice,
+        DateOnly? tradeDate = null)
     {
-        if (shares <= 0 || entryPrice <= 0m || exitPrice <= 0m)
+        if (shares <= 0 || !IsTradablePrice(entryPrice) || !IsTradablePrice(exitPrice))
         {
             return 0m;
         }
 
         return decimal.Round(
-            ComputeSellNetProceedsPhp(shares, exitPrice) - ComputeBuyTotalCostPhp(shares, entryPrice),
+            ComputeSellNetProceedsPhp(shares, exitPrice, tradeDate) -
+            ComputeBuyTotalCostPhp(shares, entryPrice, tradeDate),
             2,
             MidpointRounding.AwayFromZero);
     }
@@ -589,10 +840,81 @@ public static class PseBoardLotService
     }
 
     /// <summary>
+    /// Exact break-even exit for an actual clip. The per-share formula above is the right
+    /// continuous answer, but a fixed minimum commission can push the true break-even a tick or
+    /// two higher on a small clip, so this walks the tick grid up until the settled P&amp;L is no
+    /// longer negative.
+    /// </summary>
+    public static decimal ComputeBreakEvenStopPrice(int shares, decimal entryPrice, DateOnly? tradeDate = null)
+    {
+        if (shares <= 0 || !IsTradablePrice(entryPrice))
+        {
+            return 0m;
+        }
+
+        var buyCost = ComputeBuyTotalCostPhp(shares, entryPrice, tradeDate);
+        var candidate = ComputeBreakEvenStopPrice(entryPrice);
+
+        for (var guard = 0; guard < 512; guard++)
+        {
+            if (ComputeSellNetProceedsPhp(shares, candidate, tradeDate) >= buyCost)
+            {
+                return candidate;
+            }
+
+            var next = decimal.Round(candidate + GetTickSize(candidate), 4, MidpointRounding.AwayFromZero);
+
+            if (!IsTradablePrice(next) || next <= candidate)
+            {
+                return candidate;
+            }
+
+            candidate = next;
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// Net result of <b>one share's</b> round trip, before the broker minimum commission is
+    /// applied. This is the per-share identity the risk and R maths is built on; use it whenever
+    /// a per-share number is needed (unrealized R, break-even geometry). Do <b>not</b> simulate a
+    /// one-share trade through <see cref="ComputeRealizedNetPnlPhp"/> instead: a single share pays
+    /// the full <c>PHP 22.40</c> minimum commission and the result stops describing a share.
+    /// </summary>
+    public static decimal ComputeNetPerSharePnl(
+        decimal entry,
+        decimal exit,
+        decimal roundTripFeeRate = RoundTripFeeRate)
+    {
+        if (!IsTradablePrice(entry) || !IsTradablePrice(exit))
+        {
+            return 0m;
+        }
+
+        var (buyRate, sellRate) = SplitRoundTripFee(roundTripFeeRate);
+
+        return decimal.Round((exit * (1m - sellRate)) - (entry * (1m + buyRate)), 4, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
     /// All-in peso risk of one position at entry: the money that leaves the account minus
     /// the cash a stop-out returns. This is the denominator of the realized R.
     /// </summary>
-    public static decimal ComputeInitialNetRiskPhp(int shares, decimal entryPrice, decimal stopLoss)
+    public static decimal ComputeInitialNetRiskPhp(int shares, decimal entryPrice, decimal stopLoss) =>
+        ComputeInitialNetRiskPhp(shares, entryPrice, stopLoss, null);
+
+    /// <summary>
+    /// All-in peso risk of one position at entry, priced on the friction schedule of the entry
+    /// date. The stop leg is charged the same date's sell schedule because the exit date is not
+    /// known when the risk is booked; before 1 July 2025 that over-states the tax and therefore
+    /// under-states the R of the trade — the conservative direction.
+    /// </summary>
+    public static decimal ComputeInitialNetRiskPhp(
+        int shares,
+        decimal entryPrice,
+        decimal stopLoss,
+        DateOnly? tradeDate)
     {
         if (shares <= 0 || entryPrice <= 0m || stopLoss <= 0m || stopLoss >= entryPrice)
         {
@@ -600,7 +922,8 @@ public static class PseBoardLotService
         }
 
         return decimal.Round(
-            ComputeBuyTotalCostPhp(shares, entryPrice) - ComputeSellNetProceedsPhp(shares, stopLoss),
+            ComputeBuyTotalCostPhp(shares, entryPrice, tradeDate) -
+            ComputeSellNetProceedsPhp(shares, stopLoss, tradeDate),
             2,
             MidpointRounding.AwayFromZero);
     }

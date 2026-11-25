@@ -21,16 +21,19 @@ public sealed class PortfolioService
 
     private readonly IPortfolioRepository _portfolio;
     private readonly ISignalRepository _signals;
+    private readonly SignalOutcomeService? _outcomes;
     private readonly ILogger<PortfolioService>? _logger;
 
     public PortfolioService(
         IPortfolioRepository portfolio,
         ISignalRepository signals,
-        ILogger<PortfolioService>? logger = null)
+        ILogger<PortfolioService>? logger = null,
+        SignalOutcomeService? outcomes = null)
     {
         _portfolio = portfolio;
         _signals = signals;
         _logger = logger;
+        _outcomes = outcomes;
     }
 
     /// <summary>
@@ -41,8 +44,9 @@ public sealed class PortfolioService
     /// </summary>
     public async Task<OrderTicketContext?> GetOrderTicketContextAsync(
         string? ticker = null,
-        CancellationToken cancellationToken = default) =>
-        (await GetBookSizingSnapshotAsync(cancellationToken))?.For(ticker);
+        CancellationToken cancellationToken = default,
+        SignalHorizon? horizon = null) =>
+        (await GetBookSizingSnapshotAsync(cancellationToken, horizon))?.For(ticker);
 
     /// <summary>
     /// Reads the book <b>once</b> and returns a snapshot that can size every candidate on a run
@@ -52,7 +56,8 @@ public sealed class PortfolioService
     /// pyramid rules. Null when the account has no equity.
     /// </summary>
     public async Task<BookSizingSnapshot?> GetBookSizingSnapshotAsync(
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SignalHorizon? horizon = null)
     {
         var (account, equityPhp, openRiskPhp) = await LoadCapitalAsync(cancellationToken);
         if (equityPhp <= 0m)
@@ -68,6 +73,29 @@ public sealed class PortfolioService
             : await _signals.GetMetricsAsync(snapshot.TradeDate, cancellationToken);
         var metricsByTicker = metrics.ToDictionary(metric => metric.Ticker, StringComparer.OrdinalIgnoreCase);
 
+        // The live-drift throttle belongs to a horizon's book, so it is only evaluated when the
+        // caller names one. A ledger read must never break sizing: a failure logs and leaves the
+        // ticket unthrottled rather than handing the terminal a 500 on a cash page.
+        LiveDriftSnapshot? liveDrift = null;
+        if (horizon is SignalHorizon evaluatedHorizon && _outcomes is not null)
+        {
+            try
+            {
+                liveDrift = await _outcomes.EvaluateLiveDriftAsync(evaluatedHorizon, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(
+                    ex,
+                    "Live drift for {Horizon} could not be evaluated; this book is sized unthrottled.",
+                    evaluatedHorizon);
+            }
+        }
+
         return new BookSizingSnapshot(
             account,
             equityPhp,
@@ -75,7 +103,8 @@ public sealed class PortfolioService
             drawdownPct,
             snapshot?.PseiRealizedVol20dPct,
             open,
-            metricsByTicker);
+            metricsByTicker,
+            liveDrift);
     }
 
     /// <summary>
@@ -94,9 +123,10 @@ public sealed class PortfolioService
         decimal targetPrice,
         EdgeVerdict verdict,
         CancellationToken cancellationToken = default,
-        EdgeAssessment? edge = null)
+        EdgeAssessment? edge = null,
+        SignalHorizon? horizon = null)
     {
-        var context = await GetOrderTicketContextAsync(ticker, cancellationToken) ??
+        var context = await GetOrderTicketContextAsync(ticker, cancellationToken, horizon) ??
                       throw new PortfolioRuleViolationException(
                           "The desk account has no equity. Set the starting capital before sizing an order.");
 

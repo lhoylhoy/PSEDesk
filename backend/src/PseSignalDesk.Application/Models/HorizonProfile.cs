@@ -27,6 +27,21 @@ public sealed record HorizonProfile(
 {
     public const decimal DefaultMinimumNetRiskReward = 2.0m;
 
+    /// <summary>
+    /// Per-horizon net reward-to-risk floors. A uniform 2.0 floor is unimplementable: every
+    /// horizon builds its plan from ATR multiples with a <b>gross</b> 2.0:1 shape
+    /// (<c>1.2/2.6</c>, <c>1.5/3.0</c>, <c>2.0/4.0</c>, <c>2.5/5.0</c>), and after the 0.690%
+    /// round trip a 2%-6% stop lands at only 1.23-1.69 net. Gating all four books at 2.0 would
+    /// therefore reject every ATR-built plan instead of rejecting the bad ones. Each floor below
+    /// is what its own geometry can reach with room to spare; the DAY book, whose levels come
+    /// from the model rather than the ATR multiples, keeps the strict 2.0.
+    /// </summary>
+    public const decimal WeekMinimumNetRiskReward = 1.50m;
+
+    public const decimal MonthMinimumNetRiskReward = 1.40m;
+
+    public const decimal YearMinimumNetRiskReward = 1.40m;
+
     public static IReadOnlyList<HorizonProfile> All { get; } = new[]
     {
         new HorizonProfile(
@@ -59,8 +74,8 @@ public sealed record HorizonProfile(
             AtrTargetMultiplier: 3.0m,
             DisclosureLookbackDays: 21,
             HysteresisConvictionDelta: 10,
-            RequireNetRewardRisk: false,
-            MinimumNetRiskReward: DefaultMinimumNetRiskReward,
+            RequireNetRewardRisk: true,
+            MinimumNetRiskReward: WeekMinimumNetRiskReward,
             PreferredCategories: new[] { "TECHNICAL", "MOMENTUM", "RISK", "POSITION_SIZING" },
             ForwardWindowBars: 10,
             TargetNetRiskReward: 1.5m,
@@ -77,8 +92,8 @@ public sealed record HorizonProfile(
             AtrTargetMultiplier: 4.0m,
             DisclosureLookbackDays: 60,
             HysteresisConvictionDelta: 12,
-            RequireNetRewardRisk: false,
-            MinimumNetRiskReward: DefaultMinimumNetRiskReward,
+            RequireNetRewardRisk: true,
+            MinimumNetRiskReward: MonthMinimumNetRiskReward,
             PreferredCategories: new[] { "FUNDAMENTAL", "VALUE", "GROWTH", "MACRO", "SECTOR_ROTATION" },
             ForwardWindowBars: 42,
             TargetNetRiskReward: 1.6m,
@@ -95,8 +110,8 @@ public sealed record HorizonProfile(
             AtrTargetMultiplier: 5.0m,
             DisclosureLookbackDays: 120,
             HysteresisConvictionDelta: 15,
-            RequireNetRewardRisk: false,
-            MinimumNetRiskReward: DefaultMinimumNetRiskReward,
+            RequireNetRewardRisk: true,
+            MinimumNetRiskReward: YearMinimumNetRiskReward,
             PreferredCategories: new[] { "FUNDAMENTAL", "VALUE", "GROWTH", "MACRO" },
             ForwardWindowBars: 126,
             TargetNetRiskReward: 1.8m,
@@ -105,6 +120,21 @@ public sealed record HorizonProfile(
 
     public static HorizonProfile For(SignalHorizon horizon) =>
         All.First(profile => profile.Horizon == horizon);
+
+    /// <summary>
+    /// Minimum volume expansion this book requires at entry. A MONTH/YEAR position does not need
+    /// the 1.2x breakout print an intraday idea does; demanding one deleted most of the
+    /// long-horizon training sample for no economic reason. Every book still demands at least
+    /// average participation — a ratio of exactly 1.0 is "no expansion at all", which is what a
+    /// name trading on its own average prints on every quiet session.
+    /// </summary>
+    public decimal MinimumVolumeRatio => Horizon switch
+    {
+        SignalHorizon.DAY => 1.2m,
+        SignalHorizon.WEEK => 1.2m,
+        SignalHorizon.MONTH => 1.1m,
+        _ => 1.0m
+    };
 
     public DateTime CutoffUtc(DateTime nowUtc) => nowUtc.AddDays(-DisclosureLookbackDays);
 }

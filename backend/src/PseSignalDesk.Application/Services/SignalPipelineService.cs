@@ -240,7 +240,7 @@ public sealed class SignalPipelineService
         {
             try
             {
-                book = await _portfolio.GetBookSizingSnapshotAsync(cancellationToken);
+                book = await _portfolio.GetBookSizingSnapshotAsync(cancellationToken, horizon);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

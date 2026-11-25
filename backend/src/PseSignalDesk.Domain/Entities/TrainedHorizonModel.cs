@@ -79,4 +79,14 @@ public class TrainedHorizonModel
     /// the neutral baseline. An inactive model is documentation, not an input to live sizing.
     /// </summary>
     public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Live drift of this book against its own held-out record, persisted so the throttle has
+    /// hysteresis: a book that was cut is only released once the gap has halved, which a
+    /// stateless recomputation could never enforce.
+    /// </summary>
+    public LiveDriftStatus LiveDrift { get; set; } = LiveDriftStatus.STABLE;
+
+    /// <summary>Graded picks behind <see cref="LiveDrift"/>, so a stale verdict is visible.</summary>
+    public int LiveDriftGradedPicks { get; set; }
 }

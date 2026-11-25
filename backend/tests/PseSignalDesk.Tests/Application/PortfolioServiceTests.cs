@@ -491,6 +491,82 @@ public sealed class PortfolioServiceTests
         AtrPct = 3m
     };
 
+    [Fact]
+    public async Task GetOrderTicketContextAsync_applies_the_live_drift_throttle_to_every_ticket()
+    {
+        var portfolio = new FakePortfolioRepository();
+        var signals = new EmptySignalRepository();
+        signals.TrainedModel = new TrainedHorizonModel
+        {
+            Horizon = SignalHorizon.WEEK,
+            IsActive = true,
+            ValidationWinRate = 0.50m,
+            ValidationExpectancyR = 0.60m
+        };
+        signals.Runs.Add(new SignalRun
+        {
+            Id = 1,
+            RunDate = new DateOnly(2026, 11, 23),
+            Horizon = SignalHorizon.WEEK,
+            CreatedAtUtc = DateTime.UtcNow,
+            Items = Enumerable.Range(0, 15).Select(index => new SignalItem
+            {
+                Id = index + 1,
+                Ticker = $"LOSER{index}",
+                Rank = index + 1,
+                ConvictionScore = 70,
+                EntryPrice = 100m,
+                StopLoss = 95m,
+                TargetPrice = 110m,
+                RiskRewardRatio = 2m,
+                Thesis = "failed",
+                DeviationReason = string.Empty,
+                WinProbability = 0.5m,
+                EdgeVerdict = EdgeVerdict.TRADE,
+                OutcomeStatus = SignalOutcomeStatus.LOSS_STOP,
+                OutcomeExitPrice = 95m,
+                OutcomeDate = new DateOnly(2026, 11, 24),
+                RealizedNetR = -1m,
+                BarsHeld = 3
+            }).ToList()
+        });
+
+        var service = new PortfolioService(
+            portfolio,
+            signals,
+            outcomes: new SignalOutcomeService(signals));
+
+        var context = await service.GetOrderTicketContextAsync("ICT", default, SignalHorizon.WEEK);
+
+        Assert.NotNull(context);
+        Assert.Equal(LiveDriftStatus.HALTED, context!.LiveDrift);
+        Assert.Equal(15, context.LiveDriftGradedPicks);
+        Assert.True(context.LiveDriftExpectancyGapR > 0m);
+
+        // A halted book may not fund anything, even a textbook TRADE the governor would
+        // otherwise size at the full risk unit.
+        var ticket = OrderTicketCalculator.Build(context, 100m, 95m, 110m, EdgeVerdict.TRADE, 100_000_000m);
+
+        Assert.Equal(0, ticket.Shares);
+        Assert.Contains(ticket.Warnings, warning => warning.Contains("HALTED", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetOrderTicketContextAsync_without_a_horizon_stays_unthrottled()
+    {
+        var portfolio = new FakePortfolioRepository();
+        var signals = new EmptySignalRepository();
+        var service = new PortfolioService(portfolio, signals, outcomes: new SignalOutcomeService(signals));
+
+        // The manual sizing endpoint does not name a horizon, so no book is judged and no
+        // throttle is invented.
+        var context = await service.GetOrderTicketContextAsync("ICT");
+
+        Assert.NotNull(context);
+        Assert.Equal(LiveDriftStatus.STABLE, context!.LiveDrift);
+        Assert.Equal(0, context.LiveDriftGradedPicks);
+    }
+
     private static PortfolioService CreateService(
         FakePortfolioRepository portfolio,
         StockDailyMetric? metric = null) =>
@@ -591,6 +667,28 @@ public sealed class PortfolioServiceTests
             _metric = metric;
         }
 
+        /// <summary>The horizon's stored book, when a test needs the drift governor to see one.</summary>
+        public TrainedHorizonModel? TrainedModel { get; set; }
+
+        public List<TrainedHorizonModel> SavedModels { get; } = new();
+
+        public List<SignalRun> Runs { get; } = new();
+
+        public Task<TrainedHorizonModel?> GetTrainedModelAsync(
+            SignalHorizon horizon,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                TrainedModel is not null && TrainedModel.Horizon == horizon ? TrainedModel : null);
+
+        public Task SaveTrainedModelAsync(
+            TrainedHorizonModel model,
+            CancellationToken cancellationToken = default)
+        {
+            SavedModels.Add(model);
+            TrainedModel = model;
+            return Task.CompletedTask;
+        }
+
         public Task<DailyMarketSnapshot?> GetSnapshotAsync(
             DateOnly tradeDate,
             CancellationToken cancellationToken = default) =>
@@ -664,7 +762,8 @@ public sealed class PortfolioServiceTests
         public Task<IReadOnlyList<SignalRun>> GetAllRunsAsync(
             SignalHorizon? horizon = null,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<SignalRun>>(Array.Empty<SignalRun>());
+            Task.FromResult<IReadOnlyList<SignalRun>>(
+                Runs.Where(run => horizon is null || run.Horizon == horizon).ToList());
 
         public Task<IReadOnlyList<StockDailyMetric>> GetMetricsRangeAsync(
             DateOnly fromDate,

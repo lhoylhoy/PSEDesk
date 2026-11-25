@@ -25,6 +25,19 @@ public class StockDailyMetric
 
     public decimal AvgTurnover20dPhp { get; set; }
 
+    /// <summary>
+    /// Median close-times-volume of the last twenty sessions. The mean above is one block trade
+    /// away from clearing a liquidity floor that most sessions never reach; the median is not.
+    /// Zero means "not reported" (a row written before this column existed), never "no liquidity".
+    /// </summary>
+    public decimal MedianTurnover20dPhp { get; set; }
+
+    /// <summary>
+    /// Sessions in the last twenty that actually printed volume. A name that did not trade on a
+    /// third of its sessions cannot be exited in one clip regardless of its average turnover.
+    /// </summary>
+    public int ActiveTradingDays20d { get; set; }
+
     public decimal VolumeRatioVs20d { get; set; }
 
     public decimal Rsi14 { get; set; }

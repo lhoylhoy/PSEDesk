@@ -1,5 +1,6 @@
 using PseSignalDesk.Application.Models;
 using PseSignalDesk.Domain.Entities;
+using PseSignalDesk.Domain.Enums;
 using PseSignalDesk.Domain.Services;
 
 namespace PseSignalDesk.Application.Services;
@@ -24,6 +25,7 @@ public sealed class BookSizingSnapshot
     private readonly decimal? _regimeVolPct;
     private readonly IReadOnlyList<PortfolioTrade> _openTrades;
     private readonly IReadOnlyDictionary<string, StockDailyMetric> _metricsByTicker;
+    private readonly LiveDriftSnapshot? _liveDrift;
 
     internal BookSizingSnapshot(
         PortfolioAccount account,
@@ -32,7 +34,8 @@ public sealed class BookSizingSnapshot
         decimal drawdownPct,
         decimal? regimeVolPct,
         IReadOnlyList<PortfolioTrade> openTrades,
-        IReadOnlyDictionary<string, StockDailyMetric> metricsByTicker)
+        IReadOnlyDictionary<string, StockDailyMetric> metricsByTicker,
+        LiveDriftSnapshot? liveDrift = null)
     {
         _account = account;
         _equityPhp = equityPhp;
@@ -41,7 +44,14 @@ public sealed class BookSizingSnapshot
         _regimeVolPct = regimeVolPct;
         _openTrades = openTrades;
         _metricsByTicker = metricsByTicker;
+        _liveDrift = liveDrift;
     }
+
+    /// <summary>
+    /// The live drift verdict this book was sized under, when one was evaluated. Null means
+    /// the caller did not name a horizon, so no throttle was applied.
+    /// </summary>
+    public LiveDriftSnapshot? LiveDrift => _liveDrift;
 
     /// <summary>Book equity the size is a fraction of.</summary>
     public decimal EquityPhp => decimal.Round(_equityPhp, 2, MidpointRounding.AwayFromZero);
@@ -127,7 +137,11 @@ public sealed class BookSizingSnapshot
             ExistingUnrealizedR: existingUnrealizedR,
             ExistingStopAtBreakEven: existingStopAtBreakEven,
             ExistingPyramidCount: existingTrade?.PyramidCount ?? 0,
-            ExistingPositionCostPhp: existingTrade?.BuyCostPhp);
+            ExistingPositionCostPhp: existingTrade?.BuyCostPhp,
+            LiveDrift: _liveDrift?.Status ?? LiveDriftStatus.STABLE,
+            LiveDriftGradedPicks: _liveDrift?.GradedPicks ?? 0,
+            LiveDriftWinRateGapPct: _liveDrift?.WinRateGapPct ?? 0m,
+            LiveDriftExpectancyGapR: _liveDrift?.ExpectancyGapR ?? 0m);
     }
 
     private static string Normalize(string? ticker) =>

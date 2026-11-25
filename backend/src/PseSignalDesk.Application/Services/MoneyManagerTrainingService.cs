@@ -21,8 +21,20 @@ namespace PseSignalDesk.Application.Services;
 /// </summary>
 public sealed class MoneyManagerTrainingService
 {
-    /// <summary>Calendar history requested from the live feed. ~1,080 days is about four years of sessions.</summary>
-    public const int DefaultLookbackCalendarDays = 1080;
+    /// <summary>
+    /// Calendar history requested from the live feed. Five years of sessions, because the honest
+    /// walk-forward needs it: a 504-756 session training window, a 126-session embargo for the
+    /// YEAR book and four rolling test folds do not fit in the old 1,080 days. Yahoo's PSE depth
+    /// is the binding constraint; the provider caps the request at 1,825 days.
+    /// </summary>
+    public const int DefaultLookbackCalendarDays = 1820;
+
+    /// <summary>
+    /// Loosest per-horizon volume gate, used only by the cheap prefix prefilter. The real gate is
+    /// each horizon's own <see cref="HorizonProfile.MinimumVolumeRatio"/> inside
+    /// <see cref="IsEligible"/>.
+    /// </summary>
+    public const decimal MinimumPrefilterVolumeRatio = 0.8m;
 
     /// <summary>Below this many labelled trades no weight is allowed to price a live pick.</summary>
     public const int MinimumTrials = 80;
@@ -222,7 +234,7 @@ public sealed class MoneyManagerTrainingService
                     indexCursor++;
                 }
 
-                if (index < minBars - 1 || !prefilter.Passes(index))
+                if (index < minBars - 1 || !prefilter.Passes(index, MinimumPrefilterVolumeRatio))
                 {
                     continue;
                 }
@@ -238,7 +250,11 @@ public sealed class MoneyManagerTrainingService
                     stock with { Bars = prefix },
                     bars[index].Date,
                     indexPrefix,
-                    computeEmpiricalBaseRate: false);
+                    computeEmpiricalBaseRate: false,
+                    // Causal replay: the live session's official foreign print must never be
+                    // read into a historical prefix, and the disclosures are already scoped to
+                    // the session inside EvaluateStock.
+                    includeLiveForeignFlow: false);
 
                 if (metric is null)
                 {
@@ -343,7 +359,10 @@ public sealed class MoneyManagerTrainingService
             return false;
         }
 
-        if (metric.VolumeRatioVs20d < 1.2m ||
+        // The volume gate is per horizon: a YEAR entry does not need the same participation as a
+        // WEEK entry, and applying the WEEK gate to every book silently deletes the slow names
+        // that actually pay the year book.
+        if (metric.VolumeRatioVs20d < profile.MinimumVolumeRatio ||
             metric.AtrPct is not decimal atrPct ||
             atrPct < 1.0m ||
             metric.WeinsteinStage is "STAGE_3" or "STAGE_4")
@@ -614,7 +633,7 @@ public sealed class MoneyManagerTrainingService
         }
 
         /// <summary>Mirrors the live gate closely enough to keep the expensive pass rare.</summary>
-        public bool Passes(int index)
+        public bool Passes(int index, decimal minimumVolumeRatio)
         {
             if (index <= 0 || index >= _bars.Count)
             {
@@ -634,7 +653,7 @@ public sealed class MoneyManagerTrainingService
 
             return close > sma50.Value &&
                    close > sma200.Value &&
-                   _bars[index].Volume >= 1.2m * averageVolume &&
+                   _bars[index].Volume >= minimumVolumeRatio * averageVolume &&
                    atr.Value / close >= 0.01m;
         }
 
@@ -760,43 +779,30 @@ public sealed class MoneyManagerTrainingService
         var baselineBrier = BrierScore(baselineProbabilities, validationY);
         var baselineLogLoss = LogLoss(baselineProbabilities, validationY);
 
-        FitChoice? best = null;
+        // Hyper-parameter selection may not read the slice that grades the model. Selecting lambda
+        // on the held-out Brier turned the promotion test into a peek (pick the strength that
+        // flatters the very trades used to justify going live), so lambda is now chosen on an
+        // inner chronological split *inside* the training slice, with the same forward-window
+        // purge, and then refit on the whole training slice. The validation slice is touched once,
+        // by the gate below.
+        var selectedLambda = SelectLambda(train, trainX, trainY, trainWeights, trainOffsets, embargo);
 
-        foreach (var lambda in LambdaGrid)
-        {
-            var fitted = LogisticModelTrainer.Fit(
-                trainX,
-                trainY,
-                (double)lambda,
-                sampleWeights: trainWeights,
-                offsets: trainOffsets);
-            var probabilities = validationX
-                .Select((row, index) => LogisticModelTrainer.Predict(fitted, row, validationOffsets[index]))
-                .ToArray();
-            var brier = BrierScore(probabilities, validationY);
-            var logLoss = LogLoss(probabilities, validationY);
+        var fitted = LogisticModelTrainer.Fit(
+            trainX,
+            trainY,
+            (double)selectedLambda,
+            sampleWeights: trainWeights,
+            offsets: trainOffsets);
+        var validationProbabilities = validationX
+            .Select((row, index) => LogisticModelTrainer.Predict(fitted, row, validationOffsets[index]))
+            .ToArray();
 
-            var improved = best is null ||
-                           brier < best.Brier ||
-                           (Math.Abs(brier - best.Brier) <= 1e-9 && logLoss < best.LogLoss);
-
-            if (improved)
-            {
-                best = new FitChoice(fitted, lambda, brier, logLoss, probabilities);
-            }
-        }
-
-        best ??= new FitChoice(
-            LogisticModelTrainer.Fit(
-                trainX,
-                trainY,
-                (double)LambdaGrid[^1],
-                sampleWeights: trainWeights,
-                offsets: trainOffsets),
-            LambdaGrid[^1],
-            baselineBrier,
-            baselineLogLoss,
-            baselineProbabilities);
+        var best = new FitChoice(
+            fitted,
+            selectedLambda,
+            BrierScore(validationProbabilities, validationY),
+            LogLoss(validationProbabilities, validationY),
+            validationProbabilities);
 
         var trainedBrier = best.Brier;
 
@@ -850,6 +856,77 @@ public sealed class MoneyManagerTrainingService
             IsActive = isActive
         };
     }
+
+    /// <summary>
+    /// Chooses the L2 strength on an inner chronological split of the training slice: the first
+    /// <see cref="InnerTrainFraction"/> of the trades fit, the remainder grade, with the same
+    /// forward-window purge between them. Returns the strongest regularisation when the inner
+    /// slices are too thin to decide, which is the honest answer — never the setting that merely
+    /// looks best on the trades that decide promotion.
+    /// </summary>
+    private static decimal SelectLambda(
+        IReadOnlyList<TrainingTrial> train,
+        double[][] trainX,
+        double[] trainY,
+        double[] trainWeights,
+        double[] trainOffsets,
+        int embargo)
+    {
+        var innerSplit = Math.Clamp(
+            (int)Math.Floor(train.Count * (double)InnerTrainFraction),
+            1,
+            train.Count - 1);
+        var innerValidationStart = train[innerSplit].EntryDate;
+
+        var fitIndices = Enumerable
+            .Range(0, innerSplit)
+            .Where(index => WeekdaySessionsBetween(train[index].ExitDate, innerValidationStart) >= embargo)
+            .ToArray();
+        var gradeIndices = Enumerable.Range(innerSplit, train.Count - innerSplit).ToArray();
+
+        if (fitIndices.Length < MinimumTrainingTrialsForFit || gradeIndices.Length < MinimumValidationTrials)
+        {
+            return LambdaGrid[^1];
+        }
+
+        decimal selected = LambdaGrid[^1];
+        var bestBrier = double.PositiveInfinity;
+        var bestLogLoss = double.PositiveInfinity;
+
+        foreach (var lambda in LambdaGrid)
+        {
+            var fitted = LogisticModelTrainer.Fit(
+                fitIndices.Select(index => trainX[index]).ToArray(),
+                fitIndices.Select(index => trainY[index]).ToArray(),
+                (double)lambda,
+                sampleWeights: fitIndices.Select(index => trainWeights[index]).ToArray(),
+                offsets: fitIndices.Select(index => trainOffsets[index]).ToArray());
+
+            var probabilities = gradeIndices
+                .Select(index => LogisticModelTrainer.Predict(fitted, trainX[index], trainOffsets[index]))
+                .ToArray();
+            var labels = gradeIndices.Select(index => trainY[index]).ToArray();
+            var brier = BrierScore(probabilities, labels);
+            var logLoss = LogLoss(probabilities, labels);
+
+            var improved = brier < bestBrier ||
+                           (Math.Abs(brier - bestBrier) <= 1e-9 && logLoss < bestLogLoss);
+
+            if (improved)
+            {
+                bestBrier = brier;
+                bestLogLoss = logLoss;
+                selected = lambda;
+            }
+        }
+
+        return selected;
+    }
+
+    /// <summary>
+    /// Share of the training slice used to choose the L2 strength; the rest grades the choice.
+    /// </summary>
+    public const decimal InnerTrainFraction = 0.80m;
 
     /// <summary>
     /// Stores an honest "not enough evidence" row: the neutral prior, zero weights and a
@@ -1197,23 +1274,14 @@ public sealed class MoneyManagerTrainingService
     }
 
     /// <summary>
-    /// Trading sessions between two dates, weekends excluded. PSE holidays only make the gap
-    /// longer in calendar terms, which errs on the safe side of the embargo.
+    /// Trading sessions between two dates, holidays excluded through
+    /// <see cref="PseTradingSessionRules"/>. Weekends alone under-counts the embargo around
+    /// Holy Week and the Christmas break, which is exactly where the YEAR book's 126-session
+    /// purge is thinnest.
     /// </summary>
-    private static int WeekdaySessionsBetween(DateOnly fromExclusive, DateOnly toExclusive)
-    {
-        var sessions = 0;
+    private static int WeekdaySessionsBetween(DateOnly fromExclusive, DateOnly toExclusive) =>
+        PseTradingSessionRules.TradingSessionsBetween(fromExclusive, toExclusive);
 
-        for (var cursor = fromExclusive.AddDays(1); cursor < toExclusive; cursor = cursor.AddDays(1))
-        {
-            if (cursor.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
-            {
-                sessions++;
-            }
-        }
-
-        return sessions;
-    }
 
     /// <summary>
     /// Causal PSEi regime: the 50- and 200-session averages are recomputed from the index

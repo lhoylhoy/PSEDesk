@@ -198,7 +198,7 @@ public static class WaveTradePlanCalculator
 
         var breakEven = PseBoardLotService.ComputeBreakEvenStopPrice(entry);
         var netRiskPerShare = PseBoardLotService.ComputeNetRiskPerShare(entry, initialStop);
-        var netPerShare = PseBoardLotService.ComputeRealizedNetPnlPhp(1, entry, currentPrice);
+        var netPerShare = PseBoardLotService.ComputeNetPerSharePnl(entry, currentPrice);
         var unrealizedR = netRiskPerShare > 0m
             ? decimal.Round(netPerShare / netRiskPerShare, 2, MidpointRounding.AwayFromZero)
             : 0m;

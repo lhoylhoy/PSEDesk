@@ -93,6 +93,92 @@ public sealed class QuantitativeFilterServiceTests
     }
 
     [Fact]
+    public void SelectCandidates_rejects_a_mean_that_one_block_trade_propped_up()
+    {
+        // PHP 40M of average turnover, but the median session printed PHP 400k: the mean is a
+        // single block trade and the name cannot be exited in one clip.
+        var blockTrade = BuildRankedMetric("BLOCK", score: 90, avgTurnover: 40_000_000m, medianTurnover: 400_000m, activeDays: 20);
+
+        // Median is fine, but it only traded on 12 of 20 sessions.
+        var sparse = BuildRankedMetric("SPARSE", score: 80, avgTurnover: 40_000_000m, medianTurnover: 30_000_000m, activeDays: 12);
+
+        var robust = BuildRankedMetric("ROBUST", score: 70, avgTurnover: 40_000_000m, medianTurnover: 30_000_000m, activeDays: 20);
+
+        var candidates = _service.SelectCandidates(new[] { blockTrade, sparse, robust });
+
+        Assert.Single(candidates);
+        Assert.Equal("ROBUST", candidates[0].Ticker);
+
+        // A row written before the robust columns existed reports zero for both and must not be
+        // rejected by a gate that did not exist when it was stored.
+        Assert.True(QuantitativeFilterService.MeetsLiquidityFloor(9_000_000m, medianTurnover20dPhp: 0m, activeTradingDays20d: 0));
+        Assert.False(QuantitativeFilterService.MeetsLiquidityFloor(9_000_000m, 400_000m, 20));
+        Assert.False(QuantitativeFilterService.MeetsLiquidityFloor(9_000_000m, 9_000_000m, 15));
+    }
+
+    [Fact]
+    public void ComputeMedianTurnover20d_uses_the_middle_session_not_the_mean()
+    {
+        var window = new List<OhlcvBar>
+        {
+            new(new DateOnly(2026, 11, 2), 10m, 10m, 10m, 10m, 100),
+            new(new DateOnly(2026, 11, 3), 10m, 10m, 10m, 10m, 100),
+            new(new DateOnly(2026, 11, 4), 10m, 10m, 10m, 10m, 1_000_000)
+        };
+
+        // Mean turnover is PHP 3.33M; the median is PHP 1,000.
+        Assert.Equal(1_000m, QuantitativeFilterService.ComputeMedianTurnover20d(window));
+        Assert.Equal(0m, QuantitativeFilterService.ComputeMedianTurnover20d(Array.Empty<OhlcvBar>()));
+    }
+
+    [Fact]
+    public void EvaluateStock_scrubs_the_live_foreign_print_from_a_historical_replay()
+    {
+        var stock = BuildStock(
+            "ICT",
+            BuildTrendBars(100m, 0.2m, 220),
+            2_000_000,
+            netForeign: 12_000_000m);
+        var tradeDate = new DateOnly(2026, 11, 24);
+
+        var live = _service.EvaluateStock(stock, tradeDate);
+        var replay = _service.EvaluateStock(stock, tradeDate, includeLiveForeignFlow: false);
+
+        Assert.Equal(12_000_000m, live!.NetForeignTodayPhp);
+        Assert.Null(replay!.NetForeignTodayPhp);
+    }
+
+    [Fact]
+    public void EvaluateStock_only_reads_disclosures_that_were_on_the_wire_before_the_close()
+    {
+        var tradeDate = new DateOnly(2026, 11, 24);
+        var stock = BuildStock(
+            "ICT",
+            BuildTrendBars(100m, 0.2m, 220),
+            2_000_000,
+            netForeign: null,
+            disclosures: new[]
+            {
+                new StockDisclosure(new DateOnly(2026, 11, 20), "Board approved a joint venture", "Material"),
+                new StockDisclosure(tradeDate, "Trading halt lifted at the close", "Halt", FiledAtPht: new TimeOnly(17, 40)),
+                new StockDisclosure(tradeDate, "Quarterly results released at the bell", "Results", FiledAtPht: new TimeOnly(9, 30)),
+                new StockDisclosure(new DateOnly(2026, 12, 15), "Rights offering priced", "Rights")
+            });
+
+        var metric = _service.EvaluateStock(stock, tradeDate);
+
+        var headlines = MarketDataMapper
+            .DeserializeDisclosures(metric!.RecentDisclosuresJson)
+            .Select(disclosure => disclosure.Headline)
+            .ToList();
+
+        Assert.Contains("Board approved a joint venture", headlines);
+        Assert.Contains("Quarterly results released at the bell", headlines);
+        Assert.DoesNotContain("Trading halt lifted at the close", headlines);
+        Assert.DoesNotContain("Rights offering priced", headlines);
+    }
+
+    [Fact]
     public void SelectCandidates_honours_an_explicit_cap_and_sorts_by_score()
     {
         var metrics = Enumerable.Range(0, 12)
@@ -688,14 +774,15 @@ public sealed class QuantitativeFilterServiceTests
         IReadOnlyList<OhlcvBar> bars,
         long volume,
         decimal? netForeign,
-        IReadOnlyList<StockDividendEvent>? dividends = null) =>
+        IReadOnlyList<StockDividendEvent>? dividends = null,
+        IReadOnlyList<StockDisclosure>? disclosures = null) =>
         new(
             ticker,
             CompanyName: $"{ticker} Holdings",
             Sector: "Industrial",
             Bars: bars,
             NetForeignTodayPhp: netForeign,
-            Disclosures: Array.Empty<StockDisclosure>(),
+            Disclosures: disclosures ?? Array.Empty<StockDisclosure>(),
             Dividends: dividends);
 
     private static StockDailyMetric BuildMetric(string ticker, int score) =>
@@ -719,6 +806,21 @@ public sealed class QuantitativeFilterServiceTests
             NetForeignTodayPhp = 1_000_000m,
             QuantPreScore = score
         };
+
+    private static StockDailyMetric BuildRankedMetric(
+        string ticker,
+        int score,
+        decimal avgTurnover,
+        decimal medianTurnover,
+        int activeDays)
+    {
+        var metric = BuildMetric(ticker, score);
+        metric.AvgTurnover20dPhp = avgTurnover;
+        metric.MedianTurnover20dPhp = medianTurnover;
+        metric.ActiveTradingDays20d = activeDays;
+
+        return metric;
+    }
 
     private static List<OhlcvBar> BuildTrendBars(
         decimal start,

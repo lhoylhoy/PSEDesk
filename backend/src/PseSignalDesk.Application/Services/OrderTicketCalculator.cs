@@ -38,7 +38,19 @@ public sealed record OrderTicketContext(
     /// <summary>Legal adds already taken into the open position (0, 1 or 2).</summary>
     int ExistingPyramidCount = 0,
     /// <summary>All-in cost already committed to the open same-ticker position, in pesos.</summary>
-    decimal? ExistingPositionCostPhp = null);
+    decimal? ExistingPositionCostPhp = null,
+    /// <summary>
+    /// Live drift of the promoted model this signal came from. It is applied <b>after</b> every
+    /// clamped governor multiplier so a HALTED book really sizes zero shares instead of being
+    /// floored back up to the 0.50x pod-shop minimum.
+    /// </summary>
+    LiveDriftStatus LiveDrift = LiveDriftStatus.STABLE,
+    /// <summary>Graded picks behind the drift verdict, for the ticket warning.</summary>
+    int LiveDriftGradedPicks = 0,
+    /// <summary>Win-rate shortfall versus the promoted record, in points.</summary>
+    decimal LiveDriftWinRateGapPct = 0m,
+    /// <summary>Expectancy shortfall versus the promoted record, in R.</summary>
+    decimal LiveDriftExpectancyGapR = 0m);
 
 /// <summary>
 /// Server-owned order sizing. Given the account context and a signal's levels, it returns
@@ -203,6 +215,21 @@ public static class OrderTicketCalculator
 
         var riskFraction = Math.Clamp(context.MaxRiskPerTradePct, 0m, 100m) / 100m;
         riskFraction *= verdictMultiplier * edgeMultiplier * volatilityMultiplier * drawdownMultiplier * pyramidMultiplier;
+
+        // Live drift is applied outside the governor clamp. Every multiplier above is clamped to
+        // [0.50, 1.50] so a weak edge is scaled rather than deleted; the drift throttle must be
+        // allowed to reach 0.00x, or a model that has stopped earning would still be funded.
+        var driftMultiplier = LiveDriftPolicy.MultiplierFor(context.LiveDrift);
+        riskFraction *= driftMultiplier;
+
+        if (LiveDriftPolicy.Describe(
+                context.LiveDrift,
+                context.LiveDriftGradedPicks,
+                context.LiveDriftWinRateGapPct,
+                context.LiveDriftExpectancyGapR) is string driftReason)
+        {
+            warnings.Add(driftReason);
+        }
 
         var heatRoomPct = Math.Max(0m, context.MaxPortfolioHeatPct - Math.Max(0m, context.OpenHeatPct));
         var heatBudgetPhp = context.EquityPhp * heatRoomPct / 100m;
@@ -373,6 +400,30 @@ public static class OrderTicketCalculator
 
         if (bindingShares < boardLot)
         {
+            if (riskShares < boardLot)
+            {
+                // The refusal is the risk budget's, not the cash's: one lot's settled risk (both
+                // legs paying the PHP 20 commission floor plus VAT) is bigger than the whole
+                // per-trade budget, so no size of this plan is placeable.
+                warnings.Add(
+                    $"PHP {Format(budgetPhp)} of fee-paid risk cannot carry a {boardLot}-share lot: one lot " +
+                    $"commits PHP {Format(PesoTradeRiskPhp(1))} once both legs pay the PHP 20 minimum commission " +
+                    "and VAT, so the ticket is not sized.");
+
+                return EmptyTicket(
+                    boardLot,
+                    breakEven,
+                    budgetPhp,
+                    liquidityCapped,
+                    warnings,
+                    effectiveRiskPct,
+                    riskGovernor,
+                    drawdownPct,
+                    edgeMultiplier,
+                    volatilityMultiplier,
+                    drawdownMultiplier);
+            }
+
             var lotCostPhp = decimal.Round(boardLot * buyCostPerShare, 2, MidpointRounding.AwayFromZero);
             warnings.Add(
                 $"Equity of PHP {Format(context.EquityPhp)} cannot fund the {boardLot}-share board lot " +
@@ -393,6 +444,54 @@ public static class OrderTicketCalculator
         }
 
         var lots = bindingShares / boardLot;
+
+        // 6. Fixed-point size. The per-share risk above assumes the fee is proportional to size,
+        // but the PHP 20 minimum broker commission (plus 12% VAT) is charged once per leg and does
+        // not shrink with the clip. Below roughly PHP 8,000 of gross per leg the real peso risk of
+        // a lot is larger than shares * netRiskPerShare, so a size derived from the per-share
+        // number can breach the risk budget. Step whole lots down until the settled risk fits.
+        decimal PesoTradeRiskPhp(long lotCount) =>
+            PseBoardLotService.ComputeNetRiskPhp((int)Math.Min(lotCount * boardLot, int.MaxValue), entryPrice, stopLoss);
+
+        decimal PesoTradeRewardPhp(long lotCount) =>
+            PseBoardLotService.ComputeNetRewardPhp((int)Math.Min(lotCount * boardLot, int.MaxValue), entryPrice, targetPrice);
+
+        var lotReducedByFeeFloor = false;
+
+        while (lots > 0 && PesoTradeRiskPhp(lots) > budgetPhp)
+        {
+            lots--;
+            lotReducedByFeeFloor = true;
+        }
+
+        if (lots <= 0)
+        {
+            var lotRiskPhp = PesoTradeRiskPhp(1);
+            warnings.Add(
+                $"One {boardLot}-share lot commits PHP {Format(lotRiskPhp)} of fee-paid risk, more than the " +
+                $"PHP {Format(budgetPhp)} per-trade budget, so the ticket is not sized.");
+
+            return EmptyTicket(
+                boardLot,
+                breakEven,
+                budgetPhp,
+                liquidityCapped,
+                warnings,
+                effectiveRiskPct,
+                riskGovernor,
+                drawdownPct,
+                edgeMultiplier,
+                volatilityMultiplier,
+                drawdownMultiplier);
+        }
+
+        if (lotReducedByFeeFloor)
+        {
+            warnings.Add(
+                "The PHP 20 minimum commission (plus 12% VAT) is charged per leg no matter how small the clip, " +
+                $"so the order was stepped down to {lots} lot(s) to keep the settled risk inside the budget.");
+        }
+
         var shares = (int)Math.Min(lots * boardLot, int.MaxValue);
 
         // 6. PSE transaction-cost analysis: what crossing the spread and paying for size will
@@ -409,8 +508,8 @@ public static class OrderTicketCalculator
             2,
             MidpointRounding.AwayFromZero);
 
-        var netRiskPhp = decimal.Round(shares * netRiskPerShare, 2, MidpointRounding.AwayFromZero);
-        var netRewardPhp = decimal.Round(shares * netRewardPerShare, 2, MidpointRounding.AwayFromZero);
+        var netRiskPhp = PesoTradeRiskPhp(lots);
+        var netRewardPhp = PesoTradeRewardPhp(lots);
         var participation = PseBoardLotService.ComputeAdvParticipationRate(outlayPhp, avgTurnover20dPhp) ?? 0m;
         var participationPct = decimal.Round(participation * 100m, 2, MidpointRounding.AwayFromZero);
 

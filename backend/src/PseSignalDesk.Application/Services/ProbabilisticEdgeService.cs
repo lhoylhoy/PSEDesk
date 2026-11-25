@@ -39,7 +39,11 @@ public sealed record SetupEdgeRequest(
     // The promoted per-horizon money-manager model plus the twelve live factors it was
     // trained on. Both null keeps the deterministic prior in charge, exactly as before.
     LearnedEdgeModel? LearnedModel = null,
-    decimal?[]? LearnedFeatures = null);
+    decimal?[]? LearnedFeatures = null,
+    // The empirical payoff distribution behind the hit rate. Null keeps the textbook
+    // "a win pays the full net reward, a loss costs a full R" assumption; a supplied sample
+    // prices expected value at the payoffs this ticker actually delivered.
+    BarrierStatistics? BarrierStats = null);
 
 /// <summary>
 /// Server-owned probability view of one setup: fee-adjusted odds, calibrated win
@@ -58,6 +62,39 @@ public sealed record EdgeAssessment(
     /// learned model was supplied or the model's gate has not been earned yet.
     /// </summary>
     public decimal LearnedEdgeTilt { get; init; }
+
+    /// <summary>
+    /// Average R lost on a non-winning trial, when the caller supplied an empirical payoff
+    /// sample. Exactly <c>1</c> (a full stop) when it did not: that is the conservative default.
+    /// </summary>
+    public decimal ExpectedLossR { get; init; } = 1m;
+
+    /// <summary>Share of the sample's windows that expired without touching either barrier.</summary>
+    public decimal ExpiryRate { get; init; }
+}
+
+/// <summary>
+/// The payoff distribution behind a base rate. A hit rate alone cannot price a bet: a window
+/// that expires <c>+0.01R</c> in profit is not the same event as a target hit at <c>+1.5R</c>, and
+/// charging the full net reward for it inflates expected value by the gap between the two.
+/// These are the conditional payoffs the desk actually realized on the same ticker, in R units
+/// of each trial's own fee-paid risk.
+/// </summary>
+public sealed record BarrierStatistics(
+    int Trials,
+    int Wins,
+    int TargetHits,
+    int StopOuts,
+    int Expiries,
+    decimal WinRate,
+    decimal AverageWinR,
+    decimal AverageLossR)
+{
+    /// <summary>An empty sample. Callers must treat it as "unreported", never as zero odds.</summary>
+    public static BarrierStatistics None { get; } = new(0, 0, 0, 0, 0, 0m, 0m, 0m);
+
+    /// <summary>Share of resolved trials that never reached either barrier.</summary>
+    public decimal ExpiryRate => Trials <= 0 ? 0m : decimal.Round((decimal)Expiries / Trials, 4, MidpointRounding.AwayFromZero);
 }
 
 /// <summary>
@@ -113,7 +150,25 @@ public sealed class ProbabilisticEdgeService
             return null;
         }
 
-        return ComputeBaseRate(bars, ComputeSeries(bars), profile);
+        var stats = ComputeBarrierStatistics(bars, ComputeSeries(bars), profile);
+
+        return stats.Trials == 0 ? null : stats.WinRate;
+    }
+
+    /// <summary>
+    /// The full payoff distribution behind one horizon's base rate, priced with the friction that
+    /// applied on each trial's own entry date and with gap-through-stop fills taken at the open.
+    /// </summary>
+    public static BarrierStatistics ComputeBarrierStatistics(IReadOnlyList<OhlcvBar> bars, HorizonProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        if (bars is null || bars.Count < MinimumHistoryBars)
+        {
+            return BarrierStatistics.None;
+        }
+
+        return ComputeBarrierStatistics(bars, ComputeSeries(bars), profile);
     }
 
     /// <summary>Every horizon the desk prices, in the order the sleeves are reported.</summary>
@@ -229,12 +284,41 @@ public sealed class ProbabilisticEdgeService
         IndicatorSeries series,
         HorizonProfile profile)
     {
+        var stats = ComputeBarrierStatistics(bars, series, profile);
+
+        return stats.Trials == 0 ? null : stats.WinRate;
+    }
+
+    /// <summary>
+    /// Rolls the horizon's own barriers over the ticker's history and records what each trial
+    /// paid. Three things differ from a naive hit-rate sweep:
+    /// <list type="bullet">
+    /// <item>friction is the statutory round trip <b>as it applied on that trial's date</b>
+    /// (<c>1.190%</c> before CMEPA, <c>0.690%</c> after), so a 2023 trial is not credited with
+    /// 2025's cheaper tax;</item>
+    /// <item>a session that opens through the stop fills at the open, not at the stop, which is
+    /// what the order would really have paid;</item>
+    /// <item>an expired window is recorded with the R it actually delivered instead of being
+    /// scored as a full target hit.</item>
+    /// </list>
+    /// </summary>
+    private static BarrierStatistics ComputeBarrierStatistics(
+        IReadOnlyList<OhlcvBar> bars,
+        IndicatorSeries series,
+        HorizonProfile profile)
+    {
         var stopMultiple = profile.AtrStopMultiplier > 0m ? profile.AtrStopMultiplier : StopAtrMultiple;
         var targetMultiple = profile.AtrTargetMultiplier > 0m ? profile.AtrTargetMultiplier : TargetAtrMultiple;
         var barrierWindow = Math.Max(1, profile.ForwardWindowBars);
 
         var trials = 0;
         var wins = 0;
+        var targetHits = 0;
+        var stopOuts = 0;
+        var expiries = 0;
+        var winSum = 0m;
+        var lossSum = 0m;
+        var losses = 0;
 
         for (var index = 50; index + barrierWindow < bars.Count; index++)
         {
@@ -252,52 +336,97 @@ public sealed class ProbabilisticEdgeService
 
             var stop = entry - (stopMultiple * atrValue);
             var target = entry + (targetMultiple * atrValue);
-            if (stop <= 0m)
+            if (stop <= 0m || !PseBoardLotService.IsTradablePrice(entry))
             {
                 continue;
             }
 
-            bool? won = null;
+            var tradeDate = bars[index].Date;
+            var feeRate = PseBoardLotService.RoundTripFeeRateOn(tradeDate);
+            var netRisk = PseBoardLotService.ComputeNetRiskPerShare(entry, stop, feeRate);
+            if (netRisk <= 0m)
+            {
+                continue;
+            }
+
+            var (buyRate, sellRate) = PseBoardLotService.SplitRoundTripFee(feeRate, tradeDate);
+            decimal? realizedR = null;
 
             for (var forward = index + 1; forward <= index + barrierWindow; forward++)
             {
                 var bar = bars[forward];
 
-                // Same-session low<=stop and high>=target cannot be ordered from daily
-                // data, so the stop is assumed to fill first.
-                if (bar.Low <= stop)
+                // A session that gaps through the stop fills at its open; the same-session
+                // target/stop ambiguity still resolves as a stop (conservative).
+                if (PseBoardLotService.ResolveStopFillPrice(stop, bar.Open, bar.Low) is decimal stopFill)
                 {
-                    won = false;
+                    stopOuts++;
+                    realizedR = RealizedR(entry, stopFill, buyRate, sellRate, netRisk);
                     break;
                 }
 
                 if (bar.High >= target)
                 {
-                    won = true;
+                    targetHits++;
+                    realizedR = RealizedR(entry, target, buyRate, sellRate, netRisk);
                     break;
                 }
             }
 
-            if (won is null)
+            if (realizedR is null)
             {
-                var exitPrice = bars[index + barrierWindow].Close;
-                won = PseBoardLotService.ComputeNetRewardPerShare(entry, exitPrice) > 0m;
+                expiries++;
+                realizedR = RealizedR(entry, bars[index + barrierWindow].Close, buyRate, sellRate, netRisk);
             }
 
             trials++;
-            if (won == true)
+
+            if (realizedR > 0m)
             {
                 wins++;
+                winSum += realizedR.Value;
+            }
+            else
+            {
+                losses++;
+                lossSum += Math.Abs(realizedR.Value);
             }
         }
 
         if (trials == 0)
         {
-            return null;
+            return BarrierStatistics.None;
         }
 
         var shrunk = (wins + (NeutralPriorWinRate * PriorSampleSize)) / (trials + PriorSampleSize);
-        return decimal.Round(shrunk, 4, MidpointRounding.AwayFromZero);
+
+        return new BarrierStatistics(
+            trials,
+            wins,
+            targetHits,
+            stopOuts,
+            expiries,
+            decimal.Round(shrunk, 4, MidpointRounding.AwayFromZero),
+            wins == 0 ? 0m : decimal.Round(winSum / wins, 4, MidpointRounding.AwayFromZero),
+            losses == 0 ? 0m : decimal.Round(lossSum / losses, 4, MidpointRounding.AwayFromZero));
+    }
+
+    /// <summary>Net R of one simulated exit, using each leg's own date-correct rate.</summary>
+    private static decimal RealizedR(
+        decimal entry,
+        decimal exit,
+        decimal buyRate,
+        decimal sellRate,
+        decimal netRiskPerShare)
+    {
+        if (exit <= 0m || netRiskPerShare <= 0m)
+        {
+            return 0m;
+        }
+
+        var netPerShare = (exit * (1m - sellRate)) - (entry * (1m + buyRate));
+
+        return netPerShare / netRiskPerShare;
     }
 
     /// <summary>
@@ -515,6 +644,28 @@ public sealed class ProbabilisticEdgeService
 
         var expectedValue = PseBoardLotService.ComputeExpectedValueR(probability, netRiskReward);
         var kelly = PseBoardLotService.ComputeQuarterKellyFraction(probability, netRiskReward);
+        var expectedLossR = 1m;
+        var expiryRate = 0m;
+
+        // Payoff separation. The hit rate says *how often* the bet pays; it says nothing about
+        // how much. An empirical sample that shows most winning windows expiring just above
+        // entry cannot be valued at the full net reward, and a sample whose losing windows
+        // scratch above the stop cannot be valued at a full -1R either. Both numbers come from
+        // the ticker's own resolved history, so expected value is priced off what it delivered.
+        if (request.BarrierStats is { Trials: > 0 } barrier)
+        {
+            var winPayoff = barrier.AverageWinR > 0m
+                ? Math.Min(netRiskReward, barrier.AverageWinR)
+                : netRiskReward;
+
+            expectedLossR = barrier.AverageLossR > 0m ? barrier.AverageLossR : 1m;
+            expiryRate = barrier.ExpiryRate;
+
+            expectedValue = PseBoardLotService.ComputeExpectedValueR(probability, winPayoff, expectedLossR);
+            kelly = PseBoardLotService.ComputeQuarterKellyFraction(
+                probability,
+                expectedLossR > 0m ? winPayoff / expectedLossR : winPayoff);
+        }
 
         // A promoted model also owns how much of full Kelly the desk should stake. The
         // Quarter-Kelly figure is the neutral reference, so 0.25x leaves it unchanged.
@@ -544,7 +695,9 @@ public sealed class ProbabilisticEdgeService
 
         return new EdgeAssessment(netRiskReward, probability, breakEven, expectedValue, kelly, verdict)
         {
-            LearnedEdgeTilt = learnedTilt
+            LearnedEdgeTilt = learnedTilt,
+            ExpectedLossR = expectedLossR,
+            ExpiryRate = expiryRate
         };
     }
 
