@@ -34,7 +34,7 @@ The product is research tooling, **not investment advice**, and it is **not a li
 | On-demand research for any `{TICKER}.PS` (`/api/research/{symbol}`) | Research caching per session |
 | Causal walk-forward replay of each horizon's own rules (`/api/signals/backtest`) | Tick-level / intraday backtesting |
 | Server-sized order tickets + a **paper** blotter (open, raise stop, close, ledger, heat) | Live broker integration, real fills, multi-account books |
-| SQLite RAG knowledge base: 6 built-in Markdown documents (rules + 4 playbooks + engineering references), upload/reindex/delete | Multi-user editing, versioned document history |
+| SQLite RAG knowledge base: 8 built-in Markdown documents (PSE rules + 6 playbooks + engineering references, 46 chunks), upload/reindex/delete behind a rights attestation | Multi-user editing, per-document ownership, versioned document history |
 | PSE 15-tier board-lot/tick table, static price band, net-R:R gate, board-lot sizing | A licensed, redistributable market-data feed (the desk reads Yahoo/PSE Edge under a personal posture and refuses non-loopback traffic by default) |
 | Official PSE Daily Quotation Report ingestion (live templates + operator upload) for net foreign flow | A stable, guaranteed exchange DQR URL (operator supplies or mirrors it) |
 | Deterministic disclosure classification + structural trap flags | Fundamental database (the model reads uploaded books, the desk stores no financials) |
@@ -45,8 +45,8 @@ The product is research tooling, **not investment advice**, and it is **not a li
 
 ## Success criteria
 
-- `dotnet test backend/PseSignalDesk.slnx` passes (**369 tests** as of 2026-11-26).
-- `npm test` in `frontend/` passes (**42 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/queryCache.test.ts`).
+- `dotnet test backend/PseSignalDesk.slnx` passes (**390 tests** as of 2026-11-26).
+- `npm test` in `frontend/` passes (**49 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/legalConsent.test.ts` and `lib/__tests__/queryCache.test.ts`).
 - `npm run build` in `frontend/` passes (`tsc --noEmit` + Vite build), with each dialog and the Pro table in their own chunk.
 - The terminal is usable one-thumbed on a 320px phone and dense on a 2560px desktop from the **same payload**: dialogs become bottom sheets, wide tables fall back to cards, and no mobile variant fetches a different endpoint.
 - With network + `OLLAMA_API_KEY`, `run-now` for two consecutive sessions produces all four drift states and all three drop categories from real history, for every horizon.
@@ -64,26 +64,35 @@ The product is research tooling, **not investment advice**, and it is **not a li
 .vscode/                           # launch.json (API launch/attach, Chrome) + tasks.json (build/test/dev)
 backend/
   PseSignalDesk.slnx
-  knowledge-base/                  # curated Markdown grounding library (copied to the API output)
-    pse_rules.md
-    playbooks/                     # day_week_momentum_vcp, day_week_risk_sizing, month_position, year_compounding
-    docs/engineering-references.md
+  knowledge-base/                  # curated Markdown grounding library (copied to the API output; 8 docs / 46 chunks)
+    pse_rules.md                   # mandatory guardrails: board lots, static band, fees, traps, Weinstein stages
+    playbooks/                     # day_week_momentum_vcp, day_week_risk_sizing, month_year_quality_value,
+                                   # month_year_ph_macro_sectors, probabilistic_expectancy, asymmetric_wealth_compounding
+    docs/engineering-references.md # the deterministic invariants the model may never override
   src/
-    PseSignalDesk.Domain/          # entities, enums, PSE board-lot/tick/static-band rules
-    PseSignalDesk.Application/     # quant filter, horizons, disclosure classifier, JSON parser, pipeline, DTOs, interfaces
-    PseSignalDesk.Infrastructure/  # EF Core SQLite, live Yahoo/PSE Edge provider, Ollama clients, RAG store, scheduler
-    PseSignalDesk.WebApi/          # controllers (signals, knowledge), DI wiring, appsettings, EF migrations
-  tests/PseSignalDesk.Tests/        # board lot, quant, parser, classifier, pipeline, knowledge/parser, provider, prompt tests
+    PseSignalDesk.Domain/          # entities, enums, PSE board-lot/tick/static-band rules, expectancy + fee maths
+    PseSignalDesk.Application/     # quant filter, horizons, edge/odds, tickets, portfolio, research, backtest,
+                                   # training, market direction, wave plans, pipeline, DTOs, interfaces
+    PseSignalDesk.Infrastructure/  # EF Core SQLite, live Yahoo/PSE Edge provider (+DQR), Ollama clients, RAG, scheduler
+    PseSignalDesk.WebApi/          # controllers (signals, research, portfolio, knowledge), compliance + 499 middleware,
+                                   # DI wiring, appsettings, EF migrations
+  tests/PseSignalDesk.Tests/        # 390 cases: board lot, quant, edge, tickets, portfolio, research/backtest, outcome,
+                                   # training, direction/wave, classifier, parser, pipeline, knowledge, provider, prompt,
+                                   # compliance, cancellation middleware
 frontend/
   src/
     api/        # typed fetch client (ApiError + ProblemDetails handling, FormData uploads)
-    components/ # TerminalHeader (+ mobile "Desk controls" sheet), RegimeStrip, SignalTable (+ ProSignalCard), DropPanel,
-                # AdviceCardList, PortfolioDialog, ScorecardDialog, BacktestPanel, ModelTrainerPanel, ResearchDialog,
-                # TickerDetailDialog, KnowledgeBaseDialog, BeginnerGuideDialog
-    components/ui/ # Radix wrappers: Tabs (scrollable rail), Dialog (bottom sheet on phones + DialogStickyHeader), Tooltip, Select, Button
-    lib/        # formatters (PHP, PSE prices, Asia/Manila dates), horizons metadata, class joiner, theme,
-                # queryCache (SWR client cache), preloaders (chunk + data warmers), plainAdvice, pseNicknames
-    lib/__tests__/ # node:test suites (plainAdvice, pseNicknames, queryCache); excluded from the browser build
+    components/ # TerminalHeader (+ phone "Desk controls" sheet), RegimeStrip, MarketDirectionHero, RidingNowStrip,
+                # AdviceCardList, SignalTable (+ ProSignalCard), DropPanel, TickerDetailDialog, RiskSizerBar,
+                # ScorecardDialog, BacktestPanel, ModelTrainerPanel, ResearchDialog, PortfolioDialog,
+                # KnowledgeBaseDialog, QuotationReportImportButton, VerdictBadge, DriftBadge,
+                # WelcomeSetupBanner, BeginnerGuideDialog, LegalDisclaimerGate
+    components/ui/ # Radix wrappers: Tabs (scrollable rail), Dialog (bottom sheet + DialogStickyHeader), Tooltip,
+                   # Select, Button, InfoTip, TechnicalDisclosure
+    lib/        # formatters (PHP, PSE prices, Asia/Manila dates), horizons metadata, class joiner, theme, viewMode,
+                # legalConsent, plainAdvice, pseNicknames, sessionSelection, riskSizing, queryCache (SWR client cache),
+                # preloaders (chunk + data warmers)
+    lib/__tests__/ # node:test suites (legalConsent, plainAdvice, queryCache); excluded from the browser build
     types/      # API contract types
 ```
 

@@ -1,480 +1,228 @@
 # Progress — PSE Signal Desk
 
-**Status snapshot:** 2026-11-26 · the terminal is now **responsive from 320px to 2560px+ with no new dependency**: dialogs are bottom sheets on phones and centred modals from `sm` up, every wide table has a card fallback below `md` with a pinned identifier column, the header collapses into a "Desk controls" sheet, and a zero-dependency SWR cache (`lib/queryCache.ts`) plus intent-driven preloaders (`lib/preloaders.ts`) paint cached data first while `Suspense`-loaded dialog chunks download · underneath sits a four-horizon probabilistic desk with a **benchmarked, gated walk-forward replay** (causal PSEi regime gate, board-lot slippage, drawdown governor, break-even/EMA20 exit ladder, PSEI buy-and-hold benchmark, alpha/CAGR/Sharpe/Calmar) and a **trade-management blotter** (legal pyramiding, partial trims, expectancy/profit-factor/payoff telemetry) on top of a **self-training money manager** (per-horizon logistic weights fitted on the desk's own ATR-barrier history, purged/embargoed held-out promotion gate, ±6pp learned tilt, learned Kelly multiplier, live calibration offset, desk memory feeding the LLM prompt and a weekly refit), the pod-shop risk governor, fee-adjusted odds, server order tickets, mandatory pre-mortem, forward-outcome scorecard, on-demand research, paper blotter, official PSE DQR foreign flow (live templates + operator upload) and cross-asset macro dials, all on a SQLite RAG knowledge base · the frontend is **consumer-first** (Simple default, persisted `Simple | Pro` toggle, persisted **light/dark** theme, Peso budget & safety presets on first run, company-name search over the server catalog, per-view technical drawers, `Desk Robot` / `Learned edge` tab, dual-line equity chart with the alpha/CAGR/Sharpe/Calmar/slippage tiles, Trim/Bank-half button and the R telemetry tiles) · **Simple mode is now a "Ride the Wave" advisor**: a server-computed traffic-light market call with a 10–90 direction score and plain reasons, the top three picks each carrying a four-step roadmap (buy band → cut-loss → lock break-even at +1R → ride/trail to target) and an entry-timing chip, a quiet trust line from the desk's graded ledger, and a two-tab research dialog whose second tab grades a position the reader **already owns** (average cost + optional share count → hold / trim / take-profit / cut with fee-paid pesos) · **the money-manager pass (2026-11-26) made the replay an account**: up to five concurrent clips, a 6% heat ceiling, two names per sector under a 35% notional cap, fee-paid `EV > 0` funding, fractional-Kelly clips off equity with a cash-only affordability trim, and a nested 60-session `WalkForwardEdge` refit inside the replay; training now learns a **residual over the structural prior** with payoff/date weights and simulates the real execution ladder, one book-aware ticket is built per ticker from the account's own sector room and ATR slippage, research prices the regime causally, and the scheduler queues a cold-boot refit · backend tests green (**390**) · frontend `npm test` (**49**) + `tsc --noEmit` + build green (dialogs split into their own chunks, `vendor-react` / `vendor-radix` pinned) · the blotter's open → raise stop → close → trim arithmetic is unit-covered and the API's `/api/portfolio` + `trades/{id}/trim` were smoke-tested live on the real DB (migration applied); the replay itself still 503s here because the sandbox feed returns a single PSEi bar. Training has only been exercised offline, and no browser has been driven at any breakpoint yet — the responsive layer is build-verified and unit-tested, not screen-tested.
+**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion, deterministic screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate), server-sized order tickets, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-## Compliance hardening pass (2026-11-26, latest)
+**Latest verification:** **390 backend / 49 frontend tests green**, `tsc --noEmit` + `vite build` green (2026-11-26). Everything feed-dependent is unverified live in this environment (Yahoo/PSE answered 404/429 here); the open security remediation is listed under *Remaining*.
 
-Legal/regulatory exposure hardened without changing a single server-owned number. **390 backend / 49 frontend tests green**, `tsc --noEmit` + build green.
+## Latest verification — documentation pass (2026-11-26)
 
-1. **The API cannot be served to other people by accident** (`ComplianceGuardMiddleware`, `ComplianceOptions`, both new). Default `Compliance:DeploymentMode = PersonalLocal`: any non-loopback caller is answered `403` ProblemDetails before reaching a controller; `LicensedCommercial` (an explicit assertion that the operator holds a PSE market-data agreement and the SEC licences the activity needs) requires `X-PseDesk-Key` matching `Compliance:OperatorApiKey`/`PSEDESK_OPERATOR_API_KEY` on `POST`/`PUT`/`PATCH`/`DELETE`, compared with `CryptographicOperations.FixedTimeEquals`, `401` on a mismatch and `503` when licensed with no key (fail closed). `/health` bypasses both; an unrecognised mode falls back to personal; `AllowedHosts` narrowed from `*` to `localhost;127.0.0.1;[::1]`.
-2. **No spoofed browser identity.** `MarketData:UserAgent` (`PseSignalDesk-PersonalResearch/0.1 (local-noncommercial)`) replaces the hard-coded Chrome UA on every Yahoo/Edge request.
-3. **Uploads require a rights attestation.** `POST /api/knowledge/upload` answers `400` unless `confirmRightsAndCloudProcessing=true`, because indexing *and* retrieving a document both copy its text into prompts sent to the model provider.
-4. **No solicitation anywhere in the copy path.** Prompt rules 10/13, `MarketDirectionService.BuildCopy(bearish)`, `WaveTradePlanCalculator.BuildHoldingCopy`, `plainAdvice` (verdicts `Qualifies (Full)`/`Qualifies (Half)`/`Watch Only`, holding actions, run labels), `OrderBox` (research ticket only; `BrokerChecklist` deleted), `TerminalHeader`/`App` ("Run Latest Screen" / "Run screen"), `horizons.ts`, `index.html`.
-5. **Hypothetical results say so.** `BacktestPanel` (5-position methodology + "Simulated CAGR · annualised · not a forecast"), `ScorecardDialog` (paper record, not a client account).
-6. **First-run legal gate.** `lib/legalConsent.ts` + `LegalDisclaimerGate.tsx`; `psedesk.legalAcceptedVersion`, `CURRENT_LEGAL_VERSION = '2026-11-v1'`; footer "Review the notice".
-7. **Documents.** `DISCLAIMER.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md` at the repo root; `README.md` links them, states 0.690% fees, the upload flag, the compliance env vars and the no-mirror DQR rule.
-8. **New tests.** `ComplianceGuardMiddlewareTests` (11 cases: remote refused, loopback and `null` addresses allowed, health bypass, rule-off, reads, 401 missing/wrong key, matching key accepted, 503 licensed-without-key, personal-mode writes keyless on loopback) and `KnowledgeControllerTests` (attestation missing, attested but no file), plus 7 `legalConsent` cases and the non-solicitation verdict test on the frontend.
-9. **Not regressed but worth restating:** the audit's F-01/F-02 are now partly addressed (auth + host allowlist); F-03 (prompt fencing) and the P0 four remain open.
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Failed: 0, Passed: 390, Skipped: 0, Total: 390` (~1 s) |
+| `cd frontend && npm test` | `tests 49 · pass 49 · fail 0` |
+| `cd frontend && npm run build` | `tsc --noEmit && vite build` exit 0, `✓ 129 modules transformed`, `✓ built in <350ms` |
+| `sqlite3 …/pse_signals.db "select slug, chunkcount …"` | 8 built-in documents / 46 chunks |
+| `git ls-files \| wc -l` | 230 tracked, 5531 ignored, clean tree before the doc edits |
 
-## Security audit pass (2026-11-26, read-only)
-
-`security_audit_report.md` at the repository root is the deliverable. **No source, config, knowledge-base or data file was modified** by that pass; the temporary instance (`:5239`, `Data Source=/tmp/psedesk-audit-probe.db`, embeddings off) was stopped and its DB/payloads/probe project deleted.
-
-* **Scope and standards:** white-box read of `Program.cs`, all four controllers, the AI/knowledge/market-data infrastructure, the portfolio + backtest + training services and the SPA client; black-box probes against the temp instance. OWASP ASVS v4.0.3, API Security Top 10 (2023), LLM Top 10 (2025).
-* **15 findings, each rated twice** (loopback single-operator `L` / any reachable posture `H`): L = 0 Critical / 3 High / 4 Medium / 6 Low / 2 Info; H = 3 Critical / 2 High / 7 Medium / 3 Low.
-* **Reproduced live (no key, no working feed needed):** unauthenticated `POST /api/knowledge/upload` → `201`; a `.exe` indexed with `chunkCount: 1`; a 2.16 MB `.txt` stored as **one 2 163 998-character chunk**; a corrupt PDF answered with PdfPig's own exception text; `backtest?lookbackDays=3650000` → `500` (`ArgumentOutOfRangeException` at `PseMarketDataProvider.cs:1356`); `order-ticket?entry=7.9e28` and `trades{shares:5, entryPrice:7.9e28}` → `500` (`OverflowException` at `PseBoardLotService.cs:587` / `:537`); `Host: attacker.example` → `200`; a cross-origin multipart POST → `201`; `POST /api/signals/run-now` with a foreign `Origin` executed the pipeline; `GET /api/portfolio` re-created a deleted account row and persisted `PeakEquityPhp`; the DB file was created `0644`.
-* **Confirmed clean:** EF-only parameterized SQL, no HTML sink in `frontend/src`, no dangerous .NET primitives, escaped ticker in every URL, no secret in the repo or its history, CORS read-allowlist correct, generic 500 ProblemDetails, `PrivateAssets=all` on EF Design, OpenAPI Development-only, `--vulnerable`/`npm audit` clean, 369 + 42 tests green at that pass (390 + 49 today).
-
-* **Not measured:** injection *efficacy* (no `OLLAMA_API_KEY`), live retrieval quality, any feed-dependent path (Yahoo/PSE returned `404`).
-
-## Money-manager pass (2026-11-26)
-
-The desk now trains, replays and tickets like an **account**. This supersedes the "one position at a time, 1% risk, no funding rule" description of the replay in earlier sections.
-
-1. **Training replays the desk's own execution** (`MoneyManagerTrainingService.SimulateBarrier`): tick-grid plan (`NormalizeTradePlanWithinStaticLimits` for `DAY`), the effective round-trip fee from `ComputeEffectiveRoundTripFeeRate`, the `+1R` break-even ratchet and the `+1.5R` causal EMA20 trail (`RatchetTrainingStop`, `BuildEma20Series`, `CausalIndexRegime`), graded by `NetRealizedR(entry, exit, buyRate, sellRate, netRisk)`.
-2. **The fit learns a residual over the prior.** `eta = logit(prior) + β₀ + w·z` — the structural probability is a per-trial **offset** in `LogisticModelTrainer.Fit`, so the heuristic and the weights cannot double-count. Trial weights are `1/√(signals on that date)` × `clamp(0.5 + 0.5·|RealizedR|, 0.5, 2.0)`, normalised to mean 1.
-3. **Sizing is fractional Kelly.** `OptimalKelly` funds only `EV > 0` trades and returns `clamp(c·f*, 0, 0.025)`; the stored `OptimalKellyFractionMultiplier` is a **fraction multiplier** (0.25 = neutral), not an account-risk percentage. The promotion gate adds `LogLoss ≤ baseline` and `policyExpectancyR > 0` (`ComputePolicyExpectancyR`).
-4. **The replay is multi-slot with the live funding rules** (`BacktestService`): `MaxOpenPositions 5`, `MaxPortfolioHeatPct 6`, `MaxPositionsPerSector 2`, `MaxSectorExposurePct 35`, `SmallSizeRiskMultiplier 0.50`, `KellyReferenceFraction 0.02`; each clip is sized off **equity** and the cash balance is only a funding check (unaffordable clips are trimmed to whole lots including fees and slippage, or dropped). Nothing is funded unless its fee-paid `EV > 0`, and `BuildCandidate` refuses anything under **1.2R after fees**.
-5. **`WalkForwardEdge` (nested, new) refits the replay's own model every 60 sessions** on candidates whose `OutcomeDate` had already passed, residual-over-`logit(prior)` with fixed λ = 25 and cluster weights; it is used only when it beats the neutral base rate on its own resolved trades, and its acceptance test is deliberately in-sample (it can sharpen sizing inside a replay; promotion to live pricing stays with `MoneyManagerTrainingService`).
-6. **One ticket per ticker, from the real book.** New `BookSizingSnapshot` + `PortfolioService.GetBookSizingSnapshotAsync` read account/open trades/metrics once per run and rebuild the exact per-ticker `OrderTicketContext` (sector room, own ATR slippage, pyramid state); `SignalRunMapper` / `SignalPipelineService` / `SignalsController` pass it, and `GetOrderTicketAsync` now takes the `EdgeAssessment` directly so the pesos and the Kelly stake agree.
-7. **Research parity.** `TickerResearchService` loads the published model + live calibration offset, resolves the regime causally from the fetched PSEi bars (stored snapshot only as a fallback), and sizes its ticket off the same assessment (`ResearchSizingNotionalPhp = 50_000`).
-8. **Cold-boot refit.** `DailySignalSchedulerService.ExecuteAsync` queues a background `BootstrapRetrainAsync`; `NeedsBootstrap` is true only while a horizon is `UNTRAINED`, so a `PRIOR_FALLBACK` is not retrained on every restart, and a dead feed only logs a warning.
-
-Verification (money-manager pass; 390 + 49 today): `dotnet test PseSignalDesk.slnx` → **369 passed / 0 failed**; `npm test` → **42 passed**; `npm run build` green; `dotnet run` boots, arms the scheduler and survives the bootstrap's feed failure. The live halves (a real multi-slot backtest, a real refit, a real ticket-parity check) are unobserved because the Yahoo feed answered `404` on every constituent.
-
-## Data-accuracy pass (2026-11-25)
-
-Eight ingestion → storage → math → display defects were fixed and are now regression-tested. This supersedes every earlier fee figure in this file and in `activeContext.md`.
-
-1. **The stock transaction tax is 0.10%, not 0.60%** (RA 12214 / CMEPA, effective 2025-07-01). `PseBoardLotService` now publishes per-leg rates: `BuyLegFeeRate = 0.00295m`, `SellLegFeeRate = 0.00395m`, `RoundTripFeeRate = 0.00690m`; `ComputeNetRiskPerShare` / `ComputeNetRewardPerShare` / `ComputeBreakEvenWinRate` / `ComputeEffectiveRoundTripFeeRate` and `SplitRoundTripFee` all use them. `SignalOutcomeService.NetRealizedR` and `MoneyManagerTrainingService.NetRealizedR` charge each leg on its own price.
-2. **Slippage is charged once, in cash.** `BacktestService` debits the estimated entry slippage from cash at entry (`costPhp + slippageCostPhp <= cash`), stores it on `SimulatedPosition.SlippagePhp` / `BacktestTradeDto.SlippagePhp` and subtracts it from realized P&L; `NetReturnAfterSlippagePct == NetReturnPct` by construction (the old percentage charge double-counted it).
-3. **A pick with no entry fill is not a loss.** `SignalOutcomeService.ResolveItem` resolves the fill bar first (`low <= EntryPrice`), evaluates the stop before the target from that bar, cannot bank the target on the fill bar, and writes `UNFILLED` (null exit, null R) when the horizon elapses with no fill. `openCount` counts only `OPEN`.
-4. **The regime survives a one-bar index.** `ResolveIndexAsync` tries `IndexYahooSymbols` then falls back to the equal-weight `IndexProxyConstituents`; a proxy session is scale-free (no `PseiClose`, no SMA, `RegimeNote` says "proxy"), and index candles are fetched with `dropZeroVolume: true` so a zero-volume echo cannot date the session.
-5. **The mirror host is used.** `YahooFinanceFallbackBaseUrl` (`query2`) is retried after a transport error/5xx; a `404` is not retried.
-6. **Filings are attributed by row.** Word-boundary, row-aware disclosure matching (no `DITO` inside "auditor", no `BPI` inside "Philippine").
-7. **A DQR `-`/`N/A` cell keeps its column.** `CollectColumns` emits an explicit null column; a null net-foreign cell skips the row instead of borrowing the turnover.
-8. **A run is dated by the batch, and `run-now` means today.** `SignalPipelineService` takes `runDate` from the fetched batch; `POST /api/signals/run-now` defaults to `ManilaTimeZone.TodayPht()` instead of re-running the latest stored session.
-
-Frontend consequences: `SignalOutcomeStatus` gained `'UNFILLED'` (`describeOutcomeStatus` → "Entry never filled"), `BacktestTrade.slippagePhp` is optional, the scorecard prints `—` instead of inventing a target price as the exit, and a null `realizedNetR` is neutral rather than red. Every hard-coded 0.895% string now reads 0.690% (`VerdictBadge`, `ScorecardDialog`, `TickerDetailDialog`, `types/signals.ts`). `App.tsx` shows an amber "you are reading an older session" strip with a *Back to latest* action and relabels the primary button *Re-run This Day* while a stored session is selected; the date picker tags the newest session `latest`. `pseNicknames.ts` gained ALLHC, EMI, FB, GSMI, RCB, RCR, RRHI, VREIT and WLCON.
-
-Verification (data-accuracy pass): `dotnet test PseSignalDesk.slnx` → **363 passed / 0 failed** at the time (369 after the money-manager pass); `npm test` → **42 passed**; `tsc --noEmit` and `npm run build` green. The dev DB was purged of the two synthetic sessions it carried (`2026-11-23`, `2026-11-24`: `DailyMarketSnapshots`, `StockDailyMetrics`, `SignalRuns`, `SignalItems`, `SignalDrops` — `KnowledgeDocuments`/`KnowledgeChunks` and `PortfolioAccounts` kept) after a backup to `pse_signals.db.bak-20261125`; the API was restarted on the new build and re-indexed the KB (`4 updated`, lexical fallback because no `OLLAMA_API_KEY`). A live refill is **blocked right now**: Yahoo answers `429 Too Many Requests` on both hosts from this network, so `/api/research/{ticker}` and `run-now` correctly return `503` and `/api/signals/latest` returns an honest empty envelope.
-
+No source, config, knowledge-base, dependency or migration changed in this pass — only `README.md` and `memory-bank/*.md`.
 
 ## What works
 
-### Backend
-- [x] Clean Architecture solution (`PseSignalDesk.slnx`) targeting .NET 10 with 4 source projects + 1 test project.
-- [x] Domain model: `DailyMarketSnapshot`, `StockDailyMetric`, `SignalRun`, `SignalItem`, `SignalDrop`, `KnowledgeDocument`, `KnowledgeChunk`; enums `DriftStatus`, `DropCategory`, `MarketRegime`, `SignalHorizon`, `DisclosureCategory`, `PseTrapFlag`. `NetForeignFlowPhp` / `NetForeignTodayPhp` are `decimal?`.
-- [x] Official PSE 15-tier board-lot/tick table (`PseBoardLotService`): bracket rounding, bracket-crossing re-rounding, `GetBoardLotSize`, `RoundSharesToBoardLot`, gross and fee-adjusted R:R, `target > entry > stop` repair, static `+50%/-30%` band with `ValidateAgainstStaticThresholds` and `NormalizeTradePlanWithinStaticLimits`.
-- [x] `HorizonProfile` for `DAY`/`WEEK`/`MONTH`/`YEAR` (mission, min bars, RSI band, ATR multiples, disclosure lookback, hysteresis, net-R:R requirement, preferred knowledge categories) — the scheduler and prompt both read it.
-- [x] Quantitative filter: Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, 20-day turnover/volume ratio, support/resistance, weighted pre-score (85-point technical total rescaled when foreign flow is unreported), PHP 5M liquidity floor, top-25 selection, indicator-availability guard.
-- [x] `PseDisclosureClassifier`: headline → `DisclosureCategory`, `DetectTrapFlags` (dedupe + stable order), `Describe` copy for the UI.
-- [x] Defensive LLM JSON parser with fence/prose extraction, numeric-string support, contract validation and human-readable errors.
-- [x] Pipeline: market-data reuse/fetch, horizon-aware candidate selection, knowledge retrieval, previous-run context, model call, unknown-ticker/thesis-less/hard-trap discard, resolved-position exclusion, `DAY` static-band clamp, `DAY` net-R:R gate, board-lot sizing, citation verification, drift recomputation, drop classification, atomic persist, `SignalGenerationException` when no valid pick remains.
-- [x] Ollama Cloud engine as the only engine: `format: json`, `temperature: 0.1`, one corrective retry, optional fast-extraction pre-pass, `OllamaConfigurationException` (400) without a key.
-- [x] SQLite RAG knowledge base: 6 built-in Markdown documents → 35 chunks, front-matter parsing, `slug#section-n` references, content-hash re-indexing, mandatory-guardrail injection, BM25 + cosine RRF retrieval with horizon/sector/trap boosts, optional embeddings via Ollama `/api/embed`, PDF/Markdown upload, built-in delete protection.
-- [x] Live market data: Yahoo Finance v8 charts (PSEI, USD/PHP, 34 tickers), PSE Edge disclosure scraping, session-date resolution, 7-day FX/session guards, 10-ticker minimum, tick rounding, fail-fast 503 on any feed error.
-- [x] EF Core SQLite persistence with unique indexes, cascade deletes, replace-on-rerun semantics, no-tracking reads.
-- [x] **Probabilistic edge layer.** `PseBoardLotService` gained `ComputeNetRewardPerShare` / `ComputeNetRiskPerShare` / `ComputeBreakEvenWinRate` / `ComputeExpectedValueR` / `ComputeQuarterKellyFraction` / `SizePositionByRiskBudget`; `ProbabilisticEdgeService` blends the shrunk empirical hit rate (prior 0.42, 12 pseudo-observations, `null` under 60 bars) with the ATR barrier geometry, applies bounded tilts (stage, RS63d, VCP, breadth, regime, soft traps, conviction ≤ ±0.024), clamps to `[0.05, 0.95]` and emits the `TRADE` / `SMALL_SIZE` / `WATCH_ONLY` verdict plus `RecommendedCashPct` per run.
-- [x] **Quant factors for the odds.** Session OHLC, `AtrPct`, `VolatilityContractionRatio`, `RelativeStrength63d` (vs `PSEI.PS`) and the shrunk `EmpiricalWinRate` are computed and persisted per stock; `ComputeMarketBreadth` reports % above 50D/200D and the Stage-2 count for the snapshot, the run and the prompt's `BREADTH:` header; the horizon score adds +4 for RS and +4 for a volatility coil.
-- [x] **Mandatory pre-mortem.** The prompt requires `bear_case` (≤ 30 words, names a level); `ResolveBearCase` keeps good model output and otherwise writes the deterministic stop/resistance/probability fallback.
-- [x] **Forward-outcome ledger + scorecard.** `SignalOutcomeService` grades `OPEN` picks against real post-run bars (`WIN_TARGET`, `LOSS_STOP`, `EXPIRED_WIN`, `EXPIRED_LOSS`, `RealizedNetR`, `BarsHeld`, conservative same-bar tie → stop), runs before each new persist, and `BuildScorecardAsync` returns win rate, expectancy, profit factor, Brier score, calibration buckets, per-verdict breakdown and recent resolved picks at `GET /api/signals/scorecard`.
-- [x] **Dividends feed the odds.** `PseMarketDataProvider` parses `chart.result[0].events.dividends` (future ex-dates dropped, duplicates collapsed to the largest payout); `QuantitativeFilterService.ComputeTrailingDividends` sums the trailing 365 days into `TrailingDividendPerShare` / `TrailingDividendYieldPct` / `LastExDividendDate`, and `ProbabilisticEdgeService` applies a bounded yield tilt on the longer horizons.
-- [x] **Horizon-matched edge.** `ProbabilisticEdgeService` charges a `DAY` ATR-risk penalty and lets real trailing yield tilt `MONTH`/`YEAR`, on top of the stage/RS/VCP/breadth/regime/trap/conviction tilts (gates, clamp `[0.05, 0.95]` and verdict rule unchanged).
-- [x] **Catalog ~34 → ~58 names** (`PseTickerCatalog`): dividend compounders, mid-caps, banks, utilities, miners, property and REITs, so the longer horizons have a real universe.
-- [x] **Server-owned order tickets.** `OrderTicketCalculator` + `OrderTicketDto` (board lot, lots, all-in buy outlay, fee-paid net risk/reward, break-even stop, risk budget, position/liquidity/heat caps, warnings) attached to every `SignalItemDto` through `SignalRunMapper` + `OrderTicketContext`; `GET /api/portfolio/order-ticket` sizes an arbitrary plan. The run now builds **one ticket per ticker from the real book**: `BookSizingSnapshot` (built once per run by `PortfolioService.GetBookSizingSnapshotAsync` from the account, the open trades and the stored metrics) supplies the ticker's sector room, its own ATR slippage and its pyramid state, and `GetOrderTicketAsync` takes the `EdgeAssessment` directly so the pesos and the Kelly stake can never disagree.
-- [x] **Pod-shop ticket governor.** `OrderTicketCalculator` scales the base risk by the verdict, the edge (`QuarterKellyFraction / 2%`, `GovernorMultiplier` clamped `[0.50, 1.50]`), the realised PSEi volatility against `TargetAnnualVolPct` (cutting only) and the book's drawdown (`NORMAL` / `DEFENSIVE` / `HALTED`); it blocks a sector at its name limit, cuts the order to the remaining sector room and refuses to average down. Tickets publish `EffectiveRiskPct`, `RiskGovernor`, `DrawdownPct`, `EdgeMultiplier`, `VolatilityMultiplier`, `DrawdownMultiplier`.
-- [x] **PSE transaction-cost analysis.** `PseBoardLotService.ComputeTickSpreadRate` / `ComputeAdvParticipationRate` / `ComputeEstimatedSlippageRate` (`2 × tick / price` round-trip spread + `min(1.5%, 0.10 × ATR% × √participation)` impact) / `ComputeEffectiveRoundTripFeeRate`; tickets publish `SlippageRatePct`, `EstimatedSlippagePhp`, fee-plus-slippage net risk/reward, `AdvParticipationPct` and `ExecutionGuidance` (`LIQUID_MARKETABLE` / `STAGED_ENTRY` / `LIMIT_ONLY` / `WORK_THE_ORDER` / `NO_TRADE`), and the edge engine charges the slippage-inclusive fee when supplied.
-- [x] **Sector rotation.** `SectorRotationService` scores breadth 0.30 / Stage-2 0.25 / RS63d 0.30 / up-down volume 0.15 (renormalised over reported inputs) and labels `LEADING` (≥70) / `IMPROVING` (≥55) / `WEAKENING` (≥40) / `LAGGING`; the pipeline prints `SECTOR ROTATION (ranked)` in the prompt, stamps each candidate with its quadrant, persists `SectorRotationJson` and the regime DTO republishes the cards.
-- [x] **Factor sleeve + per-horizon hit rates.** `QuantitativeFilterService` computes up/down volume 20D, Chaikin money flow 20D, Kaufman trend efficiency 63D, beta vs the PSEi 252D (date-matched), max drawdown 252D and annualised realised volatility; the five per-name factors and `EmpiricalWinRateDay/Month/Year` are persisted and `ProbabilisticEdgeService.ComputeHorizonBaseRates` prices all four sleeves in one pass.
-- [x] **Official PSE DQR foreign flow (live + upload).** `PseDailyQuotationParser` reads PDF/CSV/TXT/TSV into `ParsedDailyQuotationReport` (header-row mapping, accounting negatives, `SUSPEND`/`SUSPENDED` flags, `HasData`, `.Empty` on garbage). `PseMarketDataProvider.TryFetchQuotationReportAsync` walks `MarketData:PseDailyQuotationUrlTemplates` (`{yyyy}`, `{MMddyyyy}`, `{MMddyy}`), continuing on 404/410/non-2xx/unparseable and returning `null` on total failure; `ApplyQuotationReport` overlays per-ticker flow + a synthetic suspension disclosure and tags the run `pse-dqr-live`. `DailyQuotationImportService` applies an uploaded report to a stored session (`pse-dqr-upload`), recomputes `QuantPreScore` for changed rows only, and re-saves through `MarketDataMapper.ToBatch` so breadth/macro/rotation survive; unmatched tickers keep `null`. `POST /api/signals/quotation-report` (25 MB, `.pdf/.csv/.txt/.tsv`) answers `400`/`404` as `ProblemDetails`.
-- [x] **Cross-asset macro dials.** `FetchMacroBenchmarksAsync` reads `^TNX`, `BZ=F` and `EPHE` concurrently (`roundToTick: false`) and `ReadMacroValue` returns the latest close plus its 20-session change (yields in bps, the rest in %, `MaxSessionLagDays` staleness guard, `null` on any failure); the batch/snapshot persist `Us10YClosePct`, `Us10YChange20dBps`, `BrentUsd`, `BrentChange20dPct`, `EpheCloseUsd`, `EpheChange20dPct` and `ForeignFlowSource`. The prompt prints a `CROSS-ASSET:` line and the foreign-flow provenance, and the system prompt gains CROSS-ASSET / FOREIGN FLOW rules.
-- [x] **Plain-English model prose (copy only).** `OllamaPromptBuilder.BuildSystemPrompt` rule 10 asks for a `thesis` of at most 45 words in clear everyday English (Peso buy / target / cut-loss levels, no RSI / EMA20 / SMA50 / VCP / CMF20 / RS63 / `-1R` shorthand) and rule 12 asks for a `bear_case` naming the invalidation level in Peso; `SignalPipelineService.ResolveBearCase` / `BuildDrops` and the `TickerResearchService` fallback were reworded to match. No threshold, size, verdict or schema changed, and `OllamaPromptBuilderTests` asserts both phrases.
-- [x] **Paper blotter.** `PortfolioService` sizes against the stored equity, debits cash with the buy leg, marks open positions to the latest stored session and derives the exit instruction (`STOP_BREACHED`, `TARGET_REACHED`, `MOVE_STOP_TO_BREAKEVEN` at +1R, `TRAIL_STOP_EMA20` at +1.5R, `TIME_STOP_DUE`, else `HOLD`). Barrier verdicts require an observed session, so a fresh position can never report a phantom stop-out. Entities `PortfolioAccount` / `PortfolioTrade`, `IPortfolioRepository`, `PortfolioRepository`; every rule breach is a `PortfolioRuleViolationException` → `400`.
-- [x] **Drawdown governor state on the book.** `PortfolioAccount` stores `PeakEquityPhp` (seeded lazily, raised on new highs), `MaxSectorExposurePct`, `MaxPositionsPerSector`, `SoftDrawdownThresholdPct`, `HardDrawdownThresholdPct` and `TargetAnnualVolPct` (all clamped on write, hard > soft enforced); `GetSummaryAsync` publishes `DrawdownPct`, `PeakEquityPhp`, `RiskPosture` and `SectorExposure`, and raises alerts for heat, drawdown and sector breaches.
-- [x] **Catalog + company-name research (server).** `CatalogStockDto`, `IMarketDataProvider.GetCatalog()` (default empty so existing fakes compile), `PseMarketDataProvider.GetCatalog()` over `PseTickerCatalog.All`, `TickerResearchService.GetCatalog()` / `ResolveTicker()` / `NormalizeName()` and `GET /api/research/catalog`. `GET /api/research/{query}` now accepts a ticker *or* an unambiguous company name: exact ticker wins, a prefix match resolves, an ambiguous query is passed through untouched (never silently priced as one bank), and blank input gets its own friendly message.
-- [x] **On-demand research.** `TickerResearchService` + `TickerResearchDto`: live single-symbol chart (any `{TICKER}.PS`) or the latest stored metric, ATR plan on the tick grid (static-band clamped for `DAY`), horizon-matched base rate, odds, ticket, trap flags, liquidity floor, disclosures, pre-mortem, `DataSource` (`live`/`stored`), catalog membership via `IMarketDataProvider.IsTracked`, and the stored row's own session date as `AsOfDate`. It now has **parity with the run**: the published learned model and the live calibration offset are loaded, the index regime is priced **causally from the fetched PSEi bars** (the stored snapshot only fills in when the tape cannot), and the ticket is sized off the same `EdgeAssessment` against `ResearchSizingNotionalPhp` (PHP 50,000) instead of a separate notional. `GET /api/research/{symbol}` answers `503` when neither source has 200 sessions.
-- [x] **Causal walk-forward replay.** `BacktestService` replays each horizon's own rules prefix-only (`computeEmpiricalBaseRate: false`, same-bar ties → stop, board lots, full round-trip fee) into an equity curve, max drawdown, expectancy, profit factor, fees and every trade. `GET /api/signals/backtest`.
-- [x] **Money-manager replay.** The replay now holds a **multi-slot book** with the live funding rules — `MaxOpenPositions 5`, `MaxPortfolioHeatPct 6`, `MaxPositionsPerSector 2`, `MaxSectorExposurePct 35` — sizes each clip off **equity** through fractional Kelly (`KellyReferenceFraction 0.02`, `SmallSizeRiskMultiplier 0.50`) and treats cash as a funding check only (a clip is trimmed to whole lots including fees and slippage, or dropped, never overdrawn). Nothing is funded unless its fee-paid `EV > 0`, `BuildCandidate` refuses anything under 1.2R after fees, and the index regime is resolved causally (`ResolveIndexRegime` over `BuildCausalEma20`). A nested **`WalkForwardEdge`** refits the replay's own model every `WalkForwardRefitSessions` (60) on already-resolved candidates (fixed λ = 25, cluster weights, in-sample Brier acceptance, prior fallback under `MinimumWalkForwardTrials` 40) and only sharpens sizing when it beats the neutral base rate.
-- [x] **Honest, benchmarked replay.** The replay now (a) blocks new longs when the **closed PSEi prefix** sits under both SMA50 and SMA200 (`RegimeBarRequirement = 200`; a shorter index prefix is "no information"), (b) charges a **board-lot slippage estimate** per round trip (`PseBoardLotService.ComputeEstimatedSlippageRate`) on top of the fees, (c) scales risk through a **drawdown governor** (soft 5% → ×0.50, hard 10% → stop funding), and (d) runs the **exit ladder** (`RatchetStop`: +1R → fee-paid break-even, +1.5R → EMA20 trail, never above the target; EMA20 built causally per ticker/date). `BacktestResultDto` gained `BenchmarkReturnPct`, `ExcessReturnPct` (alpha = slippage-adjusted return − index), `CagrPct`, `AnnualizedSharpeRatio` (null under 20 sessions), `CalmarRatio`, `TotalSlippagePhp`, `NetReturnAfterSlippagePct`, and `BacktestEquityPointDto` gained `BenchmarkEquityPhp` (the same starting capital held in `PSEI.PS` from the first replayed session). Every new input reads only the closed `[0..i]` prefix.
-- [x] **Legal pyramiding.** A ticket naming an open ticker is merged instead of duplicated when `entry > existing entry`, the stop is already at the break-even tick, the position is ≥ +1R (marked from the stored session), fewer than `MaxPyramidAdds = 2` adds exist and the entry is below the target; adds are sized at 0.50x then 0.25x of the normal risk. The merge averages the entry on the fee-paid cost, sums `BuyCostPhp`, recomputes `InitialNetRiskPhp` against the ratcheted stop, bumps `PyramidCount` and appends a note (`PyramidIntoOpenTradeAsync`).
-- [x] **Partial trims.** `POST /api/portfolio/trades/{id}/trim` banks part of a position at a real fill: whole board lots on both legs (slice at the exit price, remainder at the entry price), proportional `BuyCostPhp` / `InitialNetRiskPhp` split, own `CLOSED` slice row with its own `RealizedNetR`, cash credited with the net proceeds, and the remainder's stop ratcheted to break-even when the trim fills above it. `OpenPositionDto.RecommendedTrimShares` (the largest slice at or below half that is legal on both legs at the marked price, 0 when none exists) drives the UI's Trim half button, so the offered quantity is always one the endpoint accepts.
-- [x] **Expectancy telemetry on the book.** `PortfolioSummaryDto` publishes `ExpectancyR`, `ProfitFactor` and `PayoffRatio` from the closed ledger, so the blotter shows the same R vocabulary as the replay and the scorecard.
-- [x] **Self-training money manager (closed loop).** `LogisticModelTrainer` (L2 IRLS + Gaussian elimination over a per-trial `offset`) and `MoneyManagerTrainingService`: `BuildTrials` walks each ticker's prefix once, simulates the horizon's ATR targets/stops on liquid names only through the desk's own execution ladder (`SimulateBarrier`: tick-grid plan, effective round-trip fee, +1R break-even ratchet, +1.5R causal EMA20 trail, causal index regime), splits 70/30 chronologically with a purge and an embargo of `max(1, ForwardWindowBars)`, standardises on train-only means/scales, weights each trial `1/√(signals that date) × clamp(0.5 + 0.5·|R|, 0.5, 2.0)` normalised to mean 1, and learns `eta = logit(prior) + β₀ + w·z` so the structural prior is an offset rather than a second opinion. λ is scanned by held-out Brier (log-loss tie-break) against the neutral prior and the Kelly grid `[0.15, 0.35]` by `logGrowth − 0.5·maxDrawdown` (`OptimalKelly` funds `EV > 0` only). Promotion needs ≥25 held-out trades, a Brier *and* a log-loss below the neutral baseline, and `policyExpectancyR > 0`; a rejected fit is still stored as `PRIOR_FALLBACK` with every score. `LearnedEdgeModel.FromActive` refuses any inactive row, so an unpromoted fit cannot price anything.
-- [x] **Learned odds + learned stake.** `ProbabilisticEdgeService` accepts `LearnedModel` + `LearnedFeatures`, applies `Tilt` (half the deviation from the model's own base rate, capped at ±6pp) after every structural tilt/calibration/conviction, publishes `LearnedEdgeTilt`, and rescales the Quarter-Kelly stake by `KellyScale = fullKelly / 0.25`. Missing features are mean-imputed, never zero-filled.
-- [x] **Live calibration + desk memory.** `SignalOutcomeService.ComputeLiveCalibrationOffsetPctAsync` (≥20 graded picks, 20 pseudo-samples, ±10pp clamp) feeds the request's `CalibrationOffsetPct`; `BuildDeskMemoryAsync` returns realized win rate, expectancy, Brier, calibration bias, best/worst sectors, the promoted model's top factors and the last five stop-outs from the stored ledger only. `GET /api/signals/desk-memory`.
-- [x] **Training endpoints + weekly refit + cold boot.** `GET /api/signals/model` (one or all four books), `POST /api/signals/train`, `POST /api/signals/train-all` (503 with the upstream reason on an empty feed) and `DailySignalSchedulerService.ShouldRetrainThisWeek` / `RetrainModelsAsync` (own scope, failures logged, never thrown). `ExecuteAsync` also queues a background **`BootstrapRetrainAsync`** so a desk that has never been trained bootstraps on its own on the first boot after a deploy (only when a horizon is `UNTRAINED` — a stored `PRIOR_FALLBACK` is a decision, not a cold start), and a dead feed only logs a warning (`The structural prior stays in force…`) instead of blocking startup.
-- [x] **Prompt feedback.** `OllamaPromptBuilder.AppendDeskTrackRecord` emits `DESK_TRACK_RECORD_AND_LEARNED_EDGE` (graded count, win rate, expectancy, Brier, bias, sectors that paid/bled, model status, ranked factors) and `RECENT_STOP_OUTS`, with a system-prompt rule telling the model to respect the record but never to override the server's levels, sizes, odds or verdicts.
-- [x] Migrations `InitialCreate`, `MakeNetForeignNullable`, `AddKnowledgeBaseAndMultiHorizon`, `AddProbabilisticEdgeAndScorecard`, `AddPortfolioResearchAndDividends`, `AddMoneyManagerEngine` (8 factor columns on `StockDailyMetrics`, 6 governance columns on `PortfolioAccounts`, `UsdPhpSma50` / `UsdPhpChange20dPct` / `PseiRealizedVol20dPct` / `SectorRotationJson` on `DailyMarketSnapshots`), `AddCrossAssetMacroAndForeignFlowDqr` (6 macro dials + `ForeignFlowSource` on `DailyMarketSnapshots`) and `AddTrainedMoneyManagerModels` (`TrainedHorizonModels` with a unique `Horizon` index), applied automatically at startup.
-- [x] REST API: signals (`latest`, `by-date`, `dates`, `ticker/{symbol}/history`, `scorecard`, `backtest`, `model`, `train`, `train-all`, `desk-memory`, `run-now` with `horizon`, `POST quotation-report` multipart upload), research (`GET /api/research/{symbol}`, `GET /api/research/catalog`), portfolio (`summary`, `settings`, `order-ticket`, `trades`, `trades/{id}/stop`, `trades/{id}/close`), knowledge (`GET`, `reindex`, `upload`, `DELETE`), `/health`; RFC 7807 errors (400/404/499/502/503) plus 409 for protected documents.
-- [x] Weekday 15:35 Asia/Manila scheduler with cross-platform time-zone resolution, four horizons per session.
-- [x] Client-abort handling: `RequestCancellationMiddleware` answers `499 ClientClosedRequest`
-      (Debug log, no error log), and `PseMarketDataProvider` rethrows caller cancellation instead of
-      treating it as a feed outage.
-- [x] CORS for the Vite dev origin; Ollama env-var overrides (`OLLAMA_MODEL`, `OLLAMA_FAST_MODEL`, `OLLAMA_EMBEDDING_MODEL`); `MarketData` and `KnowledgeBase` configuration sections.
-- [x] **Ride-the-wave server layer.** `MarketDirectionService` (five weighted pillars — index 20 / breadth 14 / rotation 8 / foreign 6 / backdrop 6 — onto a 50 base, clamped **10–90**; `RIDE_THE_WAVE` ≥ 60, `BE_SELECTIVE` ≥ 45, else `STAY_IN_CASH`; a stored `BEARISH` regime forces cash; an unreported dial is omitted, never zeroed) and `WaveTradePlanCalculator` (tick-valid ideal buy / cut-loss / fee-paid break-even stop / target, `maxChasePrice` (ideal entry + 20% of the reward, or the `DAY` static ceiling, walked down tick by tick until net R:R ≥ 1.25 — 2.0 on `DAY` — and never below entry), `entryStatus`, `maxHoldTradingDays`, the `STOP_BREACHED → TARGET_REACHED → EMA20 trail → break-even lock → HOLD` ladder and a both-legs-legal trim size). `SignalsController.BuildEnvelopeAsync` publishes the `TrustPulse`; `ResearchController` accepts `averageCost` / `shares` (400 on `averageCost` ≤ 0 or negative `shares`; shares are optional).
+### Platform and invariants
+- [x] Clean Architecture solution (`PseSignalDesk.slnx`) on .NET 10: Domain → Application → Infrastructure → WebApi, plus one xUnit test project with no network access.
+- [x] Domain model (`DailyMarketSnapshot`, `StockDailyMetric`, `SignalRun`, `SignalItem`, `SignalDrop`, `KnowledgeDocument`, `KnowledgeChunk`, `PortfolioAccount`, `PortfolioTrade`, `TrainedHorizonModel`) and enums serialized as strings.
+- [x] `PseBoardLotService`: the official 15-tier PSE board-lot/tick table, bracket-crossing re-rounding, the static `+50%/-30%` band, `target > entry > stop` repair, per-leg fees (`BuyLegFeeRate` 0.295%, `SellLegFeeRate` 0.395%, round trip 0.690%), the expectancy layer (net risk/reward, break-even rate, EV, Quarter-Kelly, risk-budget sizing), tick spread, ADV participation and estimated slippage.
+- [x] `HorizonProfile` holds every per-horizon parameter (mission, `MinHistoryBars`, RSI band, ATR multiples, disclosure lookback, hysteresis, net-R:R requirement, EV minimum, preferred knowledge categories). All four horizons require net R:R ≥ 2.0; EV minima are 0.20 / 0.15 / 0.20 / 0.25.
+- [x] EF Core + SQLite with nine migrations (`InitialCreate` → `AddPyramidCountToPortfolioTrades`), unique indexes, cascade deletes, replace-on-rerun semantics and no-tracking reads.
+
+### Signal pipeline and pricing
+- [x] Live market data: Yahoo v8 charts with a mirror-host retry, index resolution plus an equal-weight heavyweight proxy, USD/PHP staleness guard, 10-ticker minimum, tick-rounded candles, zero-volume echo removal, row-aware PSE Edge disclosure attribution, best-effort macro dials and an optional official DQR.
+- [x] Quantitative filter: Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, RS63d, ATR%, VCP ratio, up/down volume, Chaikin money flow, Kaufman efficiency, beta, max drawdown, realized volatility, 20-day turnover/volume, support/resistance, weighted pre-score (85-point technical total rescaled when foreign flow is unreported), PHP 5M floor and top-25 cap.
+- [x] `PseDisclosureClassifier`: headline → `DisclosureCategory`, trap flags (hard `SRO_DILUTION`, `TENDER_OFFER_PIN`, `TRADING_HALT_RISK`; soft overhang, ex-dividend, static-band chases) and UI copy.
+- [x] Defensive `SignalJsonParser`: outermost balanced JSON, fences/prose, braces in strings, numeric strings, contract validation and human-readable retry errors.
+- [x] Pipeline: market-data reuse/fetch, horizon-aware candidate selection, knowledge retrieval, previous-run context, one Ollama call with a corrective retry, unknown-ticker/thesis-less/hard-trap discard, resolved-position exclusion, the `DAY` static-band clamp and net-R:R gate, board-lot sizing, citation verification, server-side drift and drop classification, atomic persist, and `502` when nothing tradeable remains.
+- [x] `ProbabilisticEdgeService`: shrunk empirical base rate (prior 0.42, 12 pseudo-observations, null under 60 bars) blended with barrier geometry, bounded tilts (stage, RS, VCP, breadth, regime, traps, dividend yield, conviction), clamp `[0.05, 0.95]`, verdict gates (`TRADE` / `SMALL_SIZE` / `WATCH_ONLY`), run-level cash posture and per-horizon hit rates in one pass.
+- [x] Mandatory pre-mortem: the model's `bear_case` is kept when usable, otherwise a deterministic stop/resistance/probability fallback is written.
+- [x] `MarketDirectionService` (five weighted pillars onto a 50 base, clamped 10–90; bearish regime override; unreported dials omitted) and `WaveTradePlanCalculator` (ideal buy / cut-loss / fee-paid break-even / target, chase ceiling, entry status, holding ladder, legal trim size).
+- [x] `OrderTicketCalculator`: one ticket per pick from `BookSizingSnapshot` (risk budget, cash, heat room, position cap, 2% ADV, sector room, governor multipliers, slippage, execution guidance), zero shares for `WATCH_ONLY`, and the **seven legal-pyramid rules** (above entry, break-even stop, ≥ +1R, under two adds, below target, 0.50x/0.25x risk, sector-name exemption).
+
+### Learning loop
+- [x] `LogisticModelTrainer`: L2 IRLS with a Gaussian-elimination solver over a per-trial **offset** (the structural prior), so the weights learn only the residual.
+- [x] `MoneyManagerTrainingService`: trials replay the desk's own execution (tick-grid plan, effective fee, +1R break-even ratchet, +1.5R causal EMA20 trail, causal index regime) on liquid names only, with a chronological 70/30 split that is purged and embargoed, train-only standardisation, sample weights `1/√(signals that date) × clamp(0.5 + 0.5·|R|, 0.5, 2)`, a λ scan by held-out Brier (log-loss tie-break), a Kelly grid `[0.15, 0.35]`, and a promotion gate of ≥25 held-out trades, Brier **and** log-loss better than the prior, plus `policyExpectancyR > 0`.
+- [x] `LearnedEdgeModel.FromActive` refuses any inactive row, so a `PRIOR_FALLBACK` can never price; a promoted fit adds at most ±6pp and rescales the Kelly stake.
+- [x] Live calibration offset (≥20 graded picks, 20 pseudo-samples, ±10pp) and desk memory (realized record, sectors that paid/bled, recent stop-outs, ranked factors) computed from the stored ledger only.
+- [x] Prompt feedback: `DESK_TRACK_RECORD_AND_LEARNED_EDGE` + `RECENT_STOP_OUTS`, with a rule that the record never overrides the server's levels, sizes, odds or verdicts.
+- [x] Weekly refit in its own DI scope plus a background cold-boot refit; `NeedsBootstrap` is true only while a horizon is `UNTRAINED`, and a failed fetch only logs.
+- [x] `GET /api/signals/model`, `POST /api/signals/train`, `POST /api/signals/train-all`, `GET /api/signals/desk-memory`.
+
+### Paper book (blotter)
+- [x] `PortfolioService` owns every cash transition: open (board-lot, tick, free-cash, position-cap and heat checks), raise stop, close at a fill, trim and pyramid merge. Each refusal is a `PortfolioRuleViolationException` → `400` naming the rule.
+- [x] Mark-to-market from the last stored sessions with an honest `HasSession: false` fallback; barrier verdicts only after an observed session.
+- [x] Exit ladder `STOP_BREACHED` → `TARGET_REACHED` → `MOVE_STOP_TO_BREAKEVEN` (+1R) → `TRAIL_STOP_EMA20` (+1.5R) → `TIME_STOP_DUE` → `HOLD`.
+- [x] Legal pyramiding: one merged row, fee-paid average entry, summed cost, recomputed risk, `PyramidCount`, 0.50x/0.25x adds and five refusals.
+- [x] Partial trims: whole board lots on both legs, proportional cost/risk into their own `CLOSED` slice, net cash credit, break-even ratchet on the remainder, and a server-computed `RecommendedTrimShares` that is always settlable.
+- [x] Drawdown state (`PeakEquityPhp`, `RiskPosture`), sector exposure cards, alerts, and expectancy / profit factor / payoff ratio from the closed ledger.
+
+### Research, replay and scorecard
+- [x] `TickerResearchService`: live single-symbol chart or stored-session fallback, catalog membership, tick-valid plan (static-band clamped for `DAY`), the same edge assessment and ticket as the run, causal regime from the fetched PSEi bars, the same `WavePlan` and a held-position `PositionAdvice` (`averageCost`, optional `shares`).
+- [x] `BacktestService`: prefix-only evaluation, multi-slot book (`MaxOpenPositions` 5, 6% heat, 2 names / 35% equity per sector), equity-based sizing with cash as a funding check, drawdown governor, board-lot slippage, break-even/EMA20 exit ladder, causal index regime gate, PSEi benchmark, alpha, CAGR, Sharpe, Calmar, total slippage and every trade.
+- [x] `WalkForwardEdge`: the replay's own residual model, refitted every 60 sessions on already-resolved candidates, used only when it beats the neutral base rate on its own trades; it never writes `TrainedHorizonModels` and its acceptance is deliberately in-sample.
+- [x] `SignalOutcomeService`: entry-fill gate, `UNFILLED` terminal rows, conservative same-bar tie to the stop, realized net R after per-leg fees, scorecard aggregation, live calibration offset and desk memory.
+- [x] `GET /api/signals/scorecard`, `GET /api/signals/backtest`, `GET /api/research/catalog`, `GET /api/research/{query}`.
+
+### Market data, DQR and knowledge
+- [x] Official PSE Daily Quotation Report: deterministic parser (PDF/CSV/TXT/TSV, header mapping, accounting negatives, suspension flags, missing-marker columns) with two ingestion paths — live templates (`pse-dqr-live`) and operator upload (`pse-dqr-upload`, 25 MB, `400`/`404` on bad input).
+- [x] Upload overlays foreign flow plus suspension disclosures only; breadth, macro dials, FX, realized vol and rotation survive, and unmatched tickers keep `null`.
+- [x] Cross-asset dials (`^TNX` bps, `BZ=F`, `EPHE`) fetched concurrently, best-effort, `null` when stale — printed into the prompt's `CROSS-ASSET:` line.
+- [x] SQLite RAG library: 8 built-in documents / 46 sections (front matter, `slug#section-n` references, content-hash re-indexing), mandatory-guardrail injection, BM25 + cosine RRF with horizon/sector/trap boosts, optional embeddings, Markdown/TXT/PDF upload behind the rights attestation, built-in delete protection (`409`).
+
+### API, compliance and operations
+- [x] Full REST surface: signals (`latest`, `by-date`, `dates`, `ticker/{symbol}/history`, `scorecard`, `backtest`, `model`, `train`, `train-all`, `desk-memory`, `run-now`, `quotation-report`), research (`catalog`, `{symbol}` with horizon/`averageCost`/`shares`), portfolio (summary, settings, order-ticket, trades, stop, close, trim), knowledge (list, reindex, upload, delete) and `/health`.
+- [x] RFC 7807 errors: `400` config/input/attestation/rule violation, `404` unknown session/document, `409` protected document, `499` client abort, `502` generation, `503` feed.
+- [x] `ComplianceGuardMiddleware` (loopback-only in `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`, `/health` bypass) and `AllowedHosts` narrowed to loopback names.
+- [x] First-run legal gate (`lib/legalConsent.ts`, `LegalDisclaimerGate`) plus `DISCLAIMER.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`; non-solicitation copy across the prompt and the UI.
+- [x] `RequestCancellationMiddleware` (499), caller-cancellation rethrow in the provider, and a one-macrotask deferral in the terminal that removes the common StrictMode abort.
+- [x] Scheduler: weekdays 15:35 Asia/Manila, four horizons per session, weekly refit, cold-boot refit.
 
 ### Frontend
-- [x] React 19 + TypeScript 7 + Vite 8 + Tailwind 4 terminal shell.
-- [x] Typed API client with `ApiError`, ProblemDetails parsing, abort signals, `FormData` uploads, `DELETE` + 204 handling and API-offline guidance; `knowledgeApi` for the drawer.
-- [x] Terminal header with date selector, four live horizon tabs (`DAY`/`WEEK`/`MONTH`/`YEAR`), Knowledge base action, Run pipeline button and busy state.
-- [x] `lib/horizons.ts` (`horizonMeta`) as the single source of per-horizon labels, mandates, stances and holding periods.
-- [x] Regime strip (PSEi close, SMA50/200 status, foreign flow with its **provenance** (`—`/`unreported`, `official PSE daily report (live/upload)`), USD/PHP with its 50D and 20D change, PSEi 20D realised volatility, **US 10Y (20D bps) / Brent / EPHE** macro tiles, breadth, horizon stance) plus a colour-coded **sector rotation strip** (quadrant badge, composite score, name count, RS63d, % above 50D).
-- [x] `QuotationReportImportButton`: pick a DQR file (PDF/CSV/TXT/TSV) + optional session date, posts through `signalsApi.importQuotationReport`, surfaces the `ProblemDetails` detail on failure and refreshes the dashboard (`setReloadToken`) with a notice on success; rendered in the header and the empty state.
-- [x] Top-10 table with horizon title/mandate, drift badges/accents, conviction bars, board-lot prices, net R:R, verdict badge, `P(win) vs break-even` + EV column, risk-sized share/lot column, trap badges, turnover, RSI, thesis tooltip, row selection and a verdict/cash footer.
-- [x] `VerdictBadge`, `RiskSizerBar` (win-probability bar against the fee-adjusted break-even marker, EV, Quarter-Kelly budget, risk-sized shares/lots, governor tiles for the effective risk %, edge/volatility/drawdown multipliers and posture, slippage + ADV participation + execution-guidance tiles, ticket warnings and a legacy-run fallback notice) and `ScorecardDialog` (graded/total, win rate, expectancy, profit factor with tooltip, Brier score, calibration table, verdict breakdown, recent resolved picks; the Brier tile and the `P(win)` of a pick render `—` when nothing forecasted has been graded).
-- [x] `lib/riskSizing.ts` renders the **server ticket** (`shares`, `lots`, all-in outlay, fee-paid risk/reward, break-even stop) whenever a run carries one and only falls back to the ₱100,000 model bankroll for legacy ticket-less rows (`serverSized: false`); it never re-derives the fee model.
-- [x] Drop panel with category styling and full reasons.
-- [x] Ticker detail dialog: verdict badge, thesis, plan tiles incl. net R:R and `P(win)/break-even`, risk sizer, forward-ledger outcome line, bear-case pre-mortem panel, technicals incl. SMA150 / 52-week high / Weinstein stage / RS63d / ATR% / VCP / historical hit rate / session range, the factor sleeve (up/down volume, money flow, trend efficiency, beta, max drawdown), classified disclosures with per-row trap badges, playbook citations, rank history with odds and realized R.
-- [x] Knowledge Base drawer: totals, indexed document list (horizons/categories/chunk counts), upload form, reindex and delete with ProblemDetails surfaced.
-- [x] `PortfolioDialog` (tabs `Book` / `Take trade` / `Ledger` / `Settings`): capital and heat tiles, drawdown + peak-equity + risk-posture tiles, per-sector exposure gauges, marked positions with the desk's exit instruction, raise-stop and close actions, **Trim / Bank half** (`portfolioApi.trimTrade` with the server's `recommendedTrimShares`), `+N add` pyramid badges with `describePyramidCount` copy, **Expectancy / Profit factor / Payoff ratio** tiles on the closed tab, a closed ledger and an SVG realized-equity curve, settings form with a pod-shop guardrails group (sector caps, drawdown ladder, volatility target); every mutation refetches the book and notifies the shell.
-- [x] `ResearchDialog`: ticker search with abortable fetches, plan tiles, order ticket, technicals (incl. dividend rows), trap flags, disclosures, bear case and the take-trade hand-off.
-- [x] `BacktestPanel` inside `ScorecardDialog` (`Forward scorecard` / `Walk-forward replay` tabs): stat tiles, **dual-line SVG equity chart** (desk curve solid, `benchmarkEquityPhp` dashed, one shared scale so the gap is the alpha), `Vs the market` / `Alpha vs PSEi`, `CAGR`, `Sharpe`, `Calmar` and `Fill cost / Slippage` tiles, a plain `describeAlphaPct` sentence, last 20 trades (with `BREAKEVEN` / `TRAIL_EMA20` exit copy), and the raw `503` reason when history is short.
-- [x] `ModelTrainerPanel` (third `ScorecardDialog` tab — `Desk Robot` in Simple, `Learned edge` in Pro): status banner (`LEARNED` / `PRIOR_FALLBACK` / `UNTRAINED`) with the server's own summary sentence, six held-out tiles (train/held-out counts and window, trained vs baseline Brier, held-out win rate and expectancy, profit factor, Kelly multiplier, embargo), ranked factor impacts with signed bars, the graded ledger (win rate, expectancy, Brier, calibration bias, paid/bled sectors, latest stop-outs), an all-four-books table and `Refit` / `Refit all four` buttons with the `503` reason shown verbatim. `signalsApi` gained `model`, `models`, `train`, `trainAll`, `deskMemory`; `types/signals.ts` gained `TrainedModelSummary`, `LearnedFactorWeight`, `DeskMemorySummary`, `SectorMemory`, `LossPostMortem`, `TrainedModelStatus`.
-- [x] `SignalTable` / `TickerDetailDialog` gained a `Take` action and ticket-aware sizing copy; `TerminalHeader` gained `Research` and `Book` (alert count) actions; `App` polls the book, banners exit alerts (`STOP_BREACHED` / `TARGET_REACHED`) and owns the trade-draft hand-off between dialogs.
-- [x] Centralized formatters for PHP/PSE prices, percentages, ratios and Asia/Manila dates.
-- [x] Empty/loading/error states explaining the live requirements, notices, footer disclaimer.
-- [x] Initial/dated load deferred by one macrotask, so React StrictMode's development remount
-      clears the timer instead of aborting a live request.
-- [x] **Progressive disclosure (`Simple | Pro`).** `lib/viewMode.ts` (`useViewMode`, `localStorage['psedesk.viewMode']`, default `simple`), `components/ui/TechnicalDisclosure.tsx` (`TechnicalDisclosure`, `DisclosurePill`, `OptionalDisclosure`) and `lib/plainAdvice.ts` (verdict / mood / drift / trap / disclosure / position-action / risk-posture / conviction / win-chance translators plus `describeOrderGuide` over the server ticket) — renaming and reformatting only, never recomputing.
-- [x] `AdviceCardList` (Simple home): per-pick `PlanSteps` (buy / sell / cut-loss), `OrderBox` (server ticket as pesos kept/lost after fees), confidence + win-chance meters, pre-mortem panel, `Record This Trade` / `Full Details`, a `Technical details` drawer with the verbatim desk fields, a collapsed `WATCH_ONLY` list and an honest “nothing passed the buy test today” state.
-- [x] `TerminalHeader` `ViewModeSwitch` segmented pill, friendly horizon tabs and actions (*Run Latest Screen* / *Check a Stock* / *My Trades* / *Past Results*), Knowledge Base hidden in Simple; `RegimeStrip` Simple summary (mood badge, cash to hold, stocks ready, PSEi / USD-PHP) with the nine indicator tiles and rotation behind a drawer.
-- [x] Every dialog is mode-aware: `TickerDetailDialog`, `ResearchDialog`, `ScorecardDialog` and `PortfolioDialog` (“My Trades (Paper Tracker)”, tabs `My Trades` / `Record a Trade` / `Closed Trades` / `My Rules`, three headline tiles, guardrails inside a `Risk & limits` drawer, `describePositionAction` labels, `R` columns hidden in Simple, friendly settings copy) — plus a friendly `DropPanel`.
-- [x] **Consumer-fintech pass (Simple mode).** `lib/theme.ts` (`useTheme`, persisted `psedesk.theme`, system-preference fallback, `data-theme` on `<html>`, pre-paint script in `index.html`) with the whole light palette as CSS custom properties; `lib/pseNicknames.ts` (`NICKNAMES`, `nicknameFor`, `companyLabel`, `POPULAR_PSE_STOCKS`, `searchCatalog`, `findCatalogStock`) for company-first labels and local ranked search over the server catalog; `components/WelcomeSetupBanner.tsx` (Peso budget chips + Careful/Balanced/Active safety presets saved through `portfolioApi.updateSettings`, dismissible `psedesk.welcomeDismissed`); `components/BeginnerGuideDialog.tsx` (steps, glossary, “what it will not do”); `ui/InfoTip.tsx` for hover explanations; `describeFriendlyError` + plain statistic/exit/alert readers in `lib/plainAdvice.ts` with `SAFETY_PRESETS`, `BUDGET_PRESETS_PHP` and `safetyPresetForSettings`.
-- [x] **Company-first.** `AdviceCardList` leads with the familiar name, keeps the ticker badge and labels the price `buy price` with an `InfoTip` (**the `BrokerChecklist` this pass added was deleted in the 2026-11-26 compliance pass as solicitation — `OrderBox` now prints a research ticket only**); `TickerDetailDialog`, `ResearchDialog` (catalog suggestions + popular chips + company-name input), `DropPanel`, the blotter (`PositionCard`: bought / sell-at / cut-at tiles, one Sell action, raise-stop actions) and the closed ledger all use `companyLabel` and plain labels. Simple mode hides the wide tables, Pro keeps them.
-- [x] **Zero-dependency SWR cache + preloaders.** `lib/queryCache.ts` (`queryKeys`, `queryStaleTime`, `fetchQuery` with in-flight dedupe and a **ref-counted `AbortController`**, `prefetchQuery`, `getSnapshot`, `isQueryFresh`, `setQueryData`, `invalidateQueries`, `subscribe`, `clearQueryCache`) stores verbatim server payloads and only decides *when* to refetch; `lib/preloaders.ts` warms dialog chunks and the cheap reads (`portfolio:summary`, `signals:scorecard:*`, `models`/`memory`, `research:catalog`, `signals:history:*`, `knowledge:list`) on intent, never `run-now` / `backtest` / `research/{query}`.
-- [x] **Every reader paints, then revalidates.** `App` (latest + dated signals, portfolio), `ScorecardDialog`, `BacktestPanel`, `ModelTrainerPanel`, `TickerDetailDialog`, `ResearchDialog`, `KnowledgeBaseDialog` and `PortfolioDialog` snapshot the cache, keep one-macrotask deferred dispatch (no StrictMode `499`), and keep a failed revalidation behind an amber "showing the last …" line instead of blanking. Mutations call `setQueryData`/`invalidateQueries`; the blotter returns its fresh summary through `onPortfolioMutated` instead of `onChanged`.
-- [x] **Responsive dialog surface.** `ui/Dialog.tsx`: `DialogContent` is a bottom sheet below `sm` (flush, `max-h-[92dvh]`, `.pb-safe`, grab handle, `dialog-sheet` keyframes + reduced-motion opt-out) and the centred modal above it, with an additive `size` (`md|lg|xl`) prop; `DialogStickyHeader` pins the title/close row and was adopted by every dialog.
-- [x] **Phone fallbacks for every wide table.** `SignalTable` (`ProSignalCard` cards below `md`), `PortfolioDialog` (`PositionCard` in Pro + new `ClosedTradeCard` for the ledger), `BacktestPanel` and `ModelTrainerPanel` card lists below `md`; the Pro table's first column stays pinned with `.sticky-col` (`.sticky-col-2` past the rank column), and `AdviceCardList` / `RegimeStrip` extend to `min-[1760px]` / `xl:grid-cols-5`.
-- [x] **Responsive shell + header.** `TerminalHeader` collapses to brand + Run + Book + ☰ on phones and puts the date picker, view-mode/theme switches, DQR import and sheet actions in a "Desk controls" bottom sheet; `ui/Tabs` is a swipeable rail with touch-sized triggers and intent hooks, `ui/Button` gained `touch-manipulation`/`active:scale`, `ui/Select` is full-width on phones, `ui/Tooltip` tap-toggles on coarse pointers, `ui/InfoTip` widened its tap target. `App` uses `min-h-dvh`, `max-w-[112rem]`, `lazy()` dialogs behind `Suspense` and idle research-catalog warming.
-- [x] **Viewport foundations.** `index.html` `viewport-fit=cover` + pre-paint `theme-color` (kept in sync by `lib/theme.ts` `THEME_COLORS`); `index.css` `100dvh`, scroll background on mobile, 16px mobile inputs, `touch-action: manipulation`, no tap highlight, `.no-scrollbar`, `.pb-safe`, `.sticky-col`, and the sheet keyframes outside `@layer utilities`. `vite.config.ts` pins `vendor-react` / `vendor-radix` with a `manualChunks` **function** (Vite 8/rolldown rejects the object form).
-- [x] `npm test` harness: `node --test "src/lib/__tests__/*.test.ts"` (Node 24 type stripping) over **two files** — `plainAdvice.test.ts` (29 cases covering `plainAdvice.ts` **and** `pseNicknames.ts`: preset round-trip/ordering, friendly-error mapping (offline / 503 / 404 / 400 / unknown), every statistic sentence, backtest exits (including `BREAKEVEN` / `TRAIL_EMA20`), alpha / payoff / pyramid / trim copy, alert translation, market-call traffic lights, entry-timing wait rules and the chase ceiling, trust-pulse wording, the own-it verdict, catalog search ranking and label fallbacks) and `queryCache.test.ts` (8 cases pinning the cache contracts, including the holding-scoped research key) — **37 tests**. `tsconfig.json` sets `allowImportingTsExtensions` and excludes `src/**/__tests__/**`.
-- [x] **Ride-the-wave Simple mode.** `MarketDirectionHero` (traffic light + one instruction, 10–90 score gauge with the marker at the server's number, plain reasons, money-in / money-out sector chips, trust line, institutional tiles behind one drawer) replaces the old market-mood header inside `RegimeStrip` (Pro untouched); `RidingNowStrip` lists only picks whose server `entryStatus` is `READY_NOW` and renders nothing when there are none; `AdviceCardList` leads with the top three cards, a `Show N more` toggle and the four-step `WavePlanGrid` with an entry-timing chip; `ResearchDialog` gained the **buy plan / I already own it** tabs (`averageCost` + optional `shares` → `HoldingVerdictCard`); `WelcomeSetupBanner` collapses to a one-line pill; `TerminalHeader` moved its secondary sheets into a `More ▾` menu; `DropPanel` degrades to one quiet line when nothing changed. `signalsApi.research.get` sends the holding, and `queryKeys.researchItem(horizon, query, holding)` keeps a position read out of the plain plan's cache entry.
-- [x] First-run legal gate: `lib/legalConsent.ts` (versioned `psedesk.legalAcceptedVersion`, five sections, storage-tolerant helpers) + `components/LegalDisclaimerGate.tsx` (un-dismissable dialog) wired into `App.tsx` with a footer *Review the notice* action.
-- [x] Non-solicitation copy: verdicts read `Qualifies (Full)` / `Qualifies (Half)` / `Watch Only`, the `OrderBox` prints a research ticket only (no broker checklist), the primary action is *Run Latest Screen* / *Run screen*, and every simulated figure is labelled simulated.
-- [x] Production build passes (`tsc --noEmit && vite build`).
+- [x] React 19 + TypeScript 7 + Vite 8 + Tailwind 4 shell with a typed API client (`ApiError`, ProblemDetails, abort signals, FormData uploads) and centralized formatters.
+- [x] `Simple | Pro` view mode and light/dark theme, both persisted; Simple leads with `MarketDirectionHero` (traffic light, 10–90 gauge, reasons, sector chips, trust line) and `RidingNowStrip`, then at most three `AdviceCardList` cards with the four-step plan grid and a technical drawer.
+- [x] Pro keeps the dense `SignalTable`/`ProSignalCard` views, regime tiles, rotation strip, governor/slippage tiles, `RiskSizerBar`, verdict/drift badges and the Knowledge Base action.
+- [x] `TickerDetailDialog` (thesis, plan, odds, factors, technicals, dividends, disclosures with trap badges, server-verified citations, rank history), `ResearchDialog` (buy plan vs "already holding it" with `HoldingVerdictCard`), `ScorecardDialog` (forward scorecard, dual-line benchmarked replay, `ModelTrainerPanel` with learned edge / desk memory and refit buttons).
+- [x] `PortfolioDialog` (Book / Record a trade / Ledger / Settings; trim, pyramid badges, expectancy tiles, exposure gauges, guardrails drawer), `KnowledgeBaseDialog`, `QuotationReportImportButton`, `WelcomeSetupBanner`, `BeginnerGuideDialog`, `LegalDisclaimerGate`, `DropPanel`.
+- [x] Responsive foundations: Radix `Dialog` as a bottom sheet below `sm` with a sticky header, card fallbacks for every wide table below `md`, pinned identifier column, scrolling tab rail, touch-sized controls, `100dvh` / `viewport-fit=cover` / `.pb-safe`, pre-paint theme colour and 16px mobile inputs.
+- [x] Zero-dependency SWR cache (`lib/queryCache.ts`, ref-counted abort, in-flight dedupe, prefix invalidation) plus idempotent preloaders; every reader paints cached data, then revalidates, and keeps the last payload behind an amber line when a refresh fails.
+- [x] Lazy dialog chunks and pinned vendor chunks through a `manualChunks` **function** (Vite 8 / rolldown rejects the object form).
 
-### Tooling / docs
-- [x] `knowledge-base/` content: `pse_rules.md`, four playbooks, `probabilistic_expectancy.md` (fee model, break-even/EV/Kelly maths, verdict gates, ledger and scorecard policy), `docs/engineering-references.md`, copied to the API output by MSBuild.
-- [x] `README.md` covering the live-only, grounded architecture, probabilistic verdicts and
-      Quarter-Kelly sizing, the bear-case pre-mortem, the forward-outcome scorecard (setup, API
-      table, error semantics, tests, calibration and legacy-row limitations).
-- [x] `.gitignore` for .NET build/test artefacts, restored NuGet caches (`**/.nuget/`, `*.nupkg`), local secret overrides (`appsettings.*.local.json`, `*.pfx`, `*.snk`, `.npmrc`), local SDK installs (`.dotnet/`), Node/Vite (`node_modules/`, `**/dist/`, `**/.vite/`, `vite.config.*.timestamp-*`, `*.tsbuildinfo`), SQLite files (`*.db` + `-shm`/`-wal`/`-journal`, `*.sqlite`/`*.sqlite3` sidecars and any `*.db.bak*` copy), every coverage format coverlet/node can emit (`coverage*.xml|json|info`, `*.lcov`, `*.coveragexml`), `.env` overrides (`frontend/.env.example` tracked through `!.env.example`), editor/OS noise (macOS + Windows + `.iml`/`.fleet/`/`.history/`/`.vshistory/`/`_ReSharper*/`/`*.DotSettings.user`), the stray `/Library/` folder and `*.log`/`*.pid` — re-verified 2026-11-26 over 45 sample paths with `git check-ignore -v`, `git ls-files -ci --exclude-standard` empty (no tracked file swallowed) and no stray untracked file in `git status -uall` (5526 ignored paths, 219 tracked). Deliberate omissions from the github/gitignore templates are listed in `techContext.md`.
-- [x] `.vscode/launch.json` + `.vscode/tasks.json`: API launch (build on launch) and attach,
-      Chrome terminal attach, full-stack compound, plus backend build/test and frontend build/dev
-      tasks, and `backend: free port 5236` (SIGTERM a stale `dotnet run` orphan before relaunching).
-- [x] `frontend/.env.example`.
-- [x] `DISCLAIMER.md` (no advice / no fiduciary duty, hypothetical results, data posture, model fallibility, upload responsibility, warranty), `PRIVACY.md` (local storage map, the four outbound flows, Data Privacy Act posture, retention/deletion, no cookies/analytics, security posture) and `THIRD_PARTY_NOTICES.md` (PSE market-data ownership, source table, knowledge-base provenance, NuGet/npm licence tables, trade marks), all linked from `README.md`.
-- [x] Memory bank (this directory) + `.clinerules/memory-bank.md` protocol.
+### Tooling and documentation
+- [x] `npm test` harness: `node --test "src/lib/__tests__/*.test.ts"` over the React-free `lib/` layer (no DOM, no dependencies).
+- [x] `.vscode/launch.json` + `tasks.json` (API launch/attach, Chrome, full-stack compound, build/test tasks, `backend: free port 5236`) and `frontend/.env.example`.
+- [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
+- [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory (390 backend + 49 frontend)
+## Test inventory — 390 backend + 49 frontend
 
-| File | Covers |
-| --- | --- |
-| `WebApi/ComplianceGuardMiddlewareTests.cs` | A non-loopback caller is refused in `PersonalLocal` mode (every verb) with a 403 ProblemDetails; loopback IPv4/IPv6 and a `null` remote address pass; `/health` passes from any address; the loopback rule can be switched off; reads never need the operator key while writes do (401 when missing, 401 when wrong, accepted when matching, surrounding whitespace trimmed); a `LicensedCommercial` deployment with no key answers 503; personal-mode loopback writes stay keyless |
-| `WebApi/KnowledgeControllerTests.cs` | `POST /api/knowledge/upload` answers 400 without `confirmRightsAndCloudProcessing=true` and never touches the service (an `UntouchableKnowledgeService` fails the test if called), and 400 for a missing file once the attestation is given |
+Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
-| `Application/MoneyManagerTrainingServiceTests.cs` | Empty feed → `MarketDataUnavailableException` and nothing persisted; four inactive `PRIOR_FALLBACK` rows carrying all twelve factor keys and the horizon's own embargo; one row per horizon; single-horizon refit touches only that book |
-| `Application/LearnedEdgeModelTests.cs` | `FromActive` refuses inactive and weightless rows; tilt is half the deviation and saturates at ±6pp; mean imputation for a missing factor; Kelly rebasing against the neutral 0.25x; live integration (probability + tilt, stake rescaled at the traded probability); prior kept when no feature vector is supplied |
-| `Infrastructure/DailySignalSchedulerRetrainTests.cs` | `ShouldRetrainThisWeek` true on the week's first session, false once it has traded, and still true on the Tuesday after a Monday holiday without firing twice; `NeedsBootstrap` true while any horizon is `UNTRAINED` and false once every horizon carries a fitted row (a `PRIOR_FALLBACK` is a decision, not a cold start) |
-| `Domain/PseBoardLotServiceTests.cs` | 15-tier bracket resolution (boundary theories), tick rounding, board lots per bracket, tick-collision nudging, static-band ceiling/floor limits, `RoundSharesToBoardLot`, gross + net R:R, net reward/risk per share, break-even rate, expected value, Quarter-Kelly, risk-budget sizing, plan normalization, tick spread + round-trip spread rate, ADV participation, estimated slippage (bracket + impact, cap) and the effective round-trip fee |
-| `Application/QuantitativeFilterServiceTests.cs` | SMA, EMA, RSI saturation, ATR, 200-candle requirement, liquidity floor, candidate cap/sort, pre-score bands, null-foreign-flow rescaling, reported-foreign-flow pre-score band, nullable metric, session OHLC, ATR%, RS63d vs a flat index, VCP contraction ratio, market breadth, +RS/VCP horizon score, up/down volume ratio, Chaikin money flow, trend efficiency, date-matched beta, max drawdown, realised volatility, rolling-disclosure merge window/cap/order, per-ticker disclosure scoping |
-| `Application/ProbabilisticEdgeServiceTests.cs` | Empirical base-rate shrinkage (prior 0.42, 12 pseudo-observations, null under 60 bars), barrier-geometry blend, bounded tilts, clamp `[0.05, 0.95]`, verdict gates (`EV ≤ 0` → WATCH_ONLY, TRADE buffer/regime/trap rules), `ComputeRecommendedCashPct` bands, per-horizon base rates in one pass, sector/accumulation tilts, bounded foreign-flow tilt (±0.03, `null` treated as missing), dividend-vs-US10Y pricing penalty, slippage-inclusive fee pricing |
-| `Application/DailyQuotationImportServiceTests.cs` | Real in-memory SQLite: upload overlays the foreign pillar (`pse-dqr-upload`), keeps the stored macro dials/breadth on re-save, skips unmatched tickers (`null`), adds the deduped suspension disclosure (`TRADING_HALT_RISK`), recomputes `QuantPreScore` for changed metrics only, `MarketSessionNotFoundException` for an unstored session, `QuotationReportImportException` for an unreadable file |
-| `Infrastructure/PseDailyQuotationParserTests.cs` | CSV header mapping with accounting negatives, TSV, whitespace-aligned layout + suspended block, empty/garbage/scanned-PDF input degrading to `Empty`, untracked-ticker skip |
-| `Application/OrderTicketCalculatorTests.cs` | Whole-board-lot sizing from the risk budget, `SMALL_SIZE` halving, `WATCH_ONLY` zero-share study ticket, free-cash / single-position / 2%-of-turnover caps, heat-room cut and exhaustion, no-liquidity and zero-risk guards, edge/volatility/drawdown governor multipliers and their `[0.50, 1.50]` clamp, `HALTED` → zero shares, sector name-cap block, sector-room cut, no-averaging-down refusal, slippage + ADV + execution guidance, **seven pyramid rules** (0.50x first add at 740 shares, blocked before break-even, blocked under +1R, blocked on the third add, 0.25x second add at 370 shares, same-ticker sector-count exemption, position-cap room → 190 shares) |
-| `Application/SectorRotationServiceTests.cs` | Breadth/stage/RS/volume weighting and renormalisation over reported inputs, quadrant bands (`LEADING` ≥70 / `IMPROVING` ≥55 / `WEAKENING` ≥40 / `LAGGING`), ranking order, unreported inputs staying `null` rather than `0` |
-| `Application/PortfolioServiceTests.cs` | Fee-paid buy debit and all-in risk, board-lot / cash / position-cap / heat refusals, stop raised to the break-even tick, stop rejected at or above the target, no phantom breach before a session prints, close settlement (`sellProceedsPhp`, realized P&L and R, cash credit, double-close refusal), summary heat/win-rate/realized curve, settings clamping, peak-equity persistence and drawdown, risk posture bands, sector exposure roll-up, **trim slice (500 of 1,000 shares: proportional cost/risk, PHP 4,522.50 realized at 1.5422R, break-even ratchet, cash credit), the mark-priced trim recommendation (3,000 shares bought at PHP 5.00 and marked at PHP 4.99 recommends 1,000 — a legal exit lot that leaves a legal entry lot — and settles exactly that), trim refusals (not a board lot, whole-position, illegal remainder lot, already closed), pyramid merge (1,500 shares averaged to PHP 101.70, PHP 152,949.88 cost, one position) and its four refusals, expectancy/profit-factor/payoff telemetry** |
-| `Application/TickerResearchServiceTests.cs` | Live chart → `dataSource: live` with a tick-valid plan, bounded odds and a board-lot ticket; `DAY` plan clamped inside the static band; stored-session fallback (its own `AsOfDate`, `inCatalog` from the provider); a 40-session live series is never padded; `503` copy when neither source exists; blank ticker rejected; index-relative factors and the stored sector quadrant; **the regime dial priced causally from the fetched PSEi series (a bearish index prices below a bullish stored label, and the stored label cannot leak back in when the tape is measurable)** |
-| `Application/BacktestServiceTests.cs` | No synthetic curve without history, failure when no session clears the entry rules, whole board lots + round-trip fees + equity-curve continuity, appending a future crash bar does not change a single past trade, **the same causality when the index turns bearish later, benchmark/alpha/slippage assertions, the bearish regime gate funding no new long, the break-even ratchet and the EMA20 trail** (`BuildIndexBars` / `BuildLadderBars` helpers), **the multi-slot book (an eight-name board holds exactly `MaxOpenPositions` clips at once across several tickers), the per-sector caps (a six-name Banks board holds exactly `MaxPositionsPerSector` and never breaches the 35% notional ceiling) and the funding invariant (simultaneous outlay including fees and slippage never exceeds the starting capital, every equity point positive)** |
-| `Application/SignalOutcomeServiceTests.cs` | Target-first and stop-first barrier walks, conservative same-bar tie → stop, horizon expiry win/loss, realized net R after fees, open picks untouched, **the fill gate (a limit the tape never traded at is `UNFILLED`, not a loss) and its terminal status (`ResolveOpenSignalsAsync` never re-grades it)**, **an `UNFILLED` row kept out of `resolvedCount` / `openCount` / win rate / profit factor / Brier / buckets / `recentResolved` while still counting in `totalPicks` and the verdict split**, scorecard aggregation (win rate, expectancy, profit factor, Brier, buckets, verdict split), pre-migration rows kept out of Brier/buckets but kept in realized stats, live calibration offset (zero under 20 graded, +10pp cap, −5.56pp shrunk miss after 20 pseudo-samples), desk memory (realized stats, sector record, stop-outs, no factors without a promoted model) and the empty-memory case |
-| `Application/PseDisclosureClassifierTests.cs` | 11 headline → category mappings, blank headline, hard-disqualifier theory, `DetectTrapFlags` dedupe/order, `Describe` coverage |
-| `Application/MarketDirectionServiceTests.cs` | Pillar summing onto the 50 base with the 10–90 clamp, unreported dials omitted (never counted as zero), `BEARISH` regime override to `STAY_IN_CASH`, empty signal list stepping down to `BE_SELECTIVE`, direction bands (≥60 up / ≤40 down), trust pulse publishing the ledger and `IsCalibrated` only from ≥20 resolved picks |
-| `Application/WaveTradePlanCalculatorTests.cs` | Tick-valid ideal buy / cut-loss / target, the fee-asymmetric break-even trigger solve, `maxChasePrice` walking down ticks until net R:R clears 1.25 (2.0 on `DAY`) under the static ±band ceiling, entry-status thresholds, the holding ladder (`STOP_BREACHED` → `TARGET_REACHED` → EMA20 trail → break-even lock → `HOLD`), and trim shares that are whole board lots on both legs and never more than half |
-| `Application/SignalJsonParserTests.cs` | Clean JSON, numeric strings, fences/prose, braces in strings, empty `top_10`, duplicate tickers, inverted stop, invalid drop category, empty/no-JSON responses |
-| `Application/SignalPipelineServiceTests.cs` | Drift recomputation, deterministic drop classification, resolved-position exclusion, unknown-ticker/thesis-less/hard-trap discard, `DAY` static-band clamp + citation intersection + board-lot sizing, ungrounded run with an empty knowledge base, fresh metric persistence, missing market data, server-owned odds/verdict/bear-case fallback, breadth on the request/run, model pre-mortem retention, sector rotation computed + persisted once, tickets attached to picks, broken book no longer failing the run |
-| `Infrastructure/KnowledgeDocumentParserTests.cs` | Front-matter parsing, `##` chunk splitting, unique `slug#section-n` references, plain-text chunking, content hash stability |
-| `Infrastructure/SqliteKnowledgeServiceTests.cs` | Mandatory-guardrail injection, horizon boost, trap boost, built-in delete protection, Markdown upload scoping, empty upload rejection, `IndexBuiltInAsync` idempotence (`FakeHostEnvironment`) |
-| `Infrastructure/PseMarketDataProviderTests.cs` | Chart parsing + disclosure matching, tick-grid candles, caller cancellation, 429/non-2xx, 404 index, stale session, empty PSE Edge, **macro dials null on failure**, **macro level + 20-session change (bps for the yield)**, **live DQR overlay + `pse-dqr-live` provenance**, **missing DQR leaves foreign flow `null`** (stubbed handler, no network) |
-| `Infrastructure/OllamaPromptBuilderTests.cs` | Per-horizon system prompt, playbook citation anchors, grounding-unavailable path, JSON structure line, fast-extraction prompt, `N/A (unreported)` flow handling, `bear_case` rule + contract, `BREADTH:` header, `probability inputs` line with `n/a` fallbacks, `CROSS-ASSET:` line with `n/a` dials and the foreign-flow provenance, CROSS-ASSET / FOREIGN FLOW system-prompt bullets, **plain-English `thesis` / `bear_case` wording**, **`DESK_TRACK_RECORD_AND_LEARNED_EDGE` + `RECENT_STOP_OUTS` when a desk memory/model exists and their absence when it does not** |
-| `WebApi/RequestCancellationMiddlewareTests.cs` | Aborted request → 499 and no rethrow; non-abort cancellation rethrows; normal requests untouched; already-started responses never rewritten |
+### Backend — `backend/tests/PseSignalDesk.Tests` (26 files)
 
-Data-accuracy pass additions inside those files: `PseMarketDataProviderTests` gained the secondary-host fallback, the zero-volume-echo session guard, the unfinished intraday index candle drop, the one-bar `PSEI.PS` → heavyweight-proxy regime and the row-aware disclosure attribution (18 cases in the file); `PseDailyQuotationParserTests` gained the `-`/`N/A` missing-marker column case; `SignalOutcomeServiceTests` covers the entry-fill gate and `UNFILLED`; `BacktestServiceTests` proves slippage reaches the equity curve (`grossOfSlippagePct > NetReturnPct`) instead of being charged twice; `PseBoardLotServiceTests` / `OrderTicketCalculatorTests` / `PortfolioServiceTests` carry the per-leg fee constants (net risk 5.6703, net reward 9.2705, break-even 0.3795, 1,760 shares on 1% of PHP 1M).
+| Layer | Suite | Cases |
+| --- | --- | --- |
+| Domain | `PseBoardLotServiceTests` — 15 tier/tick rows, bracket crossing, static band, plan repair, per-leg fees, net R:R, break-even, EV, Quarter-Kelly, risk budget, ADV, slippage | 73 |
+| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring | 32 |
+| Application | `OrderTicketCalculatorTests` — sizing, verdicts, governor band, heat/sector/cash caps, slippage, execution guidance, all seven pyramid rules | 27 |
+| Application | `PortfolioServiceTests` — open/close/stop rules, pyramiding, trims, drawdown posture, exposure, alert dedupe | 27 |
+| Application | `ProbabilisticEdgeServiceTests` — base rate, barrier geometry, tilts, clamps, verdict gates, hit rates, learned edge, calibration | 22 |
+| Application | `PseDisclosureClassifierTests` — categories, hard/soft traps, priority order, copy | 20 |
+| Application | `TickerResearchServiceTests` — live/stored paths, plan validity, `DAY` clamp, ticket/edge parity, regime, holding advice | 17 |
+| Application | `SignalOutcomeServiceTests` — entry gate, `UNFILLED`, stop tie, net R, scorecard, calibration, desk memory | 16 |
+| Application | `BacktestServiceTests` — prefix causality, book limits, governor, slippage, exits, benchmark metrics, walk-forward | 13 |
+| Application | `WaveTradePlanCalculatorTests` — plan levels, chase ceiling, entry status, ladder, trim size | 12 |
+| Application | `SignalPipelineServiceTests` — discards, gates, drift, drops, persistence, `502` | 12 |
+| Application | `SignalJsonParserTests` — fences, prose, brace-in-string, numeric strings, contract failure | 9 |
+| Application | `LearnedEdgeModelTests` — activation gate, ±6pp tilt, Kelly rescale, probability clamp | 7 |
+| Application | `SectorRotationServiceTests` — mapping, leaders/laggards, strength | 7 |
+| Application | `MarketDirectionServiceTests` — pillar blend, clamp, bearish override, unreported dials | 6 |
+| Application | `DailyQuotationImportServiceTests` — live/upload paths, overlays, unmatched tickers, size guard | 4 |
+| Application | `MoneyManagerTrainingServiceTests` — promotion gate, purged split, inactive fallback | 3 |
+| Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials | 18 |
+| Infrastructure | `OllamaPromptBuilderTests` — horizon block, knowledge, feedback, cross-asset, desk memory, guardrails | 16 |
+| Infrastructure | `SqliteKnowledgeServiceTests` — reindex idempotency, guardrail retrieval, delete protection, search boosts | 8 |
+| Infrastructure | `KnowledgeDocumentParserTests` — chunking, section refs, content hash | 6 |
+| Infrastructure | `PseDailyQuotationParserTests` — header mapping, negatives, suspension, missing markers | 6 |
+| Infrastructure | `DailySignalSchedulerRetrainTests` — weekday/hour trigger, per-horizon retrain, scope isolation | 5 |
+| WebApi | `ComplianceGuardMiddlewareTests` — loopback gate, operator key (constant time), `/health` bypass, licensed passthrough | 18 |
+| WebApi | `RequestCancellationMiddlewareTests` — 499 on abort, no write after cancellation | 4 |
+| WebApi | `KnowledgeControllerTests` — upload attestation, protected-delete mapping | 2 |
 
+### Frontend — `frontend/src/lib/__tests__` (3 files, React-free)
 
-### Frontend (npm test, 49 tests)
+| File | Covers | Cases |
+| --- | --- | --- |
+| `plainAdvice.test.ts` | `plainAdvice` / `plainStatus` / formatter copy for every plan, verdict, scorecard and backtest field, plus the "not advice" wording | 35 |
+| `queryCache.test.ts` | cache read/write, ref-counted abort, in-flight dedupe, prefix invalidation, failed-refresh retention | 8 |
+| `legalConsent.test.ts` | first-run gate, versioned acceptance, stale notice, review clears flag, throwing storage, notice content | 6 |
 
-| File | Covers |
-| --- | --- |
-| `frontend/src/lib/__tests__/legalConsent.test.ts` | A first run (no stored value) must accept; accepting stores exactly the current version and one key; a stale version re-prompts; clearing removes it; a throwing/absent `localStorage` never breaks the gate; the section list keeps its order, covers the five required topics and every body is non-empty |
+## Remaining
 
-| `frontend/src/lib/__tests__/queryCache.test.ts` | Fresh hit returns the verbatim payload without touching the API; a stale entry revalidates and replaces the cached value; concurrent callers share one upstream request; aborting one subscriber leaves the shared request running for the rest; aborting every subscriber cancels upstream and evicts the dead promise; prefix invalidation leaves unrelated keys intact and fresh; prefetch failures stay silent while subscribers hear about new data; a research read carrying the reader's own cost/shares is a different key from the plain plan (and prefix invalidation still reaches both) |
-| `frontend/src/lib/__tests__/plainAdvice.test.ts` | Safety-preset round-trip and risk ordering, customised settings detected as no preset, budget presets ascending, friendly-error mapping (offline / `503` / `404` / `400` / unknown throw), expectancy / profit factor / Brier / win rate / max drawdown / risk-per-trade sentences, backtest exit translation (`TARGET` / `STOP` / `TIME` / `BREAKEVEN` / `TRAIL_EMA20` / unknown), alpha copy (beat / level / trailed / no index), payoff / pyramid / trim guidance, portfolio-alert de-shouting, market-call traffic lights (green / amber / red / unknown), entry-timing wait rules and the too-late chase price, trust-pulse wording (calibrated, small sample, empty ledger, unreadable), the own-it verdict (hold pesos, stop-out loss, sizeless), catalog search (nickname, ticker, legal name, exact-ticker-first, empty/garbage), label fallbacks and the popular-chip invariants, **the outcome-status copy (`UNFILLED` → "Entry never filled", `OPEN` → "Still open", unknown statuses lowercased with spaces), the dash-instead-of-zero formatters (`formatR` / `formatProbability` on `null` / `undefined` / `NaN`), the latest-vs-history decision (`newestSessionDate`, `isViewingHistory` — newest day and empty store are not history) and the re-run copy (`describeRunLabel` / `describeHistoryBanner`)** |
+### Security remediation (`security_audit_report.md`, 2026-11-26 — 15 findings)
 
-## Known issues / limitations
+- **Done** — F-01/F-02 partly: `ComplianceGuardMiddleware` (loopback-only `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`), loopback `AllowedHosts`, `/health` bypass.
+- **P0/P1 open** — F-03 prompt fencing for retrieved text; F-04 lookback ceiling; F-05 price bounds in `PseBoardLotService`; F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings.
+- **P2 open** — F-08 security headers/HSTS, F-09 unbounded free text, F-10 regex timeout/response caps, F-11 SQLite file mode, F-12 committed lock files + `NuGetAudit` + `PdfPig` bump, F-13 rate limiting / run gate, F-14 `GET` mutating state, F-15 raw model response persistence.
+- **Auth** — no user authentication, no origin check on unsafe methods, no rate limiter: keep the desk on `127.0.0.1`.
 
-**Security (2026-11-26 audit — partly remediated).** `security_audit_report.md` records 15 findings. Since that pass, `ComplianceGuardMiddleware` refuses non-loopback callers in `PersonalLocal` mode (so a CSRF/DNS-rebinding attempt from another origin, and any other machine, is a 403), `LicensedCommercial` writes require a constant-time-compared operator key (`PSEDESK_OPERATOR_API_KEY`, 503 fail-closed when unset) and `AllowedHosts` is narrowed to loopback names — that covers most of F-01/F-02. Still open, in fix order: **unfenced untrusted text in the ranking prompt** (uploaded documents and scraped headlines are still instructions to the model), **unbounded `lookbackDays`** (500 + multi-decade upstream fetch), **unbounded price decimals** (500 via `decimal` overflow), **`ex.Message` reflected** in the knowledge-base and Ollama error paths, **the plain-text chunker bypasses `MaxChunkCharacters`**, and **no rate limit / run gate**. Until those land, keep the desk bound to loopback and never port-forward or tunnel it; if you do choose `LicensedCommercial`, add real per-user authentication in front of it.
+### Live verification (needs network + `OLLAMA_API_KEY`)
 
-**Regulatory (2026-11-26).** The desk reads Yahoo Finance and PSE Edge under a personal, non-commercial posture and holds no PSE market-data redistribution agreement and no SEC licence. `DISCLAIMER.md` / `PRIVACY.md` / `THIRD_PARTY_NOTICES.md` state that, the API enforces loopback by default and the UI gates first use — but the code cannot grant a licence. Operating it for other people, publishing its prices, or presenting it as a licensed or advisory service remains the operator's legal exposure, not something this repository has solved. Uploaded documents still carry the operator's own copyright/confidentiality exposure (the attestation is an undertaking, not a check).
+- [ ] `POST /api/signals/run-now` × four horizons, twice, to exercise drift and drop categories.
+- [ ] `POST /api/signals/quotation-report` against a stored session (`foreignFlowSource`, suspension trap).
+- [ ] `POST /api/signals/train-all` → four books `LEARNED`, then a second call → `skipped: every horizon already carries a fitted model`.
+- [ ] `GET /api/signals/backtest?horizon=WEEK` once `PSEI.PS` returns ≥200 bars.
+- [ ] Ticket parity: `SignalItemDto.orderTicket` = `/api/research/{ticker}` = `/api/portfolio/order-ticket`.
+- [ ] Real browser pass, Simple and Pro, 320 → 2560px (no component suite exists).
 
-1. **Live feeds are unofficial.** Yahoo Finance can rate-limit (`429` → 503) and PSE Edge markup can
-   change (empty/parse mismatch → 503). Delisted or renamed symbols are skipped, and fewer than 10
-   survivors fails the run.
-2. **The odds model is calibrated, not proven.** The probability blend (shrunk empirical hit rate +
-   ATR barrier geometry + bounded tilts) is deterministic and unit-tested, but its accuracy is only
-   measurable through the scorecard once a real sample of graded picks exists. Treat `P(win)` as an
-   estimate and the verdict as a policy, not a forecast of profit.
-3. **Legacy runs carry no odds.** Rows written before `AddProbabilisticEdgeAndScorecard` store zero
-   probabilities, `WATCH_ONLY` and an empty bear case (`RiskSizerBar` shows an explicit notice instead
-   of a fake forecast). They still grade for real once their forward window fills, so they count
-   toward win rate/expectancy, but `BuildScorecardAsync` keeps them out of the Brier score and the
-   calibration buckets — they never produced a forecast to grade.
-4. **Embeddings are untested against a live key.** The vector path compiles and is unit-covered only
-   through fakes; every smoke run so far used `KnowledgeBase__EnableEmbeddings=false`, so production
-   retrieval quality (BM25 vs vectors) has not been observed.
-5. **No full live Top-10 run has been observed** in this sandbox: an early session returned a single
-   bar per request (503) and a later one fetched the session but stopped at `400 Ollama Cloud is not
-   configured` because `OLLAMA_API_KEY` is unset. Net-R:R rejections, static-band clamps, live odds
-   and citation filtering are therefore verified by tests, not by real output.
-6b. **The dev store is empty and cannot be refilled right now.** The two sessions it held (`2026-11-23`, `2026-11-24`) were synthetic/legacy — their round net-foreign figures and empty `ForeignFlowSource` cannot be produced by the current provider — so they were deleted on 2026-11-25 along with everything derived from them (metrics, runs, items, drops). `KnowledgeDocuments` / `KnowledgeChunks` / `PortfolioAccounts` were kept, and the DB was copied to `backend/src/PseSignalDesk.WebApi/pse_signals.db.bak-20261125` first. Since then Yahoo answers **`429 Too Many Requests` on both `query1` and `query2`** from this network, so `POST /api/signals/run-now`, `GET /api/research/{ticker}` and `GET /api/signals/backtest` all return `503` and `GET /api/signals/latest` returns an honest empty envelope (`run: null`, `dates: []`). Nothing about the desk is wrong in that state, but every number must be regenerated from a real feed before the store is representative again.
+### Product tuning (policy defaults, not fitted)
 
+- [ ] Direction pillars 20/14/8/6/6, 60/45 thresholds, 1.25 chase floor (2.0 on `DAY`).
+- [ ] `+1R` break-even / `+1.5R` trail and the 5%/10% ladder — currently duplicated in training, replay and wave plans.
+- [ ] Governor `[0.50, 1.50]`, 2% Kelly reference, 6% heat, 2 names / 35% sector, λ = 25, `EV > 0` on a thin tape.
+- [ ] Calibration prior 0.42 / 12 pseudo-observations / ±10pp clamp after ≥30 graded picks.
+- [ ] Slippage model (`2 × tick / price` + √impact, ≤ 1.5%) against real fills.
+- [ ] Optional: horizon-specific net-R:R and EV minima beyond the current uniform 2.0 floor.
 
-6. **Foreign flow is opt-in, not automatic.** The exchange publishes no stable date-addressed DQR URL, so `MarketData:PseDailyQuotationUrlTemplates` ships **empty** and foreign flow stays `null` until an operator either configures a mirror or uploads the report through `POST /api/signals/quotation-report`. Coverage is therefore per-session and human-driven, and the DQR PDF layout is only covered by the parser's header/whitespace heuristics (real PSE PDFs have not been parsed in this sandbox). A failed/missing report never fabricates a zero.
-7. **Macro dials depend on Yahoo symbols** (`^TNX`, `BZ=F`, `EPHE`). They are best-effort: a missing/stale/renamed series leaves that tile `—` and the run continues; no live macro value has been observed here (no outbound network for those symbols in the sandbox).
-8. **The uploaded DQR does not update breadth.** The import owns foreign flow and suspension flags only; advancing/declining counts in the report are ignored, so `BreadthAboveSma50Pct` keeps the pipeline's own measurement.
-9. **Knowledge uploads are append-only.** Re-uploading the same file creates a new slug (hash suffix)
-   instead of replacing the old upload; delete the previous one manually.
-10. **No PSE holiday calendar.** The scheduler fires on weekdays, including exchange holidays.
-11. **SQLite MVP.** Decimals are TEXT; embeddings are `BLOB`s scanned in memory (no ANN index), so
-   retrieval cost grows with the chunk count. No concurrent-writer strategy beyond SQLite defaults.
-12. **No auth / rate limiting / HTTPS enforcement.** Anyone who can reach the API can upload or delete
-   (non-built-in) knowledge documents.
-13. **Frontend coverage is the language/cache layer only — and still no browser walkthrough.** `npm test` runs 42 `node:test` cases over `lib/plainAdvice.ts`, `lib/pseNicknames.ts` and `lib/queryCache.ts`; there is no component/DOM suite and no lint script, so the theme switch, the first-run banner, the catalog suggestions, the dual-line chart, the bottom-sheet dialogs, the card fallbacks, the sticky columns and the tap-to-toggle tooltips are verified by `tsc --noEmit` + `npm run build` only. The client cache's *contract* is unit-covered, but the wiring (which dialog invalidates which key) is not, and no real device or DevTools throttling session has been run.
-14. **No CI/CD, Docker, or deployment config.**
-15. **Committed on 2026-11-25.** The first commit is the initial commit on `main` ("Initial commit: PSE Signal Desk …"), made after `.gitignore` was extended with `*.db.bak-*` so the timestamped DB safety copy stays local; the tree is clean.
-16. **Model drift fields are ignored** by design; the raw response is retained in
-    `RawModelResponseJson` for audit (the fast-extraction note is not persisted).
-17. **Client aborts are 499s, not faults — and no longer pause the debugger.** A cancelled request makes EF Core raise `TaskCanceledException` while opening SQLite; `RequestCancellationMiddleware` answers `499` with a Debug log. Both mount-time fetches in `App.tsx` (signals **and** the portfolio summary) are deferred by one macrotask so StrictMode's development remount clears a timer instead of aborting a request, and the API launch configuration now ships `"justMyCode": false` so a deliberate mid-flight abort (dialog close, horizon switch, closed tab) does not stop the debugger before the catch.
-18. **The blotter is paper-only and single-account.** No broker, no routing: entry is priced at the planned level, the close uses the supplied fill, and marks come from the latest stored session. There is one implicit account (`PortfolioAccount` row 1), no multi-user separation and no audit table for stop moves.
-19. **Research and replay depend on live history.** Both answer `503` with the upstream reason when Yahoo returns fewer bars than the horizon (or the 200-day regime) needs — verified in this sandbox, where `SM` had no 200-session chart and `PSEI.PS` returned a single bar (`"PSEi (PSEI.PS) returned only 1 live daily bars through 2026-11-25; 200 are required for the 200-day regime."`, re-observed on 2026-11-25). The gate lives in `PseMarketDataProvider.FetchIndexBarsAsync` (`MinimumIndexBars`), so it predates the replay's own regime check: inside the replayer, a **short index prefix is treated as "no information"** (entries are not blocked), while the provider refuses to build a snapshot at all. Live research/backtest output has not been observed yet.
+### UI / device
 
-20. **Two risk conventions coexist.** Signal tickets and the blotter size against the stored account equity (default ₱100,000, 1% risk); `MODEL_POSITION_BUDGET_PHP` survives only as the legacy fallback in `lib/riskSizing.ts` for runs stored before tickets existed. Remove it once every stored run carries a ticket.
-21. **F5 can lose the race for port 5236 to a leftover `dotnet run`.** The stale terminal server
-    (often reparented to PPID 1 after a window reload) keeps listening, so the debugger instance
-    dies with `IOException: Failed to bind to address http://127.0.0.1:5236: address already in
-    use`. Recover with `lsof -nP -iTCP:5236 -sTCP:LISTEN` + `kill <pid>`, then relaunch; no code
-    change is involved. (Observed 2026-11-25 and documented in `techContext.md`.)
+- [ ] Manual iOS Safari + Android Chrome pass (sheet dismissal, safe areas, 16px inputs, chart legibility).
+- [ ] Decide whether a component/DOM harness (jsdom + Testing Library) is worth the dependency; today `lib/` is the only tested surface.
+- [ ] A lint/format step is still absent (no ESLint/Prettier config).
 
-22. **The money-manager dials are policy, not calibration.** The governor bounds (`[0.50, 1.50]`, a 2% Kelly reference), the sector cap (35% of equity / 2 names), the `[5%, 10%]` drawdown ladder, the `TargetAnnualVolPct` (18) and the slippage model (`2 × tick / price` plus a √impact term capped at 1.5%) are reasoned defaults, unit-tested for behaviour but never fitted to real PSE fills. They have also never been observed at a non-1.0 value in a live run (no key in this sandbox).
-23. **Rotation is only as good as the catalog's sector tags.** Many `PseTickerCatalog` sectors hold one or two names, so a "sector" score can be the opinion of a single ticker; unreported breadth/RS inputs are renormalised away rather than faked.
-24. **The drawdown ladder only gates new tickets.** A breach changes sizing and raises an alert; nothing forces an existing position out (closing stays manual by design).
-25. **The learned model has never been trained against the live feed.** No network/`OLLAMA_API_KEY` in this sandbox, so `POST /api/signals/train*` has only been exercised through stubs: a 240-bar oscillating tape yields an honest `PRIOR_FALLBACK` for all four books. The fit is now a residual over `logit(prior)` (payoff/date-weighted, λ = constant) with a promotion gate that also demands a log-loss no worse than the baseline and a positive policy expectancy; whether any book actually promotes on the real ~1080-day tape is unobserved, and the ±6pp tilt, the ±10pp calibration clamp and the `[0.15, 0.35]` Kelly grid stay reasoned defaults until it does.
-26. **Training is a single full refetch.** `TrainAllAsync` fetches 1080 calendar days, rebuilds every trial for every horizon and refits in the request/scheduler thread; there is no incremental update, no cached trial store and no background queue, so a slow Yahoo feed makes the refit slow (and the endpoint's `lookbackDays` is the only tuning knob).
+### Docs
 
-27. **The benchmark/alpha layer is unit-proven, not observed.** `BenchmarkEquityPhp`, `ExcessReturnPct`, `CagrPct`, `AnnualizedSharpeRatio`, `CalmarRatio`, `TotalSlippagePhp` and the `BREAKEVEN` / `TRAIL_EMA20` exits are asserted against deterministic stub tapes in `BacktestServiceTests`, but no real curve has been rendered here (the sandbox feed cannot supply 200 PSEi bars). Whether the rules actually beat buy-and-hold on the PSE over a multi-year window is still an open, measurable question.
+- [ ] Keep the sync rules in `techContext.md` current; refresh `README.md` counts only from real command output.
 
-28. **Pyramiding and trims have never been exercised over HTTP against a funded book.** The arithmetic, refusals and telemetry are unit-covered (`PortfolioServiceTests`, `OrderTicketCalculatorTests`) and the route was smoke-tested only for its `400` path, because running a real open → pyramid → trim sequence would have written throwaway trades into the developer's paper book. A single manual walkthrough (open a multi-board-lot name, raise the stop to break-even, Trim half, find the slice in Closed Trades) is still owed.
+## Known issues and limitations
 
-29. **The pyramid/trim rules are policy, not calibration.** 0.50x then 0.25x adds, the +1R gate, the two-add ceiling, "trim half in whole lots" and the "bank above break-even ratchets the stop" rule are reasoned defaults from `asymmetric_wealth_compounding.md`; nothing has compared them against real fills.
+- **Unverified live feeds.** Yahoo/PSE answered `404`/`429` from this environment, so ingestion, the model calls, DQR live templates and the replay's PSEi benchmark have never been observed end-to-end here. By design a failure is a `503`, never synthetic data.
+- **No UI automation.** Responsiveness and the Simple/Pro switch are verified by reading code and by `tsc`, not by a test.
+- **Deliberately in-sample walk-forward.** `WalkForwardEdge` accepts its residual model by comparing it to the base rate on its own trades; it is a replay aid, not a validated out-of-sample result — and it never writes `TrainedHorizonModels`.
+- **Bootstrap success path unobserved.** Only the failure branch (`cold-boot refit skipped`) has been seen; the `LEARNED` path still needs a network run.
+- **SQLite decimals.** Amounts are `decimal` and read back through SQLite's `TEXT` provider; the desk treats values as advisory and rounds at the board lot.
+- **Calendar, not exchange calendar.** The scheduler fires on weekdays 15:35 Asia/Manila and does not know PSE holidays.
+- **Thin books start on the prior.** Below 25 held-out trades (training) or 20 graded picks (calibration) the desk prices off the structural prior with small tilts, so a fresh database reports `PRIOR_FALLBACK`.
+- **Retrieval degrades silently by design.** No embeddings key, an embeddings failure or a BM25-only fallback all still retrieve through guardrails rather than erroring.
+- **Ladder duplication.** The break-even/trail ladder lives in three services; a change must be applied in all three (training, replay, wave plans).
+- **Replay/training cost.** Both refetch long lookbacks for the liquid universe per call; refits are bounded and cached, but a cold `train-all` is the slowest operation in the app.
 
-30. **The trim button ignores P&L direction.** `recommendedTrimShares` depends only on the share count and both board lots, so a losing position still shows *Trim / Bank half* and `describeTrimGuidance` still says "to bank part of the gain". Either the server should gate the offer on `unrealizedNetR > 0` (or on a `MOVE_STOP_TO_BREAKEVEN`/`TRAIL_STOP_EMA20` action) or the Simple copy should read the position's `unrealizedNetR` and say "cut part of the position to shrink the risk" when it is negative. Decision pending — the current behaviour is honest about the arithmetic but arguably misleading about the reason.
-31. **The client cache lives in JS memory only.** `lib/queryCache.ts` keeps entries for the tab's lifetime — there is no size cap, no LRU eviction and no persistence, so a long session accumulates one payload per visited date/horizon/ticker (small: the largest is the Top-10 run, and every entry is a verbatim DTO). A reload starts cold. `signals:date:*`/`signals:card:*` keys therefore grow with browsing history, which is acceptable today but would need bounding if the date picker gets a "compare many dates" mode.
-32. **Responsive layout is verified by build, not by eye.** The bottom-sheet dialogs, the `md` table↔card crossover, `.sticky-col` (which hard-codes the `3rem` rank column for `.sticky-col-2`) and the `min-[1760px]` grids have never been rendered in a browser at 320/360/375/768/1024/1440/2560, and iOS Safari's URL-bar collapse, home-indicator inset and 16px-input no-zoom rule are asserted from CSS only. Treat the phone layout as "compiles and is structurally correct" until a device pass is done.
+## Verification log (newest first, observed output)
 
-33. **The wave layer is policy, not proof.** The direction pillars (index 20 / breadth 14 / rotation 8 / foreign 6 / backdrop 6), the 60/45 call thresholds, the 1.25 net-R:R chase floor (2.0 on `DAY`) and the +1R break-even / +1.5R trail triggers are reasoned defaults, not fitted numbers. They have unit tests but no years of PSE evidence behind them, and the hero has never been rendered in a browser — treat the call and the four-step cards as "compiles and is arithmetically pinned" until a live run plus a device pass confirm them.
-
-34. **The replay's money-management dials and its nested refit have never been seen on a real tape.** The five-slot book, the 6% heat ceiling, two names per sector under 35% notional, the `EV > 0` funding gate, the `[0.50, 1.50]` Kelly dial and the `WalkForwardEdge` refit are asserted only against deterministic stub tapes (`BacktestServiceTests`: exact `MaxOpenPositions` clips, exact `MaxPositionsPerSector` on a Banks board, simultaneous outlay including fees and slippage never exceeding capital). Whether those caps bind *usefully* on the real ~58-name catalogue — and whether alpha survives them — is unmeasured. The Yahoo feed answered `404` on every constituent during this pass, so no live backtest was produced.
-
-35. **`WalkForwardEdge` acceptance is in-sample by design.** The nested model is promoted for sizing when it beats the neutral base rate on the same candidates it was fitted on, and it never writes `TrainedHorizonModels`. That is a deliberate scope line (a replay has no held-out slice to spend), but it means a replay's `ExcessReturnPct` can be flattered by a refit that would have failed the live promotion gate. Compare a run against the prior-pinned baseline before quoting the difference as edge.
-
-36. **The bootstrap's success path is unobserved.** `BootstrapRetrainAsync` was exercised only through its failure path (`Bootstrap money-manager refit failed. The structural prior stays in force…` after a Yahoo `404`); the "refit finished … LEARNED" and "skipped: every horizon already carries a fitted model" branches are unit-covered through `NeedsBootstrap` but have never fired against a live feed.
-
-## Candidate next steps (not committed)
-
-- **Security P0 (from the 2026-11-26 audit, all small and local):** clamp `lookbackDays` (`Math.Clamp` + a 400 at the controller), add `PseBoardLotService.ValidatePrice` to the five price-taking entry points, return a correlation id instead of `ex.Message` in the knowledge-base and Ollama error paths, and route the plain-text chunker through `SplitLong` with batched `/api/embed` calls. Each has a named test in the report's §7.
-- **Security P1 (before the API is ever published):** shared-key auth handler + `RequireAuthorization()`, `AllowedHosts` closed + an origin/`Sec-Fetch-Site` guard on unsafe methods, fenced `Untrusted()` prompt references + an upload extension allowlist, and a rate limiter plus a single-flight run gate.
-- **Then:** security headers + HSTS off-loopback, `File.SetUnixFileMode(0600)` on the DB, `packages.lock.json` + `NuGetAudit` + a `PdfPig` bump, and the `GET`-writes-state refactor. Keep the desk on `127.0.0.1` until P1 lands.
-
-- **Read one live wave run end to end.** Press *Run Latest Screen*, then compare `directionForecast.bullishScore` and the top-three `wavePlan`s against the raw dials on a strong and a weak session; if a single unreported dial (foreign flow, US 10Y, Brent) swings the call by more than a few points, revisit the omission rule before the weights harden.
-- **Walk the "already holding it" ladder by hand** with costs above and below the mark, with and without a share count, and confirm `STOP_BREACHED` / `TARGET_REACHED` / trail / break-even lock / `HOLD` each produce a legal trim size.
-- **Device pass on the new home screen** at 375px: hero gauge, the four-step grid (two columns on a phone), the `Show N more` toggle, the `More ▾` menu and the collapsed setup pill; then confirm **Pro** is unchanged.
-- **Read the multi-slot replay on a real tape.** `GET /api/signals/backtest?horizon=WEEK` once Yahoo answers: confirm overlapping entries appear, that the heat and sector caps actually bind on the real catalogue, that `ExcessReturnPct` survives them, and compare against a run with the nested refit pinned to the prior. The caps and the funding invariant are unit-covered (`BacktestServiceTests`), never observed on live data.
-- **Judge the learned books, not just the fit.** `POST /api/signals/train-all` against the real tape, then read `optimalKellyFractionMultiplier`, `validationExpectancyR`, the Brier/log-loss pair and the status. If all four land `PRIOR_FALLBACK`, the residual geometry (or the promotion gate) — not the tape — is the thing to revisit.
-- **Shared exit ladder.** `SimulateBarrier` (training), `LabelOutcome`/`Simulate` (replay) and `WaveTradePlanCalculator` (tickets/UI) each encode the +1 break-even and +1.5R EMA20-trail rules. They agree today by construction; one helper would keep them from drifting.
-- **Ticket parity check.** For one stored session, compare `SignalItemDto.orderTicket` against `GET /api/research/{ticker}` and `GET /api/portfolio/order-ticket` on the same plan — the three paths now share `OrderTicketCalculator` + the edge assessment but have never been diffed on live numbers.
-- **Observe the bootstrap's success path.** On a healthy network, boot the API and expect `… refit finished … LEARNED`; the second boot must log `skipped: every horizon already carries a fitted model`.
-- **Settle the risk dials with live data.** Heat 6%, two names per sector, 35% notional, the `[0.50, 1.50]` Kelly dial, fixed λ = 25 vs a sample-size-scaled penalty, and whether `EV > 0` is too strict on a thin PSE tape are all reasoned defaults for a PHP 100k account.
-- **Incremental refit.** Cache the trial rows (or derive them from the stored forward ledger) so the weekly refit stops refetching 1080 days; add a background queue if the fetch gets slower.
-- **Read the benchmark honestly.** Run the replay on a real multi-year tape and look at `ExcessReturnPct` versus `CagrPct`/`CalmarRatio`: if alpha stays negative after the regime gate and the slippage charge, the entry rules — not the costs — are the thing to change.
-- **Fit the exit ladder.** The +1R break-even and +1.5R EMA20-trail triggers are policy; sweep them (and the 5%/10% replay drawdown ladder) once a real curve exists, and record what wins without re-optimising per window.
-- **Exercise the pyramid/trim loop once by hand** on a disposable database: open a multi-board-lot name, raise the stop, Trim half, confirm the slice lands in Closed Trades, the cash credit and the expectancy tiles — then delete the database.
-- Live four-horizon smoke test with a real key: confirm TRADE/SMALL_SIZE verdicts and non-1.0 governor multipliers appear on real data and that the scorecard starts filling once picks resolve.
-- Calibration review: once ≥30 picks are graded, compare Brier buckets and adjust the prior (0.42), the pseudo-observation count (12) and the tilt bounds in `ProbabilisticEdgeService`.
-- Fit the slippage model to real fills (and revisit the 1.5% cap) once paper trades can be compared against actual PSE prints.
-- Re-check the rotation weights and quadrant bands against a wider catalog, or split single-name sectors into an "unclassified" bucket.
-- Replace in-memory vector scans with an ANN index if the library grows past a few hundred chunks.
-- Replace-on-reupload semantics (match by `sourcePath` for uploads) and a document preview endpoint.
-- Feed foreign flow automatically: find a stable DQR URL/mirror per session, or add a scheduled drop-folder watcher so the operator does not have to click an upload after every close.
-- Extend the DQR overlay to breadth inputs (advancing/declining counts) once a report layout that carries them is confirmed.
-- Holiday-aware scheduler / configurable run time; persist the fast-extraction note for audit.
-- Server database + deployment story; authentication if multi-user.
-- CI pipeline (backend `dotnet test` + frontend `npm test` / `tsc --noEmit` / build); remove the legacy `MODEL_POSITION_BUDGET_PHP` fallback once no stored run lacks a ticket.
-- **Device walkthrough of the responsive layer** (the one thing this pass could not check): 320/360/375 for bottom sheets, one-thumb reach, tab rails and the Pro/ledger cards; 768/1024 for the `md` table↔card crossover and the `sm` modal; 1440/2560 for `max-w-[112rem]` and the `min-[1760px]` grids; plus an iOS Safari run for the 16px-input no-zoom rule, `.pb-safe` and the `100dvh` toolbar collapse. Add a component-level suite if the hooks keep growing.
-- Optional cache hardening: cap/evict `signals:date:*` entries (or persist the last payload to `localStorage`) so a long browsing session cannot grow the map without bound.
-- Decide whether `STOP_BREACHED` / `TARGET_REACHED` should auto-settle the position instead of waiting for a manual close.
-- Cache research per (ticker, session, horizon) instead of refetching the chart on every request.
-- Expose OpenAPI docs / client generation for external consumers.
-
-## Verification commands
-
-```bash
-cd backend && dotnet test PseSignalDesk.slnx --nologo  # 390 passed
-cd frontend && npm test                        # 49 passed (node --test)
-cd frontend && ./node_modules/.bin/tsc --noEmit # exit 0, no diagnostics
-cd frontend && npm run build                  # tsc --noEmit + vite build
-```
-
-All green on 2026-11-26, output observed (compliance hardening pass):
+**2026-11-26 — documentation pass (this pass; docs only).**
 
 ```
-Passed!  - Failed:     0, Passed:   390, Skipped:     0, Total:   390, Duration: 3 s - PseSignalDesk.Tests.dll (net10.0)
-npm test → ℹ tests 49 · ℹ pass 49 · ℹ fail 0 · ℹ duration_ms 201.3
-tsc --noEmit → exit 0, no diagnostics (npx tsc prints npm notices only)
-vite build → ✓ built in 312ms · index 86.75 kB (gzip 23.31) · ScorecardDialog 39.19 · PortfolioDialog 35.19 ·
-             ResearchDialog 21.42 · TickerDetailDialog 19.65 · SignalTable 12.92 · KnowledgeBaseDialog 9.72 ·
-             vendor-react 206.75 · vendor-radix 118.02
+cd backend && dotnet test PseSignalDesk.slnx --nologo
+  -> Passed! - Failed: 0, Passed: 390, Skipped: 0, Total: 390 (net10.0)
+cd frontend && npm test            -> ℹ tests 49 · ℹ pass 49 · ℹ fail 0
+cd frontend && npm run build       -> tsc --noEmit exit 0; vite ✓ 129 modules, ✓ built in <350ms
+sqlite3 …/pse_signals.db "select slug, chunkcount …" -> 8 built-in documents, 46 chunks
+git ls-files | wc -l               -> 230 tracked; 5531 ignored; tree clean before edits
 ```
 
-API restart on the new build (2026-11-25, `dotnet run --launch-profile http`, `:5236`): startup
-re-indexed the knowledge base (`0 new, 4 updated, 4 unchanged, 25 chunks (0 embedded)` — Ollama
-embeddings answered `401`, so retrieval is lexical) and the scheduler reported
-`Next daily PSE signal run scheduled for 2026-11-26 15:35 PHT`. Endpoints observed:
-`GET /api/research/catalog` → `200` (bare array of `{ticker, companyName, sector}`);
-`GET /api/signals/latest?horizon=WEEK` → `200 {run: null, regime: null, dates: [], droppedFromYesterday: [],
-trustPulse: {totalPicks 0, resolvedCount 0, openCount 0, …}}` after the synthetic sessions were purged;
-`GET /api/research/JFC` → `503 "JFC has no live chart with 200 sessions and no stored session to research…"`
-with the log line `No usable research series for JFC (JFC.PS): HTTP 404 for JFC.PS.` — Yahoo is
-rate-limiting this network (`429 Too Many Requests` on both `query1` and `query2` from `curl`), so the
-live half of the accuracy pass could not be re-observed. The `:5236` process now runs the new build.
+**2026-11-26 — compliance hardening** (`ComplianceGuardMiddleware`, legal notices, first-run
+gate, non-solicitation copy): 390 / 49 / `tsc` / build green; no behaviour-critical number changed.
+**2026-11-26 — security audit** (`security_audit_report.md`, read-only): 15 findings, no code changed.
+**2026-11-26 — money-manager pass** (training, learned edge, calibration, desk memory): backend went
+369 → 390, frontend 42 → 49. **2026-11-25 — data-accuracy pass**: 363 backend / 42 frontend at the
+time; per-leg fees, single slippage debit, `UNFILLED`, proxy regime and row-attributed filings landed
+with regression tests.
 
-Frontend numbers are measured with `./node_modules/.bin/tsc` (a bare `npx tsc` here prints only npm
-notices and looks like a silent failure).
-
-Profitability-pass smoke test on 2026-11-25 (a second API instance was started on
-`http://127.0.0.1:5237` against the real `backend/src/PseSignalDesk.WebApi/pse_signals.db` because a
-stale `dotnet run` already owned `:5236`, then stopped; the `:5236` process was left untouched):
+Earlier smoke tests against the real SQLite database (each on a throwaway port, then stopped):
 
 ```
-POST startup migration          -> PRAGMA table_info(PortfolioTrades) now ends with PyramidCount INTEGER NOT NULL DEFAULT 0
-GET  /api/portfolio             -> 200, keys include expectancyR / profitFactor / payoffRatio
-                                   ({} = 0, 0, null on the empty book) plus riskPosture / drawdownPct / peakEquityPhp
-POST /api/portfolio/trades/999999/trim {shares:500,exitPrice:110}
-                                -> 400 {"title":"Order rejected","detail":"Position 999999 does not exist."}
-GET  /api/signals/backtest?horizon=WEEK
-                                -> 503 "PSEi (PSEI.PS) returned only 1 live daily bars through 2026-11-25;
-                                        200 are required for the 200-day regime."
+POST startup migration          -> PRAGMA table_info(PortfolioTrades) ends with PyramidCount INTEGER NOT NULL DEFAULT 0
+GET  /api/portfolio             -> 200, expectancyR / profitFactor / payoffRatio / riskPosture / drawdownPct
+POST /api/portfolio/trades/999999/trim -> 400 {"title":"Order rejected","detail":"Position 999999 does not exist."}
+GET  /health                    -> 200 {"status":"ok","service":"PseSignalDesk.WebApi",…}
+POST /api/signals/quotation-report (date=1999-01-01) -> 404 "No stored session for that trading day"
+POST /api/signals/quotation-report (notes.xlsx)      -> 400 "'.xlsx' is not a quotation-report format…"
+GET  /api/knowledge             -> 200 (built-in docs, source: builtin); reindex 0 indexed / N skipped
+DELETE /api/knowledge/{builtin} -> 409 (built-ins are protected); Markdown upload 201 -> delete 204
+GET  /api/signals/backtest?horizon=WEEK -> 503 "PSEi (PSEI.PS) returned only 1 live daily bars…"
 ```
 
-(The 503 is the sandbox's live feed, not the code: `PseMarketDataProvider.FetchIndexBarsAsync` has
-always refused a PSEi series shorter than `MinimumIndexBars`.) The earlier baseline in this session read
-`Passed! … 308` / `npm test … 20`; the deltas are 14 backend tests (pyramid, trim, expectancy, the
-mark-priced trim recommendation) and 4 frontend copy tests.
+The `503` is the sandbox feed, not the code: `FetchIndexBarsAsync` refuses an index series shorter
+than `MinimumIndexBars`, and Yahoo answered `429 Too Many Requests` on both `query1` and `query2`
+from this network, so `run-now` and `/api/research/{ticker}` correctly returned `503` too.
 
-The closed-loop tests were also run in isolation and read
-`Passed! - Failed: 0, Passed: 10` (`MoneyManagerTrainingServiceTests` + `LearnedEdgeModelTests`),
-`Passed! … 12` (`SignalOutcomeServiceTests`, 5 new) and `Passed! … 18`
-(`OllamaPromptBuilderTests` + `DailySignalSchedulerRetrainTests`).
-
-Note: if NuGet resolves a relative global-packages folder,
-prefix the build/test with `NUGET_PACKAGES=$HOME/.nuget/packages`.
-
-Quotation-report endpoint smoke test on 2026-11-25 (`dotnet run --project src/PseSignalDesk.WebApi
---urls http://127.0.0.1:5299` against the real `pse_signals.db`, then stopped):
-
-```
-GET  /health                                              -> 200 {"status":"ok","service":"PseSignalDesk.WebApi",...}
-POST /api/signals/quotation-report (dqr-smoke.csv, date=1999-01-01)
-                                                          -> 404 {"title":"No stored session for that trading day",
-                                                                  "detail":"No stored market session exists for 1999-01-01. ..."}
-POST /api/signals/quotation-report (same CSV as notes.xlsx)
-                                                          -> 400 {"title":"Unsupported file type",
-                                                                  "detail":"'.xlsx' is not a quotation-report format. Upload a PDF, CSV, TXT or TSV export."}
-GET  /api/signals/latest?horizon=WEEK                     -> 200, regime carries us10YClosePct / us10YChange20dBps /
-                                                             brentUsd / epheCloseUsd / foreignFlowSource (null on the
-                                                             pre-migration 2026-11-24 row)
-```
-
-No happy-path upload was fired at the real DB (it would have written a fabricated ₱30M flow into the
-stored 2026-11-24 session); the 200 path is covered by `DailyQuotationImportServiceTests` against an
-in-memory SQLite session.
-
-Knowledge-base smoke test on 2026-11-25 (`dotnet run` +
-`KnowledgeBase__EnableEmbeddings=false`): startup applied `AddKnowledgeBaseAndMultiHorizon` and
-indexed `6 new, 0 updated, 0 unchanged, 35 chunks (0 embedded)`; `GET /api/knowledge` → 200 (6 docs,
-`source: builtin`); `POST /api/knowledge/reindex` → 0 indexed / 6 skipped; `DELETE /api/knowledge/6`
-→ 409; Markdown upload → 201 (2 chunks) and its delete → 204.
-
-Probabilistic-edge smoke test on 2026-11-25 (same sandbox, `--no-build` against the new build):
-startup applied `AddProbabilisticEdgeAndScorecard`; `GET /api/signals/scorecard?horizon=WEEK` → 200
-with `totalPicks: 20`, `resolvedCount: 0`, `openCount: 20` and a `verdicts` array of
-`TRADE 0 / SMALL_SIZE 0 / WATCH_ONLY 20` (legacy rows default to `WATCH_ONLY`);
-`GET /api/signals/latest?horizon=WEEK` → 200 including `recommendedCashPct`, `tradeCount`,
-`smallSizeCount`, `watchOnlyCount`, `breadth: null` and per-item `netRiskRewardRatio`,
-`winProbability`, `breakEvenWinRate`, `expectedValueR`, `quarterKellyFraction`, `edgeVerdict`
-(`WATCH_ONLY`), `bearCase: ""`, `outcomeStatus: OPEN`, `realizedNetR: null` — i.e. the contract is
-live and legacy rows read as "no odds stored", exactly as `RiskSizerBar` expects.
-`POST /api/signals/run-now?horizon=WEEK&date=2026-11-24` fetched the session and retrieved 6
-knowledge sections, then returned `400` "Ollama Cloud is not configured" (no `OLLAMA_API_KEY` in
-this sandbox), so live odds/verdicts were not observed end-to-end here.
-
-Forward-ledger smoke test on 2026-11-25 (same DB, API rebuilt and restarted on `:5236`):
-`GET /api/signals/scorecard?horizon=WEEK` → 200 with `totalPicks 20`, **`resolvedCount 2`**,
-`openCount 18`, `winRate 0.5`, `expectancyR 0.1991`, `profitFactor 1.40`, and two genuinely graded
-picks from the 2026-11-23 run (`AC` → `LOSS_STOP` at 601.5, `-1.0R`, 1 bar; `ICT` → `WIN_TARGET` at
-575.0, `+1.3982R`, 1 bar) — i.e. `ResolveOpenSignalsAsync` really walks the stored bars and the
-realized R is fee-adjusted. Because both rows predate the odds migration, the calibration was
-reporting `brierScore 0.50` with a phantom `0-20%` bucket; `BuildScorecardAsync` now filters
-`WinProbability > 0` for Brier/buckets, and the re-run returns `brierScore 0` with
-`calibration: []` while keeping the realized stats intact. That instance was later stopped while this session ran its own smoke tests, so nothing is listening on `:5236` now.
-
-
-Blotter / research / replay smoke test on 2026-11-25 (throwaway DB
-`ConnectionStrings__DefaultConnection='Data Source=/tmp/psedesk-smoke.db'`; startup applied all five
-migrations and indexed `7 new … 42 chunks`):
-`GET /api/portfolio` → `200` `{startingCapitalPhp 100000, cashBalancePhp 100000, maxRiskPerTradePct 1.0,
-maxPortfolioHeatPct 6.0, openPositions 0, …}`;
-`GET /api/portfolio/order-ticket?ticker=SM&entry=800&stop=760&target=880` → `200`
-`{boardLotSize 10, shares 10, lots 1, buyOutlayPhp 8023.60, netRiskPhp 539.62, netRewardPhp 649.64,
-breakEvenStopPrice 807.50, riskBudgetPhp 1000.00}`;
-`POST /api/portfolio/trades` (SM, 10 sh @800, stop 760, target 880, `TRADE`) → `201` with
-`buyCostPhp 8023.60`, `initialNetRiskPhp 469.20`, `unrealizedNetPnlPhp -71.60` (the sell leg),
-`unrealizedNetR -0.1526`, `action HOLD`;
-`PATCH …/trades/1/stop {807.5}` → `200`; `POST …/trades/1/close {880}` → `200`
-`sellProceedsPhp 8747.20`, `realizedNetPnlPhp 723.60`, `realizedNetR 1.5422`; the summary then read
-`cashBalancePhp 100723.60`, `closedTrades 1`, `winRate 1` and a one-point realized curve; a 15-share
-order returned `400` "SM trades in 10-share board lots at PHP 800; 15 is not a whole multiple."
-`GET /api/research/SM?horizon=WEEK` → `503` "SM has no live chart with 200 sessions and no stored
-session to research…" and `GET /api/signals/backtest?horizon=DAY` → `503` "PSEi (PSEI.PS) returned only
-1 live daily bars through 2026-11-25; 200 are required for the 200-day regime." — the honest fail-fast
-paths the dialogs render. A second run on the rebuilt binaries confirmed
-`PATCH …/stop {807.5}` now answers `HOLD` ("No barrier touched; net -0.15R with 0 session(s) held.")
-instead of the phantom `STOP_BREACHED` the entry-price fallback mark used to produce. Temp databases,
-pid files and both API processes were removed; no listener is left on 5236/5238/5239.
-
-Money-manager verification on 2026-11-25 was **offline only** — `dotnet test PseSignalDesk.slnx`
-(`Passed! - Failed: 0, Passed: 260` — that session's baseline; the suite now reports 353),
-`npx tsc --noEmit` (exit 0) and `npm run build`
-(`✓ 110 modules transformed`, 37.09 kB CSS / 440.91 kB JS, built in 191–242 ms across runs). No API instance was
-started with the new engine, so the ticket/governor/rotation/sector payloads have only been observed
-through tests: the smoke outputs quoted above predate `AddMoneyManagerEngine` (their figures use the
-pre-governor sizing path).
-
-Repository-hygiene verification on 2026-11-25 (`.gitignore` rewrite; repo on `main`, 0 commits):
-
-```bash
-git status --ignored --porcelain | grep '^!!'   # Library/ backend/.nuget/ */bin/ */obj/ pse_signals.db frontend/dist/ frontend/node_modules/
-git check-ignore -v <path>                      # 15 ignored samples matched (incl. **/.nuget/, /Library/, TestResults/, *.log)
-git ls-files -o --exclude-standard | wc -l      # 172 untracked source files, no bin/obj/dist/node_modules/.nuget paths
-```
-
+Environment notes: use `./node_modules/.bin/tsc` (a bare `npx tsc` only prints npm notices and looks
+like a silent failure); if NuGet resolves a relative global-packages folder, prefix the build/test with
+`NUGET_PACKAGES=$HOME/.nuget/packages`.
 

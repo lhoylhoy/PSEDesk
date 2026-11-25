@@ -134,7 +134,7 @@ Storage access is wrapped: a blocked/quota-full `localStorage` falls back to in-
 - API: `http://localhost:5236` (HTTP profile; HTTPS profile also exposes 7207). OpenAPI mapped in Development only; `/health` always available.
 - Frontend dev server: `http://localhost:5173`, strict port; CORS pre-configured.
 - SQLite file: `backend/src/PseSignalDesk.WebApi/pse_signals.db` (gitignored; created at startup via `Database.MigrateAsync`). Signal runs, the knowledge base and the paper blotter share this file.
-- Knowledge library: `backend/knowledge-base/` is copied to the API output (`bin/<cfg>/net10.0/knowledge-base/…`) by MSBuild, so the packaged app can seed without the source tree.
+- Knowledge library: `backend/knowledge-base/` is copied to the API output (`bin/<cfg>/net10.0/knowledge-base/…`) by MSBuild, so the packaged app can seed without the source tree. The seeded library is **8 documents / 46 sections** — `pse_rules.md` (mandatory), six playbooks (`day_week_momentum_vcp`, `day_week_risk_sizing`, `month_year_quality_value`, `month_year_ph_macro_sectors`, `probabilistic_expectancy`, `asymmetric_wealth_compounding`) and `docs/engineering-references.md`.
 - Migrations: `20261124150948_InitialCreate`, `20261124231758_MakeNetForeignNullable`, `20261124233850_AddKnowledgeBaseAndMultiHorizon` (adds `KnowledgeDocuments`/`KnowledgeChunks`, `StockDailyMetrics.Sma150`/`Week52High`/`WeinsteinStage` and `SignalItems.BoardLotShares`/`CitedReferencesJson`) `20261125010058_AddProbabilisticEdgeAndScorecard` (adds the odds/verdict/bear-case/outcome columns, run-level cash posture + breadth, snapshot breadth, metric OHLC/RS/VCP/ATR%/hit-rate columns and the `SignalItems (Horizon, OutcomeStatus)` index; defaults keep legacy rows at `WATCH_ONLY` / `OPEN` / `0`), `20261125025142_AddPortfolioResearchAndDividends` (adds `PortfolioAccounts` / `PortfolioTrades` with their indexes and `StockDailyMetrics.TrailingDividendPerShare` / `TrailingDividendYieldPct` / `LastExDividendDate`), `20261125035931_AddMoneyManagerEngine` (adds the factor columns `UpDownVolumeRatio20d` / `ChaikinMoneyFlow20d` / `TrendEfficiency63d` / `Beta252d` / `MaxDrawdown252dPct` / `EmpiricalWinRateDay` / `EmpiricalWinRateMonth` / `EmpiricalWinRateYear` onto `StockDailyMetrics` (realised volatility is **not** stored per name — `QuantitativeFilterService.ComputeRealizedVolatilityPct` computes it on demand), the governance columns `PeakEquityPhp` / `MaxSectorExposurePct` / `MaxPositionsPerSector` / `SoftDrawdownThresholdPct` / `HardDrawdownThresholdPct` / `TargetAnnualVolPct` onto `PortfolioAccounts`, and `UsdPhpSma50` / `UsdPhpChange20dPct` / `PseiRealizedVol20dPct` / `SectorRotationJson` onto `DailyMarketSnapshots`; existing rows read `null` = unreported), and `20261125045357_AddCrossAssetMacroAndForeignFlowDqr` (adds `Us10YClosePct` / `Us10YChange20dBps` / `BrentUsd` / `BrentChange20dPct` / `EpheCloseUsd` / `EpheChange20dPct` / `ForeignFlowSource` onto `DailyMarketSnapshots`; nullable = unreported, `NetForeignTodayPhp` already existed on `StockDailyMetrics`), and `20261125060730_AddTrainedMoneyManagerModels` (adds `TrainedHorizonModels` with a unique `Horizon` index; the JSON weight/stat blobs are `TEXT` and the scores are `TEXT` decimals, exactly like the rest of the SQLite schema), and `20261125092954_AddPyramidCountToPortfolioTrades` (adds `PortfolioTrades.PyramidCount` as `INTEGER` default 0, so a book written before the pyramid layer reads "no adds taken").
 - Risk-governance settings are **data, not configuration**: the sector caps, drawdown ladder and `TargetAnnualVolPct` live on the `PortfolioAccounts` row and are edited through `PUT /api/portfolio/settings` (clamped server-side, hard > soft enforced). There is no appsettings knob for them, so a restart can never silently widen the pod's risk budget.
 - Hosted services (in order): `KnowledgeBaseInitializer` (seed library, failures logged) then `DailySignalSchedulerService`, weekdays 15:35 PHT (07:35 UTC), one run per horizon `DAY`/`WEEK`/`MONTH`/`YEAR`.
@@ -154,6 +154,19 @@ Environment variables (`OllamaCloud__ApiKey`, `OLLAMA_API_KEY`) still win, so CI
 ## Legal notices
 
 `DISCLAIMER.md`, `PRIVACY.md` and `THIRD_PARTY_NOTICES.md` live at the repository root (and are linked from `README.md`). `frontend/src/lib/legalConsent.ts` mirrors their reader-facing summary; bumping `CURRENT_LEGAL_VERSION` there re-prompts every browser through `LegalDisclaimerGate`. Keep the three documents, that summary and the README's compliance paragraph in sync when any of them changes.
+
+## Documentation map
+
+| Document | Audience / purpose |
+| --- | --- |
+| `README.md` | The user-facing manual: what the desk does, how to run it, the API table, tests and limitations |
+| `DISCLAIMER.md` / `PRIVACY.md` / `THIRD_PARTY_NOTICES.md` | Legal posture, data handling and licences (linked from the README and mirrored by the first-run gate) |
+| `security_audit_report.md` | The 2026-11-26 read-only audit (OWASP ASVS / API Top 10 / LLM Top 10) with the still-open remediation list |
+| `memory-bank/*.md` | Durable engineering context: brief, product, patterns, toolchain, active state, progress |
+| `.clinerules/memory-bank.md` | The protocol that keeps the memory bank current |
+| `backend/knowledge-base/` | The grounding library the model is allowed to cite (also documented product content) |
+
+Sync rules: a behaviour change lands in `README.md` and the memory bank; a compliance or copy change lands in the three legal documents **and** `legalConsent.ts` (bump the version) **and** the README; a fee/rule change lands in `PseBoardLotService`, `backend/knowledge-base/`, the README and the memory bank.
 
 ## Debugging (VS Code)
 
@@ -229,8 +242,7 @@ the API at all.
 - **Server owns the odds and the verdict.** `WinProbability`, `BreakEvenWinRate`, `ExpectedValueR`, `QuarterKellyFraction`, `EdgeVerdict` and the fallback `BearCase` are computed in `ProbabilisticEdgeService`/`PseBoardLotService`; the frontend only formats them and converts Kelly to a peso budget. Do not recompute fees in TypeScript — `lib/riskSizing.ts` deliberately avoids duplicating `RoundTripFeeRate`.
 - **Legacy runs look empty by design.** Rows written before `AddProbabilisticEdgeAndScorecard` carry zero odds, `WATCH_ONLY` and an empty bear case. They still resolve once their forward window fills (and are visible in the scorecard's realized stats + recent list) but are excluded from Brier and the calibration buckets. Re-run the pipeline (or a past date) to populate them.
 - **Frontend `npm test` is `node:test` over pure modules, not a DOM suite.** It runs `node --test "src/lib/__tests__/*.test.ts"` on Node's native type stripping, so nothing there may import React or touch the DOM; `lib/queryCache.ts` is deliberately React-free for this reason. There is still no component/browser harness (`tsc --noEmit` + `npm run build` are the gate for UI).
-- **Git is initialized on branch `main` and has one commit: the initial commit** (2026-11-25), so
-  everything under `backend/`, `frontend/`, `memory-bank/` and `.clinerules/` is tracked.
+- **Git is initialized on branch `main` and currently has three commits** (2026-11-25 initial, a portfolio/book-sizing refactor and a readability pass on 2026-11-26; HEAD `3e2aea4`), so everything under `backend/`, `frontend/`, `memory-bank/`, `docs`-level notices and `.clinerules/` is tracked.
 - `.gitignore` covers build output (`**/bin/`, `**/obj/`, `.vs/`, `*.user`, `*.suo`,
   `*.sln.docstates` / `*.slnx.docstates`), test/coverage artefacts (`**/TestResults/`,
   `**/coverage/`, `*.trx`, `*.coverage`, `*.coveragexml`, `coverage*.xml`, `coverage*.json`,
@@ -254,11 +266,7 @@ the API at all.
   legacy `**/[Pp]ackages/*` (PackageReference only), blanket `*.pdb`/`*.dll`/`*.exe`, and the blanket
   `.env.*` (this repo keeps `.env.local` / `.env.*.local` local but would allow a deliberate
   `.env.production` to be committed).
-- Two ways to verify: `git check-ignore -v <path>` shows which rule wins (2026-11-26: 5526 ignored
-  entries reported, 219 tracked files, none of them ignored); `git ls-files -ci --exclude-standard`
-  must print nothing — it is the check that a new rule has not swallowed source files. This macOS
-  checkout has `core.ignorecase=true`, so `Obj/`/`TestResults/` are matched by the lowercase rules
-  too.
+- Two ways to verify: `git check-ignore -v <path>` shows which rule wins (2026-11-26: **5531 ignored entries reported, 230 tracked files**, none of them ignored); `git ls-files -ci --exclude-standard` must print nothing — it is the check that a new rule has not swallowed source files. This macOS checkout has `core.ignorecase=true`, so `Obj/`/`TestResults/` are matched by the lowercase rules too.
 
 
 ## Environment notes
