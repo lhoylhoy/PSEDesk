@@ -1,0 +1,35 @@
+@PseSignalDesk.WebApi_HostAddress = http://localhost:5236
+
+GET {{PseSignalDesk.WebApi_HostAddress}}/health
+Accept: application/json
+
+###
+
+# 1. Generate the first list from live Yahoo Finance + PSE Edge data (requires OLLAMA_API_KEY)
+POST {{PseSignalDesk.WebApi_HostAddress}}/api/signals/run-now?date=2026-11-23&horizon=WEEK
+
+###
+
+# 3. Generate the next session to surface drift + drops
+POST {{PseSignalDesk.WebApi_HostAddress}}/api/signals/run-now?date=2026-11-24&horizon=WEEK
+
+###
+
+GET {{PseSignalDesk.WebApi_HostAddress}}/api/signals/latest?horizon=WEEK
+Accept: application/json
+
+###
+
+GET {{PseSignalDesk.WebApi_HostAddress}}/api/signals/by-date?date=2026-11-24&horizon=WEEK
+Accept: application/json
+
+###
+
+GET {{PseSignalDesk.WebApi_HostAddress}}/api/signals/dates?horizon=WEEK
+Accept: application/json
+
+###
+
+GET {{PseSignalDesk.WebApi_HostAddress}}/api/signals/ticker/ICT/history?horizon=WEEK
+Accept: application/json
+

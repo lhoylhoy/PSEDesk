@@ -1,0 +1,278 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink-950: #05080d;
+  --color-ink-900: #080d14;
+  --color-ink-850: #0b1119;
+  --color-ink-800: #0e1620;
+  --color-ink-700: #14202c;
+  --color-ink-600: #1b2a39;
+  --color-line: #1e2d3d;
+
+  --color-mint-400: #3ce6a8;
+  --color-mint-500: #1fc98d;
+  --color-rose-400: #ff6f8b;
+  --color-amber-400: #f4c15a;
+  --color-sky-400: #5cc0ff;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  /*
+   * Light theme. Every utility already reads these custom properties, so flipping the
+   * palette here re-skins the whole terminal without a single themed component prop.
+   * The slate ramp is inverted on purpose: copy that was light-on-dark becomes
+   * dark-on-light, which is why `text-white` is remapped to near-black ink.
+   */
+  :root[data-theme='light'] {
+    color-scheme: light;
+
+    --color-ink-950: #f3f6fb;
+    --color-ink-900: #ffffff;
+    --color-ink-850: #f8fafc;
+    --color-ink-800: #f1f5f9;
+    --color-ink-700: #e3e9f1;
+    --color-ink-600: #d6dee8;
+    --color-line: #d5dee9;
+
+    --color-mint-400: #0b8a5f;
+    --color-mint-500: #0a6f4d;
+    --color-rose-400: #c81e45;
+    --color-amber-400: #9a5b00;
+    --color-amber-300: #7c4a00;
+    --color-sky-400: #0b6cb3;
+
+    --color-white: #0a1220;
+    --color-slate-50: #0a1220;
+    --color-slate-100: #101a28;
+    --color-slate-200: #1b2735;
+    --color-slate-300: #2f3d4d;
+    --color-slate-400: #435264;
+    --color-slate-500: #5b6a7c;
+    --color-slate-600: #6f7e90;
+    --color-slate-700: #8b98a8;
+    --color-slate-800: #b7c1cd;
+    --color-slate-900: #dbe2ea;
+    --color-slate-950: #eef2f7;
+  }
+
+  body {
+    @apply bg-ink-950 font-sans text-slate-300 antialiased;
+    background-image:
+      radial-gradient(90rem 40rem at 15% -12%, rgba(31, 201, 141, 0.09), transparent 60%),
+      radial-gradient(70rem 34rem at 100% 0%, rgba(92, 192, 255, 0.08), transparent 55%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    /* `dvh` keeps the terminal exactly one screen tall while mobile browser chrome
+       collapses, so the sticky header never jumps behind the address bar. */
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /*
+   * A fixed background is repainted on every scroll frame on mobile and touch laptops —
+   * the single largest cause of scroll jank in this app. Pin it only where it is cheap.
+   */
+  @media (max-width: 768px), (hover: none) {
+    body {
+      background-attachment: scroll;
+    }
+  }
+
+  /* Kill the 300 ms tap delay and the grey flash on every interactive surface. */
+  button,
+  [role='button'],
+  summary,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS Safari zooms the whole page when a focused control is under 16px. */
+  @media (max-width: 639px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='file']),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
+  :root[data-theme='light'] body {
+    background-image:
+      radial-gradient(90rem 40rem at 12% -14%, rgba(11, 138, 95, 0.1), transparent 62%),
+      radial-gradient(70rem 34rem at 100% 0%, rgba(11, 108, 179, 0.08), transparent 58%);
+  }
+
+  ::selection {
+    @apply bg-mint-400/25 text-white;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-mint-400/70;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Horizontal chip rails: swipeable, but without a second scrollbar on top of the UI. */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /*
+   * Sticky identifier column for the wide Pro tables. The opaque background is required:
+   * the row underneath is translucent, and an un-backfilled sticky cell would smear.
+   */
+  .sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background-color: var(--color-ink-900);
+  }
+
+  .sticky-col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -1px;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--color-line);
+  }
+
+  /* Second sticky cell, parked exactly past the 3rem rank column. */
+  .sticky-col-2 {
+    position: sticky;
+    left: 3rem;
+    z-index: 5;
+    background-color: var(--color-ink-900);
+  }
+
+  .sticky-col-2::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -1px;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--color-line);
+  }
+
+  /* Bottom sheets leave room for the iOS home indicator. */
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .dialog-sheet {
+    animation: dialog-sheet-in 160ms ease-out;
+  }
+
+  @media (min-width: 640px) {
+    .dialog-sheet {
+      animation-name: dialog-fade-in;
+    }
+  }
+
+  .panel {
+    @apply rounded-2xl border border-line/80 bg-ink-900/70 backdrop-blur;
+  }
+
+  :root[data-theme='light'] .panel {
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.05),
+      0 18px 40px -28px rgba(15, 23, 42, 0.25);
+  }
+
+  :root[data-theme='light'] .dialog-overlay {
+    background-color: rgba(15, 23, 42, 0.35);
+  }
+
+  /*
+   * Simple mode: the same controls, read like a consumer app rather than a Bloomberg
+   * terminal. Labels drop the 10px uppercase tracking and grow to a comfortable size.
+   * Nothing about the layout or the data changes — only the type scale.
+   */
+  [data-view-mode='simple'] .ui-button {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  [data-view-mode='simple'] .ui-tab {
+    font-size: 0.8125rem;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  [data-view-mode='simple'] .ui-drawer-title {
+    font-size: 0.75rem;
+    letter-spacing: 0.01em;
+    text-transform: none;
+  }
+
+  [data-view-mode='simple'] .ui-tooltip {
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+
+  [data-view-mode='simple'] .simple-copy {
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  [data-view-mode='simple'] .simple-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+}
+
+/* Sheet motion lives outside the utilities layer: keyframes are global by definition. */
+@keyframes dialog-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-sheet {
+    animation: none;
+  }
+}

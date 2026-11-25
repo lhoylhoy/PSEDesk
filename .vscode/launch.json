@@ -1,0 +1,49 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API: PseSignalDesk.WebApi",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "backend: build",
+      "program": "${workspaceFolder}/backend/src/PseSignalDesk.WebApi/bin/Debug/net10.0/PseSignalDesk.WebApi.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/backend/src/PseSignalDesk.WebApi",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5236"
+      },
+      // Client aborts are expected control flow in this app (see RequestCancellationMiddleware):
+      // closing a dialog, switching horizon, or closing the tab cancels the in-flight request and
+      // EF Core surfaces it as a TaskCanceledException while opening SQLite. Just My Code's
+      // "user-unhandled" stop breaks *before* the middleware catches it, so it is off by default;
+      // the debugger then stops only on a truly unhandled exception. Page loads no longer abort at
+      // all — App.tsx defers both first fetches by one macrotask.
+      "justMyCode": false,
+      "logging": { "exceptions": false }
+    },
+    {
+      "name": "API: attach to running process",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    },
+    {
+      "name": "Terminal: Chrome (run `npm run dev` first)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMaps": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full stack (API + Chrome, Vite already running)",
+      "configurations": ["API: PseSignalDesk.WebApi", "Terminal: Chrome (run `npm run dev` first)"],
+      "stopAll": true
+    }
+  ]
+}

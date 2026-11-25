@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PseSignalDesk.Application/PseSignalDesk.Application.csproj" />
+    <Project Path="src/PseSignalDesk.Domain/PseSignalDesk.Domain.csproj" />
+    <Project Path="src/PseSignalDesk.Infrastructure/PseSignalDesk.Infrastructure.csproj" />
+    <Project Path="src/PseSignalDesk.WebApi/PseSignalDesk.WebApi.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PseSignalDesk.Tests/PseSignalDesk.Tests.csproj" />
+  </Folder>
+</Solution>

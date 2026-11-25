@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f3f6fb" />
+    <meta
+      name="description"
+      content="PSE Signal Desk - a Philippine equity research terminal for Top 10 weekly swing-trade candidates, day-over-day drift and drop explanations."
+    />
+    <title>PSE Signal Desk · Top 10 Weekly Buys</title>
+    <script>
+      // Paint the stored theme before the first frame so a light-mode reader never sees a
+      // dark flash. Kept inline (and dependency-free) because it must run before the bundle.
+      (function () {
+        try {
+          var theme = window.localStorage.getItem('psedesk.theme');
+          if (theme !== 'light' && theme !== 'dark') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', theme);
+
+          // Keep the browser chrome (iOS status bar, Android address bar) on the same
+          // colour as the terminal. Updated again by `applyTheme` when the user flips it.
+          var themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) {
+            themeColor.setAttribute('content', theme === 'dark' ? '#05080d' : '#f3f6fb');
+          }
+
+          var mode = window.localStorage.getItem('psedesk.viewMode');
+          document.documentElement.setAttribute('data-view-mode', mode === 'pro' ? 'pro' : 'simple');
+        } catch (error) {
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.setAttribute('data-view-mode', 'simple');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

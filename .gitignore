@@ -1,0 +1,78 @@
+# PSE Signal Desk — repository ignore rules.
+# Keep build output, package caches, local databases, secrets and editor/OS
+# noise out of git. Syntax: https://git-scm.com/docs/gitignore
+
+# --- .NET build output ------------------------------------------------------
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.slnx.docstates
+
+# Test and coverage artefacts
+**/TestResults/
+*.trx
+*.coverage
+coverage*.xml
+*.opencover.xml
+*.binlog
+
+# Restored/packaged NuGet content. The per-project `.nuget/` folders appear when
+# MSBuild resolves a *relative* global-packages folder (see the NUGET_PACKAGES
+# gotcha in memory-bank/techContext.md); they are a local cache, never source.
+**/.nuget/
+*.nupkg
+*.snupkg
+project.lock.json
+*.nuget.props
+*.nuget.targets
+
+# --- Local data (SQLite; created at API startup) ----------------------------
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+# Timestamped safety copies (e.g. `pse_signals.db.bak-20261125`) are local state too.
+*.db.bak-*
+
+# --- Node / Vite ------------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Local environment overrides (keep the Ollama key out of git) -----------
+.env
+.env.local
+.env.*.local
+frontend/.env.local
+!.env.example
+
+# --- Editor / OS ------------------------------------------------------------
+.DS_Store
+._*
+.AppleDouble
+.Spotlight-V100
+.Trashes
+*.swp
+*.swo
+*~
+.idea/
+
+# Stray `~/Library`-style folder the .NET developer tools create when HOME is
+# resolved to the workspace root. Local machine state, not project content.
+/Library/
+
+# --- Misc run artefacts -----------------------------------------------------
+*.log
+
