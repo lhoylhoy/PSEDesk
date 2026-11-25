@@ -216,7 +216,7 @@ export const researchApi = {
   /**
    * On-demand deep dive for one ticker *or company name*: the server resolves an
    * unambiguous name ("Jollibee" → JFC) before pricing the plan from the live series.
-   * Passing an `averageCost` asks the desk to answer "I already own it" against the
+   * Passing an `averageCost` asks the desk to grade a position the reader already holds against the
    * reader's own cost; `shares` is optional but turns the peso result into real money.
    */
   get(
@@ -323,6 +323,7 @@ export const knowledgeApi = {
   upload(input: KnowledgeUploadInput): Promise<KnowledgeDocument> {
     const form = new FormData();
     form.append('file', input.file);
+    form.append('confirmRightsAndCloudProcessing', String(input.confirmRightsAndCloudProcessing));
 
     if (input.title && input.title.trim().length > 0) {
       form.append('title', input.title.trim());

@@ -158,25 +158,6 @@ export function WavePlanSteps({ item }: { item: SignalItem }) {
   return <WavePlanGrid plan={item.wavePlan} />;
 }
 
-/** The broker taps stay one tap away instead of lengthening every card. */
-function BrokerChecklistToggle({ item, guide }: { item: SignalItem; guide: PlainOrderGuide }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mt-2">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="text-[10px] font-semibold text-slate-400 underline decoration-line/80 underline-offset-2 transition hover:text-slate-200"
-      >
-        {open ? 'Hide the broker steps' : 'Show the exact taps in your broker app'}
-      </button>
-      {open ? <BrokerChecklist item={item} guide={guide} /> : null}
-    </div>
-  );
-}
-
 /** Friendly confidence meter; `pct` is only used for the bar width. */
 function Meter({
   label,
@@ -207,12 +188,19 @@ function Meter({
   );
 }
 
-/** Peso-sized buying instructions, straight from the server order ticket. */
+/**
+ * The server-sized ticket, reported rather than prescribed.
+ *
+ * This used to spell out the taps to make inside a broker app ("Tap Buy, then choose Limit order").
+ * Execution directions are the part of a retail terminal closest to a dealing service, so the panel
+ * now reports the ticket the sizing engine produced and leaves the order — and the decision — to
+ * the reader and their broker.
+ */
 export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: SignalItem }) {
   if (!guide.actionable) {
     return (
       <div className="rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2">
-        <p className="text-[11px] font-semibold text-slate-300">Skip this one for now</p>
+        <p className="text-[11px] font-semibold text-slate-300">Watch only — no ticket</p>
         <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{guide.orderTip}</p>
         {guide.warnings.length > 0 ? (
           <ul className="mt-1.5 space-y-0.5">
@@ -231,7 +219,7 @@ export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: Signa
     <div className="rounded-lg border border-mint-400/25 bg-mint-400/5 px-3 py-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-[11px] font-semibold text-slate-100">
-          Buy {formatInteger(guide.shares)} share{guide.shares === 1 ? '' : 's'}
+          Ticket: {formatInteger(guide.shares)} share{guide.shares === 1 ? '' : 's'}
           <span className="font-normal text-slate-500">
             {' '}
             ({guide.lots} board lot{guide.lots === 1 ? '' : 's'} of {guide.boardLot})
@@ -242,9 +230,9 @@ export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: Signa
         </p>
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-        If it reaches the target you keep about{' '}
+        If the price reaches the target the ticket keeps about{' '}
         <span className="font-semibold text-mint-400">{formatCompactPeso(guide.netGainAtTargetPhp)}</span> after broker
-        fees. If it hits the cut-loss you lose about{' '}
+        fees; at the cut-loss it gives up about{' '}
         <span className="font-semibold text-rose-400">{formatCompactPeso(guide.netLossAtStopPhp)}</span>.
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{guide.orderTip}</p>
@@ -262,47 +250,11 @@ export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: Signa
           Estimated size — this older session has no server order ticket.
         </p>
       )}
-      {item ? <BrokerChecklistToggle item={item} guide={guide} /> : null}
-    </div>
-  );
-}
-
-/**
- * Beginner bridge: the exact taps to make inside any online broker once the card looks right.
- * Every number comes from the server order ticket or the server plan — nothing is recalculated.
- */
-export function BrokerChecklist({ item, guide }: { item: SignalItem; guide: PlainOrderGuide }) {
-  const lots = `${guide.lots} board lot${guide.lots === 1 ? '' : 's'} of ${formatInteger(guide.boardLot)}`;
-
-  return (
-    <div className="mt-2 rounded-lg border border-line/70 bg-ink-900/60 px-3 py-2">
-      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500 simple-label">
-        In your broker app
-      </p>
-      <ol className="mt-1 space-y-1 text-[11px] leading-relaxed text-slate-400">
-        <li>
-          1. Search for <span className="font-mono font-semibold text-slate-200">{item.ticker}</span>.
-        </li>
-        <li>
-          2. Tap <span className="text-slate-200">Buy</span>, then choose a{' '}
-          <span className="text-slate-200">Limit order</span> (not market).
-        </li>
-        <li>
-          3. Quantity: <span className="tabular text-slate-200">{formatInteger(guide.shares)} shares</span> ({lots}).
-        </li>
-        <li>
-          4. Limit price: <span className="tabular text-slate-200">{formatPrice(item.entryPrice)}</span> — never pay
-          more.
-        </li>
-        <li>
-          5. Cash needed: about {formatCompactPeso(guide.cashNeededPhp)}, broker fees already included.
-        </li>
-        <li>
-          6. Set a reminder to sell at{' '}
-          <span className="tabular text-mint-400">{formatPrice(item.targetPrice)}</span> or cut at{' '}
-          <span className="tabular text-rose-400">{formatPrice(item.stopLoss)}</span>.
-        </li>
-      </ol>
+      {item ? (
+        <p className="mt-1 text-[10px] leading-relaxed text-slate-600">
+          Placing an order is your decision and your broker’s execution; nothing here is routed or sent.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -618,10 +570,10 @@ export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: Advice
 
       {buyable.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-line/80 bg-ink-950/40 px-4 py-6 text-center">
-          <p className="text-xs font-semibold text-slate-300">Nothing is worth buying today</p>
+          <p className="text-xs font-semibold text-slate-300">Nothing cleared the test today</p>
           <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
-            That is a real answer, not a glitch — the desk would rather keep your money in cash than take a trade
-            that does not pay its fees. Come back after the next session.
+            That is a real answer, not a glitch — the model would rather hold cash than size a setup that does not
+            pay its fees. The next session is screened as usual.
           </p>
         </div>
       ) : (

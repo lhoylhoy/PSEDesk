@@ -64,11 +64,23 @@ public sealed class MarketDataOptions
     /// Date-addressed templates for the official PSE Daily Quotation Report, the only public
     /// source of net foreign flow. Supported tokens: <c>{yyyy}</c>, <c>{MMddyyyy}</c> and
     /// <c>{MMddyy}</c>. Empty by default: the exchange does not publish a stable date-addressed
-    /// URL, so operators either configure their own mirror here or upload the report through
-    /// <c>POST /api/signals/quotation-report</c>. Any failure is best-effort and leaves foreign
-    /// flow unreported (null), never zero.
+    /// URL, so operators either configure an <b>authorised or licensed</b> endpoint (or a local
+    /// file server they control) here, or upload the report through
+    /// <c>POST /api/signals/quotation-report</c>. Pointing these templates at a third-party
+    /// mirror of the exchange's report is not permitted: it would redistribute PSE market data
+    /// without a redistribution agreement. Any failure is best-effort and leaves foreign flow
+    /// unreported (null), never zero.
     /// </summary>
     public IList<string> PseDailyQuotationUrlTemplates { get; set; } = new List<string>();
+
+    /// <summary>
+    /// User-Agent sent with every upstream market-data request. It names the application
+    /// honestly instead of impersonating a browser: spoofing a Chrome UA to get around an
+    /// upstream anti-scraping control is both a breach of the feed's terms of use and a
+    /// misrepresentation this project does not make. Operators with a licensed feed may set
+    /// their own identifier here.
+    /// </summary>
+    public string UserAgent { get; set; } = "PseSignalDesk-PersonalResearch/0.1 (local-noncommercial)";
 
     /// <summary>
     /// Yahoo Finance symbols for the cross-asset macro dials. <c>^TNX</c> is the US 10-year

@@ -9,9 +9,9 @@ interface RidingNowStripProps {
 }
 
 /**
- * "What can I act on right now?" — only the names whose server entry status says the price is
- * already inside the buy band. When nothing qualifies the strip renders nothing at all, which
- * is itself the honest answer: today the desk says wait.
+ * "What is inside the model's entry band right now?" — only the names whose server entry status
+ * says the price is already inside the band. When nothing qualifies the strip renders nothing at
+ * all, which is itself the honest answer: today the model sizes nothing.
  */
 export function RidingNowStrip({ items, onSelect }: RidingNowStripProps) {
   const ready = items.filter(
@@ -25,7 +25,7 @@ export function RidingNowStrip({ items, onSelect }: RidingNowStripProps) {
   return (
     <section className="panel flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 simple-label">
-        Inside the buy zone right now
+        Inside the model's entry band
       </p>
       <ul className="flex flex-wrap items-center gap-1.5">
         {ready.slice(0, 5).map((item) => (

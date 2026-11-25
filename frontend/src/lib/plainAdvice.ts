@@ -23,32 +23,32 @@ import { computeRiskSizing } from './riskSizing.ts';
  */
 
 export interface PlainVerdict {
-  /** Badge text: "Strong Buy", "Buy Small", "Wait". */
+  /** Badge text: "Qualifies (Full)", "Qualifies (Half)", "Watch Only". */
   label: string;
   /** One-line reason to show under the badge. */
   explanation: string;
   /** Tailwind text colour for the verdict. */
   tone: string;
-  /** True for TRADE / SMALL_SIZE — a name the desk would actually fund. */
+  /** True for TRADE / SMALL_SIZE — a name the model would actually size. */
   buyable: boolean;
 }
 
 const verdictCopy: Record<EdgeVerdict, PlainVerdict> = {
   TRADE: {
-    label: 'Strong Buy',
-    explanation: 'Good reward for the risk once PSE fees are counted.',
+    label: 'Qualifies (Full)',
+    explanation: 'The setup clears the fee-adjusted edge test at the model’s full size.',
     tone: 'text-mint-400',
     buyable: true,
   },
   SMALL_SIZE: {
-    label: 'Buy Small',
-    explanation: 'Worth a smaller, cautious position — the edge is thinner.',
+    label: 'Qualifies (Half)',
+    explanation: 'The setup clears the edge test at half size — the margin over fees is thinner.',
     tone: 'text-amber-400',
     buyable: true,
   },
   WATCH_ONLY: {
-    label: 'Wait',
-    explanation: "Reward isn't big enough after broker fees right now.",
+    label: 'Watch Only',
+    explanation: 'The reward does not clear broker fees at this price, so the model sizes it at zero.',
     tone: 'text-slate-400',
     buyable: false,
   },
@@ -152,8 +152,8 @@ export function describeExecutionGuidance(
       return 'The desk would not trade this size today — wait for a better entry.';
     default:
       return buyable
-        ? 'Use a limit order at the buy price if your broker supports it.'
-        : 'Watch it for now; nothing needs to be bought today.';
+        ? 'Use a limit order at the plan price if your broker supports it.'
+        : 'Watch only for now; the model sizes no position at this price.';
   }
 }
 
@@ -272,23 +272,23 @@ export function describeMarketMood(regime: MarketRegime | string): MarketMood {
     case 'BULLISH':
       return {
         ...style,
-        headline: 'Healthy market for buying',
+        headline: 'Healthy tape — long setups work more often',
         explanation:
-          'The overall PSE index is trending up. Good setups have a better chance of working, so this is a reasonable time to buy quality names.',
+          'The overall PSE index is trending up, which is the friendlier backdrop for long setups. The model still ranks every name and sizes each one on its own edge.',
       };
     case 'BEARISH':
       return {
         ...style,
-        headline: 'Downtrend — keep cash safe',
+        headline: 'Downtrend — the model stands in cash',
         explanation:
-          'The overall PSE index is trending down. Fewer trades work in a falling market, so keeping more cash and buying small is the safer choice.',
+          'The overall PSE index is trending down. Fewer setups clear their fees in a falling market, so the model keeps more cash and sizes smaller.',
       };
     default:
       return {
         ...style,
-        headline: 'Mixed market — be selective',
+        headline: 'Mixed market — only the clearest setups qualify',
         explanation:
-          'The PSE index is not clearly trending either way. Pick only the strongest setups and keep some cash aside.',
+          'The PSE index is not clearly trending either way, so only the strongest setups clear their fees and the model keeps cash aside.',
       };
   }
 }
@@ -300,18 +300,18 @@ export function describeCashAdvice(recommendedCashPct: number | null | undefined
   }
 
   if (recommendedCashPct >= 75) {
-    return 'Stay mostly in cash today. Only the very best setups are worth a small buy.';
+    return 'The model stays mostly in cash at this level; only the very best setups qualify.';
   }
 
   if (recommendedCashPct >= 50) {
-    return 'Keep more than half of your money in cash and buy selectively.';
+    return 'The model keeps more than half of the account in cash and accepts few setups.';
   }
 
   if (recommendedCashPct >= 25) {
-    return 'Keep a cash buffer, but there is room to buy the stronger setups.';
+    return 'The model keeps a cash buffer while the stronger setups qualify.';
   }
 
-  return 'Most of your cash can go to work on the top setups, while keeping the cut-losses firm.';
+  return 'The model deploys most of the account into the top setups, each with its cut-loss set.';
 }
 
 /** Plain words for the conviction score. */
@@ -425,38 +425,39 @@ export interface PlainPositionAction {
 
 const positionActionCopy: Record<string, PlainPositionAction> = {
   HOLD: {
-    label: 'Keep holding',
-    description: 'Nothing to do — the plan is still on track.',
+    label: 'Hold — plan on track',
+    description: 'The plan is unchanged; no level has been touched.',
     tone: 'text-slate-300',
     urgent: false,
   },
   STOP_BREACHED: {
-    label: 'Cut-loss hit — sell',
-    description: 'The price fell through your cut-loss. Exit to protect your capital.',
+    label: 'Cut-loss level breached',
+    description:
+      'The price fell through the cut-loss. By the model’s exit rule the position is closed here, which caps the loss at the planned risk.',
     tone: 'text-rose-400',
     urgent: true,
   },
   TARGET_REACHED: {
-    label: 'Take profit now',
-    description: 'The price reached your target. Consider selling to bank the gain.',
+    label: 'Target reached',
+    description: 'The price reached the target, so the model’s exit rule banks the planned gain here.',
     tone: 'text-mint-400',
     urgent: true,
   },
   MOVE_STOP_TO_BREAKEVEN: {
-    label: 'Lock in break-even',
-    description: 'Raise your cut-loss to the break-even price so the trade cannot lose after fees.',
+    label: 'Break-even stop available',
+    description: 'A stop at the break-even price takes the trade’s fee-adjusted loss to zero.',
     tone: 'text-amber-400',
     urgent: false,
   },
   TRAIL_STOP_EMA20: {
-    label: 'Lock in profits',
-    description: 'Raise your cut-loss to protect the gain you already have.',
+    label: 'Trail the stop',
+    description: 'The model’s trail follows the rising 20-day average and protects the open gain.',
     tone: 'text-amber-400',
     urgent: false,
   },
   TIME_STOP_DUE: {
-    label: 'Time is up — review',
-    description: 'The planned holding period has passed. Decide whether to stay or sell.',
+    label: 'Holding window ended — review',
+    description: 'The planned holding period has passed, so the rule asks for a fresh look at the name.',
     tone: 'text-sky-400',
     urgent: false,
   },
@@ -964,21 +965,21 @@ export interface MarketCallCopy {
 const marketCallCopy: Record<MarketCall, MarketCallCopy> = {
   RIDE_THE_WAVE: {
     label: 'Green light',
-    instruction: 'Buy the strongest names on the list, in small pieces.',
+    instruction: 'The model favours the strongest names on the list, sized in small pieces.',
     tone: 'text-mint-400',
     badgeClass: 'border-mint-400/40 bg-mint-400/10 text-mint-400',
     dotClass: 'bg-mint-400',
   },
   BE_SELECTIVE: {
     label: 'Amber light',
-    instruction: 'Only the clearest setups — keep a cash cushion.',
+    instruction: 'Only the clearest setups qualify; the model keeps a cash cushion.',
     tone: 'text-amber-400',
     badgeClass: 'border-amber-400/40 bg-amber-400/10 text-amber-400',
     dotClass: 'bg-amber-400',
   },
   STAY_IN_CASH: {
     label: 'Red light',
-    instruction: 'Keep your money in cash today.',
+    instruction: 'The model stands in cash at this cash level.',
     tone: 'text-rose-400',
     badgeClass: 'border-rose-400/40 bg-rose-400/10 text-rose-400',
     dotClass: 'bg-rose-400',
@@ -1022,10 +1023,10 @@ export function describeEntryTiming(
   switch (status as EntryTimingStatus) {
     case 'READY_NOW':
       return {
-        label: 'Ready now',
+        label: 'Inside the band',
         detail: band
-          ? `The price is inside the buy zone (${band}).`
-          : 'The price is inside the plan’s buy zone.',
+          ? `The price is inside the model’s entry band (${band}).`
+          : 'The price is inside the model’s entry band.',
         tone: 'text-mint-400',
         badgeClass: 'border-mint-400/40 bg-mint-400/10 text-mint-400',
         wait: false,
@@ -1060,8 +1061,8 @@ export function describeEntryTiming(
       };
     case 'WAIT_WATCH_ONLY':
       return {
-        label: 'Watch, do not buy',
-        detail: 'The desk would not put money into this today. Keep it on the watchlist.',
+        label: 'Watch only',
+        detail: 'The model sizes no position here today. The name stays on the watch list.',
         tone: 'text-slate-300',
         badgeClass: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
         wait: true,
@@ -1094,7 +1095,7 @@ export function describeTrustPulse(pulse: TrustPulse | null | undefined): string
   return `${pulse.resolvedCount} of ${pulse.totalPicks} picks graded · ${winRate} · ${expectancy} average · profit factor ${pulse.profitFactor.toFixed(2)}${sample}.`;
 }
 
-/** The "I already own it" verdict: the server's instruction plus the fee-paid result. */
+/** The "reader already holds it" read: the server's instruction plus the fee-paid result. */
 export interface PlainHoldingVerdict extends PlainPositionAction {
   /** The server's own sentence, with the peso result appended when it knows the size. */
   detail: string;
@@ -1122,7 +1123,7 @@ export function describeRunLabel(historicalSession: boolean, simple: boolean): s
     return simple ? 'Re-run This Day' : 'Re-run session';
   }
 
-  return simple ? 'Get Latest Advice' : 'Run pipeline';
+  return simple ? 'Run Latest Screen' : 'Run screen';
 }
 
 /**

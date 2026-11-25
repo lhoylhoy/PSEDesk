@@ -47,6 +47,9 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
   const [title, setTitle] = useState('');
   const [categories, setCategories] = useState('');
   const [targets, setTargets] = useState<Horizon[]>(['WEEK', 'MONTH']);
+  // Uploading indexes the document and sends its retrieved passages to the cloud model, so the
+  // reader has to attest to the rights and the data flow before the button unlocks.
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal, force = false) => {
@@ -135,7 +138,14 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
 
   const handleUpload = useCallback(async () => {
     if (!file) {
-      setError('Pick a .md, .txt or .pdf trading book first.');
+      setError('Pick a .md, .txt or .pdf research note or licensed document first.');
+      return;
+    }
+
+    if (!rightsConfirmed) {
+      setError(
+        'Confirm that you hold the rights to index this document and that its excerpts may go to the cloud model.',
+      );
       return;
     }
 
@@ -152,6 +162,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
           .split(',')
           .map((value) => value.trim())
           .filter((value) => value.length > 0),
+        confirmRightsAndCloudProcessing: rightsConfirmed,
       });
 
       setNotice(
@@ -161,6 +172,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
       setFile(null);
       setTitle('');
       setCategories('');
+      setRightsConfirmed(false);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -172,7 +184,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
     } finally {
       setBusy(null);
     }
-  }, [categories, file, load, targets, title]);
+  }, [categories, file, load, rightsConfirmed, targets, title]);
 
   const handleDelete = useCallback(
     async (document: KnowledgeDocument) => {
@@ -201,7 +213,8 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
             <DialogTitle className="text-base font-semibold text-white">Knowledge base</DialogTitle>
             <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
               The desk answers from these documents only. Built-in playbooks ship with the repo; uploads are
-              scoped to the horizons you tick so a trading book cannot outrank the horizon playbook.
+              scoped to the horizons you tick so an uploaded document cannot outrank the horizon playbook, and
+              each upload needs a rights and cloud-processing attestation.
             </DialogDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -236,7 +249,9 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
           {formatInteger(totals.embedded)} embedded
         </p>
         <section className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Upload a trading book</h3>
+          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            Upload a research note or licensed document
+          </h3>
           <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
               File (.md, .txt or .pdf)
@@ -303,16 +318,34 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
               </div>
             </div>
           </div>
+          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-line/80 bg-ink-900/70 px-3 py-2">
+            <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-400">
+              <input
+                type="checkbox"
+                checked={rightsConfirmed}
+                onChange={(event) => {
+                  setRightsConfirmed(event.target.checked);
+                  setNotice(null);
+                }}
+                className="mt-0.5 size-3.5 shrink-0 accent-mint-400"
+              />
+              <span>
+                I hold the rights or permission to index this document, it contains no personal information and no
+                material non-public information, and I understand its retrieved passages are sent to the configured
+                Ollama Cloud model. I will not upload a book, report or feed I merely have access to.
+              </span>
+            </label>
+          </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <p className="max-w-lg text-[10px] leading-relaxed text-slate-600">
               Markdown keeps its structure; PDFs are text-extracted and chunked on headings. Leave the horizons
-              empty to let the book apply to every book.
+              empty to let the document apply to every book.
             </p>
             <Button
               variant="primary"
               busy={busy === 'upload'}
               onClick={() => void handleUpload()}
-              disabled={busy !== null || !file}
+              disabled={busy !== null || !file || !rightsConfirmed}
               className="w-full sm:w-auto"
             >
               Upload and index

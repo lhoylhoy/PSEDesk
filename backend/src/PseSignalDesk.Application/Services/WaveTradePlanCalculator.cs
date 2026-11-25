@@ -315,33 +315,35 @@ public static class WaveTradePlanCalculator
     {
         var move = Math.Abs(netReturnPct);
         var trimNote = trimShares > 0
-            ? $" You could sell {trimShares:N0} shares (about half) and let the rest run."
+            ? $" A half-trim of {trimShares:N0} shares is the largest whole board lot that keeps the rest at cost."
             : string.Empty;
 
+        // Impersonal, conditional phrasing. These strings describe where the model's levels sit and
+        // what the exit rule would do; they are not personal recommendations to trade.
         return action switch
         {
             "STOP_BREACHED" => (
-                "Sell now — your cut-loss was hit",
-                $"The price is PHP {FormatPrice(currentPrice)}, below your PHP {FormatPrice(initialStop)} cut-loss. " +
-                "Selling now protects the rest of your capital."),
+                "Cut-loss level breached",
+                $"The price is PHP {FormatPrice(currentPrice)}, below the PHP {FormatPrice(initialStop)} cut-loss. " +
+                "By the model's exit rule the position is closed here, which caps the loss at the planned R."),
             "TARGET_REACHED" => (
-                "Take profit — the target was reached",
-                $"The price is PHP {FormatPrice(currentPrice)}, at or above your PHP {FormatPrice(target)} target. " +
-                "Consider selling to bank the gain."),
+                "Target reached",
+                $"The price is PHP {FormatPrice(currentPrice)}, at or above the PHP {FormatPrice(target)} target. " +
+                "The model's exit rule banks the planned gain at this level."),
             "TRAIL_STOP_EMA20" => (
-                "Ride the wave — raise your cut-loss",
-                $"You are up {Format(move)}% after fees, about {Format(unrealizedR)}R. Raise your cut-loss to " +
-                $"PHP {FormatPrice(suggestedStop)}, just under the 20-day average, so the gain is protected." + trimNote),
+                "Trend intact — trail the stop",
+                $"The position is up {Format(move)}% after fees, about {Format(unrealizedR)}R. The model's trail " +
+                $"sits at PHP {FormatPrice(suggestedStop)}, just under the 20-day average, so the open gain stays protected." + trimNote),
             "MOVE_STOP_TO_BREAKEVEN" => (
-                "Lock in a free ride",
-                $"You are up {Format(move)}% after fees. Raise your cut-loss to PHP {FormatPrice(suggestedStop)} " +
-                "so the trade cannot lose after fees." + trimNote),
+                "Break-even stop available",
+                $"The position is up {Format(move)}% after fees. A stop at PHP {FormatPrice(suggestedStop)} takes the " +
+                "trade's fee-adjusted loss to zero." + trimNote),
             _ => (
-                "Keep holding — nothing to change yet",
+                "Plan unchanged — no level touched",
                 netReturnPct == 0m
-                    ? $"You are flat after fees at PHP {FormatPrice(currentPrice)}. Your cut-loss stays at PHP {FormatPrice(initialStop)}."
-                    : $"You are {(netReturnPct > 0m ? "up" : "down")} {Format(move)}% after fees at PHP {FormatPrice(currentPrice)}. " +
-                      $"Your cut-loss stays at PHP {FormatPrice(initialStop)}.")
+                    ? $"Flat after fees at PHP {FormatPrice(currentPrice)}. The cut-loss sits at PHP {FormatPrice(initialStop)}."
+                    : $"{(netReturnPct > 0m ? "Up" : "Down")} {Format(move)}% after fees at PHP {FormatPrice(currentPrice)}. " +
+                      $"The cut-loss sits at PHP {FormatPrice(initialStop)}.")
         };
     }
 

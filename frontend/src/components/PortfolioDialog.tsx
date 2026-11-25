@@ -54,7 +54,7 @@ import { Tooltip } from './ui/Tooltip';
 interface PortfolioDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Pick handed over by the terminal's "Take trade" button; consumed once applied. */
+  /** Pick handed over by the terminal's "Record in blotter" button; consumed once applied. */
   draft: TradeDraft | null;
   onDraftConsumed: () => void;
   /** Authoritative book already loaded by the terminal, painted on the sheet's first frame. */
@@ -1156,7 +1156,7 @@ function TakeTradeTab({
           disabled={pending !== null || !valid}
           onClick={onSubmit}
         >
-          {simple ? 'Record This Trade' : 'Take trade'}
+          {simple ? 'Record This Trade' : 'Record in blotter'}
         </Button>
       </div>
     </div>
@@ -1353,7 +1353,7 @@ export function PortfolioDialog({
             </DialogTitle>
             <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
               {simple
-                ? 'A practice account that tracks the trades you take from the advice cards. It shows what you own, what it is worth today and what the desk suggests you do next.'
+                ? 'A practice account that tracks the plans you record from the advice cards. It shows what the paper book holds, what it is worth today and the exit posture the server derived for each position.'
                 : "Server-sized paper book: cash, open heat, fee-paid P&L and the exit instruction the session's OHLC implies. Sizing, cash and the risk caps are enforced by the API, never by this screen."}
             </DialogDescription>
           </div>
@@ -1373,7 +1373,7 @@ export function PortfolioDialog({
                 {simple ? 'My Trades' : 'Book'}
                 {summary ? ` · ${summary.openPositions}` : ''}
               </TabsTrigger>
-              <TabsTrigger value="take">{simple ? 'Record a Trade' : 'Take trade'}</TabsTrigger>
+              <TabsTrigger value="take">Record a trade</TabsTrigger>
               <TabsTrigger value="closed">
                 {simple ? 'Closed Trades' : 'Ledger'}
                 {summary ? ` · ${summary.closedTrades}` : ''}

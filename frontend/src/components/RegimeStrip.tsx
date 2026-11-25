@@ -284,12 +284,12 @@ export function RegimeStrip({ regime, horizon, run, viewMode = 'simple', trustPu
                 detail={describeCashAdvice(run?.recommendedCashPct)}
               />
               <SummaryCard
-                label="Stocks ready to buy"
+                label="Names that qualify"
                 value={buyCount !== null ? String(buyCount) : dash}
                 detail={
                   run
-                    ? `${run.tradeCount} strong buy · ${run.smallSizeCount} buy small · ${run.watchOnlyCount} on hold`
-                    : 'Get the latest advice to fill this in'
+                    ? `${run.tradeCount} full size · ${run.smallSizeCount} half size · ${run.watchOnlyCount} watch only`
+                    : 'Run the latest screen to fill this in'
                 }
                 tone={buyCount ? 'text-mint-400' : undefined}
               />

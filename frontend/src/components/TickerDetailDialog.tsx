@@ -85,7 +85,7 @@ function HistoryPanel({
   }
 
   if (!history || history.points.length === 0) {
-    return <p className="text-xs text-slate-500">First appearance in the Top 10 — no prior runs.</p>;
+    return <p className="text-xs text-slate-500">First appearance in the ranked list — no prior runs.</p>;
   }
 
   return (
@@ -266,7 +266,7 @@ export function TickerDetailDialog({
                     disabled={item.orderTicket == null || item.orderTicket.shares <= 0}
                     onClick={() => onTakeTrade(item)}
                   >
-                    {simple ? 'Practise This Trade' : `Take trade${item.orderTicket ? ` · ${formatInteger(item.orderTicket.shares)} sh` : ''}`}
+                    {simple ? 'Practise This Trade' : `Record in blotter${item.orderTicket ? ` · ${formatInteger(item.orderTicket.shares)} sh` : ''}`}
                   </Button>
                   <DialogClose asChild>
                     <Button variant="ghost">Close</Button>
@@ -571,8 +571,7 @@ export function TickerDetailDialog({
             </OptionalDisclosure>
 
             <p className="mt-4 text-[10px] leading-relaxed text-slate-600">
-              Research output only. Levels are rounded to the PSE board lot and tick table; size positions to
-              your own risk budget.
+              Research output only. Levels are rounded to the PSE board lot and tick table; how much to risk is the reader's own decision.
             </p>
           </>
         ) : (

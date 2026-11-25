@@ -91,7 +91,7 @@ export function MarketDirectionHero({
       <section className="panel p-5">
         <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">The call</p>
         <p className="mt-2 text-sm text-slate-400">
-          No market session saved yet. Press Get Latest Advice to pull today’s PSE prices and company news.
+          No market session saved yet. Run the latest screen to pull today’s PSE prices and company news.
         </p>
       </section>
     );

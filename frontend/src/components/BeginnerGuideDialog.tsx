@@ -71,8 +71,9 @@ export function BeginnerGuideDialog({ open, onOpenChange }: BeginnerGuideDialogP
               How the PSE Signal Desk works
             </DialogTitle>
             <DialogDescription className="mt-1 max-w-xl text-xs leading-relaxed text-slate-400">
-              A stock-research desk for Philippine shares. It tells you what it would buy, at what
-              price, and where it would give up — in pesos, with broker fees already counted.
+              A stock-research notebook for Philippine shares. For each name it reports the entry it would
+              size, the target, and where its cut-loss would sit — in pesos, with broker fees already counted.
+              It is not an adviser and does not place orders.
             </DialogDescription>
           </div>
           <DialogClose asChild>

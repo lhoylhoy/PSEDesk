@@ -33,8 +33,9 @@ public sealed record KnowledgeDocumentDto(
     DateTime UpdatedAtUtc);
 
 /// <summary>
-/// Upload payload for a Markdown, text or PDF trading book. The controller fills
-/// <see cref="TextContent"/> for Markdown/TXT and <see cref="BinaryContent"/> for PDF.
+/// Upload payload for a Markdown, text or PDF research note or licensed document. The controller
+/// fills <see cref="TextContent"/> for Markdown/TXT and <see cref="BinaryContent"/> for PDF, and
+/// only after the uploader has attested to the document's rights and cloud-processing consent.
 /// </summary>
 public sealed record KnowledgeUploadRequest(
     string FileName,

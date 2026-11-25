@@ -1,6 +1,10 @@
 # PSE Signal Desk — repository ignore rules.
 # Keep build output, package caches, local databases, secrets and editor/OS
 # noise out of git. Syntax: https://git-scm.com/docs/gitignore
+#
+# Verify a rule with `git check-ignore -v <path>`; confirm that nothing wanted
+# is ignored with `git ls-files -ci --exclude-standard` (it must print nothing).
+# `!.env.example` style negations must stay *below* the rule they re-include.
 
 # --- .NET build output ------------------------------------------------------
 **/bin/
@@ -14,9 +18,14 @@
 
 # Test and coverage artefacts
 **/TestResults/
+**/coverage/
 *.trx
 *.coverage
+*.coveragexml
 coverage*.xml
+coverage*.json
+coverage*.info
+*.lcov
 *.opencover.xml
 *.binlog
 
@@ -30,6 +39,17 @@ project.lock.json
 *.nuget.props
 *.nuget.targets
 
+# Local secret overrides. The Ollama key belongs in user-secrets or the
+# environment (see memory-bank/techContext.md), never in a tracked file.
+appsettings.*.local.json
+*.pfx
+*.snk
+# npm auth tokens live in `.npmrc`; this repo needs no per-project registry.
+.npmrc
+
+# Local SDK/tool installs (`dotnet-install.sh --install-dir .dotnet`, `dotnet tool install --local`).
+.dotnet/
+
 # --- Local data (SQLite; created at API startup) ----------------------------
 *.db
 *.db-shm
@@ -37,37 +57,59 @@ project.lock.json
 *.db-journal
 *.sqlite
 *.sqlite3
-# Timestamped safety copies (e.g. `pse_signals.db.bak-20261125`) are local state too.
-*.db.bak-*
+# Sidecar files follow the database's own spelling (`foo.sqlite-wal`, `foo.sqlite3-shm`).
+*.sqlite-*
+*.sqlite3-*
+# Safety copies of the dev store, timestamped (`pse_signals.db.bak-20261125`)
+# or not (`pse_signals.db.bak`) — both are local state.
+*.db.bak*
 
 # --- Node / Vite ------------------------------------------------------------
 node_modules/
-frontend/dist/
-frontend/.vite/
+**/dist/
+**/.vite/
+# Vite writes a temporary copy of a TypeScript config next to it; a killed
+# process can leave one behind.
+vite.config.*.timestamp-*
 *.tsbuildinfo
 .eslintcache
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
 # --- Local environment overrides (keep the Ollama key out of git) -----------
 .env
 .env.local
 .env.*.local
-frontend/.env.local
 !.env.example
 
 # --- Editor / OS ------------------------------------------------------------
 .DS_Store
-._*
+.localized
+__MACOSX/
 .AppleDouble
-.Spotlight-V100
-.Trashes
+.LSOverride
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+.VolumeIcon.icns
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 *.swp
 *.swo
 *~
 .idea/
+*.iml
+.fleet/
+.history/
+.vshistory/
+_ReSharper*/
+*.DotSettings.user
 
 # Stray `~/Library`-style folder the .NET developer tools create when HOME is
 # resolved to the workspace root. Local machine state, not project content.
@@ -75,4 +117,4 @@ frontend/.env.local
 
 # --- Misc run artefacts -----------------------------------------------------
 *.log
-
+*.pid

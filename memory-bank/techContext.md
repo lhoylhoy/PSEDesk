@@ -29,14 +29,14 @@ dotnet run --project src/PseSignalDesk.WebApi        # http://localhost:5236
 
 # Backend tests
 cd backend
-dotnet test PseSignalDesk.slnx                        # currently 363 passing
+dotnet test PseSignalDesk.slnx                        # currently 390 passing
 
 # Frontend
 cd frontend
 npm install
 npm run dev                                          # http://localhost:5173 (strict port)
 npm run build                                        # tsc --noEmit && vite build
-npm test                                             # node --test "src/lib/__tests__/*.test.ts" (42 passing)
+npm test                                             # node --test "src/lib/__tests__/*.test.ts" (49 passing)
 ./node_modules/.bin/tsc --noEmit                     # type gate alone (npx tsc only prints npm notices here)
 npm run preview
 
@@ -101,6 +101,12 @@ curl -X DELETE http://localhost:5236/api/knowledge/7        # upload → 204, bu
 | `MarketData:MaxConcurrency` | `8` | Parallel ticker requests |
 | `MarketData:RequestTimeoutSeconds` | `15` | Per-request timeout; a timeout is a 503 |
 | `Cors:AllowedOrigins` | `http://localhost:5173` | Frontend origin |
+| `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Host-header allowlist (no wildcard, so a forged `Host:` cannot resolve) |
+| `Compliance:DeploymentMode` | `PersonalLocal` | `PersonalLocal` refuses non-loopback callers with `403`; `LicensedCommercial` opens that check and requires the operator key on writes. Unrecognised values fall back to personal |
+| `Compliance:EnforceLoopbackInPersonalMode` | `true` | The loopback refusal switch; only a deliberate `false` disables it |
+| `Compliance:OperatorApiKey` | empty | Shared key required on `POST`/`PUT`/`PATCH`/`DELETE` when set; blank is fine in personal mode and a `503` fail-closed in licensed mode |
+| `MarketData:UserAgent` | `PseSignalDesk-PersonalResearch/0.1 (local-noncommercial)` | Outbound identity for Yahoo and PSE Edge — never a spoofed browser string |
+| `PSEDESK_OPERATOR_API_KEY` | — | Environment override for `Compliance:OperatorApiKey`, so the key never sits in `appsettings.json` |
 | `OLLAMA_API_KEY` / `OLLAMA_BASE_URL` / `OLLAMA_MODEL` / `OLLAMA_FAST_MODEL` / `OLLAMA_EMBEDDING_MODEL` | — | Environment variables override settings |
 
 
@@ -119,6 +125,7 @@ See `frontend/.env.example`.
 | `psedesk.viewMode` | `simple` (default) / `pro` | `lib/viewMode.ts` — sets `data-view-mode` on `<html>` |
 | `psedesk.theme` | `light` / `dark` — unset means system `prefers-color-scheme`, light when the browser cannot say | `lib/theme.ts` — sets `data-theme` on `<html>`; also read by the inline pre-paint script in `index.html` |
 | `psedesk.welcomeDismissed` | `1` | `WelcomeSetupBanner` — the only way to re-show the first-run presets is clearing it |
+| `psedesk.legalAcceptedVersion` | the `CURRENT_LEGAL_VERSION` string currently `2026-11-v1` | `lib/legalConsent.ts` — the first-run legal gate; a stale or missing value re-shows the dialog |
 
 Storage access is wrapped: a blocked/quota-full `localStorage` falls back to in-memory state instead of throwing.
 
@@ -142,7 +149,11 @@ cd backend/src/PseSignalDesk.WebApi
 dotnet user-secrets set "OllamaCloud:ApiKey" "..."   # UserSecretsId already in the csproj
 ```
 
-Environment variables (`OllamaCloud__ApiKey`, `OLLAMA_API_KEY`) still win, so CI and the sandbox can inject the key without user-secrets.
+Environment variables (`OllamaCloud__ApiKey`, `OLLAMA_API_KEY`) still win, so CI and the sandbox can inject the key without user-secrets. The compliance operator key has the same shape: `PSEDESK_OPERATOR_API_KEY` (bound over `Compliance:OperatorApiKey` in `Program.cs`) and never committed — `appsettings.json` ships it blank.
+
+## Legal notices
+
+`DISCLAIMER.md`, `PRIVACY.md` and `THIRD_PARTY_NOTICES.md` live at the repository root (and are linked from `README.md`). `frontend/src/lib/legalConsent.ts` mirrors their reader-facing summary; bumping `CURRENT_LEGAL_VERSION` there re-prompts every browser through `LegalDisclaimerGate`. Keep the three documents, that summary and the README's compliance paragraph in sync when any of them changes.
 
 ## Debugging (VS Code)
 
@@ -220,12 +231,34 @@ the API at all.
 - **Frontend `npm test` is `node:test` over pure modules, not a DOM suite.** It runs `node --test "src/lib/__tests__/*.test.ts"` on Node's native type stripping, so nothing there may import React or touch the DOM; `lib/queryCache.ts` is deliberately React-free for this reason. There is still no component/browser harness (`tsc --noEmit` + `npm run build` are the gate for UI).
 - **Git is initialized on branch `main` and has one commit: the initial commit** (2026-11-25), so
   everything under `backend/`, `frontend/`, `memory-bank/` and `.clinerules/` is tracked.
-- `.gitignore` covers build output (`bin`/`obj`), `node_modules`, `frontend/dist`, SQLite `*.db`,
-  `*.db-shm`/`*.db-wal`/`*.db-journal`, the timestamped `*.db.bak-*` safety copies,
-  `.env` overrides (`.env.example` stays tracked), editor/OS noise, test/coverage artefacts, the
-  stray per-project `.nuget/` package caches and the `/Library/` folder the .NET tools create when
-  `HOME` resolves to the workspace root. `.vscode/` stays tracked on purpose.
-  Verify a path with `git check-ignore -v <path>`.
+- `.gitignore` covers build output (`**/bin/`, `**/obj/`, `.vs/`, `*.user`, `*.suo`,
+  `*.sln.docstates` / `*.slnx.docstates`), test/coverage artefacts (`**/TestResults/`,
+  `**/coverage/`, `*.trx`, `*.coverage`, `*.coveragexml`, `coverage*.xml`, `coverage*.json`,
+  `coverage*.info`, `*.lcov`, `*.opencover.xml`, `*.binlog`), restored NuGet caches (`**/.nuget/`,
+  `*.nupkg`, `*.snupkg`, `project.lock.json`), local secret overrides (`appsettings.*.local.json`,
+  `*.pfx`, `*.snk`, `.npmrc`), local SDK/tool installs (`.dotnet/`), SQLite `*.db` + its
+  `-shm`/`-wal`/`-journal` siblings, `*.sqlite`/`*.sqlite3` + their sidecars (`*.sqlite-*` /
+  `*.sqlite3-*`) and **any** `*.db.bak*` safety copy, Node/Vite (`node_modules/`, `**/dist/`,
+  `**/.vite/`, `vite.config.*.timestamp-*`, `*.tsbuildinfo`, `.eslintcache`, npm/yarn/pnpm/lerna
+  debug logs), `.env` overrides (`.env`, `.env.local`, `.env.*.local`; `frontend/.env.example` stays
+  tracked through the `!.env.example` negation), editor/OS noise (`.DS_Store`, `._*`, `.localized`,
+  `__MACOSX/`, `.Spotlight-V100/`, `.Trashes/`, `.fseventsd/`, `.VolumeIcon.icns`, `Thumbs.db`,
+  `Desktop.ini`, `$RECYCLE.BIN/`, `.idea/`, `*.iml`, `.fleet/`, `.history/`, `.vshistory/`,
+  `_ReSharper*/`, `*.DotSettings.user`, swap/backup files), the stray per-project `.nuget/` package
+  caches, the `/Library/` folder the .NET tools create when `HOME` resolves to the workspace root,
+  and `*.log`/`*.pid`. `.vscode/` and `frontend/.env.example` stay tracked on purpose.
+- Deliberately **not** copied from the github/gitignore `VisualStudio` / `Node` templates: VS
+  designer/legacy C++/SharePoint/SQL-Server artefacts (this is a pure ASP.NET Core CLI solution),
+  `[Dd]ebug/` + `[Rr]elease/` (they would also swallow a legitimately named folder; `bin/`+`obj/`
+  already hold the output), `publish/` (default `dotnet publish` lands inside the ignored `bin/`),
+  legacy `**/[Pp]ackages/*` (PackageReference only), blanket `*.pdb`/`*.dll`/`*.exe`, and the blanket
+  `.env.*` (this repo keeps `.env.local` / `.env.*.local` local but would allow a deliberate
+  `.env.production` to be committed).
+- Two ways to verify: `git check-ignore -v <path>` shows which rule wins (2026-11-26: 5526 ignored
+  entries reported, 219 tracked files, none of them ignored); `git ls-files -ci --exclude-standard`
+  must print nothing — it is the check that a new rule has not swallowed source files. This macOS
+  checkout has `core.ignorecase=true`, so `Obj/`/`TestResults/` are matched by the lowercase rules
+  too.
 
 
 ## Environment notes

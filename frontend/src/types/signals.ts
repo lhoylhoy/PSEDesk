@@ -419,7 +419,7 @@ export interface TickerHistory {
   points: TickerHistoryPoint[];
 }
 
-/** One indexed knowledge-base document (built-in playbook or uploaded trading book). */
+/** One indexed knowledge-base document (built-in playbook or uploaded research document). */
 export interface KnowledgeDocument {
   id: number;
   slug: string;
@@ -452,6 +452,12 @@ export interface KnowledgeUploadInput {
   title?: string;
   horizons: string[];
   categories: string[];
+  /**
+   * The uploader's attestation that they hold the rights to index the document, that it holds no
+   * personal or material non-public information, and that its retrieved passages go to the
+   * configured cloud LLM. The API answers 400 without it.
+   */
+  confirmRightsAndCloudProcessing: boolean;
 }
 
 /** One probability bucket of the calibration table: what the desk predicted vs what happened. */
@@ -553,7 +559,7 @@ export interface TickerResearch {
   aiThesis: string | null;
   /** The same four-step roadmap the daily list prints for this name. */
   wavePlan?: WaveTradePlan | null;
-  /** The "I already own it" answer; null unless the reader supplied an average cost. */
+  /** The "reader already holds it" answer; null unless an average cost was supplied. */
   positionAdvice?: PositionAdvice | null;
 }
 

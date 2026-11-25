@@ -134,8 +134,11 @@ public sealed class SignalsController : ControllerBase
     }
 
     /// <summary>
-    /// Causal walk-forward replay of the horizon's own rules over the real tape: one
-    /// position at a time, 1% risk per trade, board lots and the full round-trip fee.
+    /// Causal walk-forward replay of the horizon's own sizing rules over the real tape: a book of
+    /// up to five concurrent positions, 1% risk per trade inside a 6% portfolio heat cap, at most
+    /// two names and 35% of equity per sector, board lots, fractional Kelly sizing, the full
+    /// 0.690% round-trip friction plus slippage, and a 60-session walk-forward refit of the
+    /// money-manager weights. The numbers describe one simulated path, not a promise.
     /// Returns 503 when the live feed has no history, never a synthetic curve.
     /// </summary>
     [HttpGet("backtest")]

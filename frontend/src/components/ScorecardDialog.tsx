@@ -191,8 +191,8 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
             </DialogTitle>
             <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
               {simple
-                ? `Every pick the desk made on the ${meta.friendlyTab.toLowerCase()} list, checked against what the price actually did afterwards. Nothing is back-filled or simulated.`
-                : `${meta.label} book · every persisted pick graded against the ${meta.holding} of OHLC sessions that followed it. Win rate, expectancy and Brier calibration come from the stored ledger, never from the model's own claims.`}
+                ? `Every pick the desk published for the ${meta.friendlyTab.toLowerCase()} list, checked against what the price actually did afterwards. This is the model’s own paper record, not a client account, and nothing is back-filled.`
+                : `${meta.label} book · every persisted pick graded against the ${meta.holding} of OHLC sessions that followed it. Win rate, expectancy and Brier calibration come from the stored ledger, never from the model's own claims, and the book is the desk's own paper record rather than a client account.`}
             </DialogDescription>
           </div>
           <DialogClose asChild>

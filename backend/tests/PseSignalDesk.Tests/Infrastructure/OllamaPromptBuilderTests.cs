@@ -201,6 +201,17 @@ public sealed class OllamaPromptBuilderTests
     }
 
     [Fact]
+    public void BuildSystemPrompt_forbids_personal_investment_advice_phrasing()
+    {
+        var prompt = OllamaPromptBuilder.BuildSystemPrompt(SignalHorizon.WEEK);
+
+        // A retail terminal whose prose says "buy now" is investment advice; the prompt insists on
+        // impersonal, third-person research notes instead.
+        Assert.Contains("neutral, third-person analytical phrasing", prompt, StringComparison.Ordinal);
+        Assert.Contains("never instruct the reader to buy, sell or hold", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildUserPrompt_prints_na_for_unreported_cross_asset_dials_and_the_foreign_provenance()
     {
         var unreported = OllamaPromptBuilder.BuildUserPrompt(

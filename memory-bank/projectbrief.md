@@ -6,10 +6,10 @@
 
 **PSE Signal Desk** (`PseSignalDesk`) is a full-stack research terminal for the Philippine Stock Exchange:
 
-- A **.NET 10 Clean Architecture API** that screens the liquid PSE universe, ranks a **Top 10 buy list for four horizons** (`DAY`, `WEEK`, `MONTH`, `YEAR`), grounds every thesis in a **local RAG knowledge base** of PSE rules and playbooks, reconciles **day-over-day drift**, and explains **what dropped out and why**.
+- A **.NET 10 Clean Architecture API** that screens the liquid PSE universe, ranks a **screened list for four horizons** (`DAY`, `WEEK`, `MONTH`, `YEAR`), grounds every thesis in a **local RAG knowledge base** of PSE rules and playbooks, reconciles **day-over-day drift**, and explains **what dropped out and why**.
 - A **React 19 + TypeScript + Vite** terminal with four horizon tabs, a market-regime strip, the drop panel, a per-ticker detail dialog (board lot, SMA150/52-week high, Weinstein stage, trap flags, playbook citations) and a **Knowledge Base drawer** for curating the grounding library.
 
-The product is research tooling, **not investment advice**.
+The product is research tooling, **not investment advice**, and it is **not a licensed market-data service**: `README.md`, `DISCLAIMER.md`, `PRIVACY.md` and `THIRD_PARTY_NOTICES.md` state the posture, the API refuses non-loopback callers by default, and the terminal opens behind a first-run legal gate. Redistributing PSE market data or operating for other people needs an exchange market-data agreement and SEC licensing that this repository does not have.
 
 ## Core requirements
 
@@ -35,7 +35,7 @@ The product is research tooling, **not investment advice**.
 | Causal walk-forward replay of each horizon's own rules (`/api/signals/backtest`) | Tick-level / intraday backtesting |
 | Server-sized order tickets + a **paper** blotter (open, raise stop, close, ledger, heat) | Live broker integration, real fills, multi-account books |
 | SQLite RAG knowledge base: 6 built-in Markdown documents (rules + 4 playbooks + engineering references), upload/reindex/delete | Multi-user editing, versioned document history |
-| PSE 15-tier board-lot/tick table, static price band, net-R:R gate, board-lot sizing | Guaranteed licensed market-data feed |
+| PSE 15-tier board-lot/tick table, static price band, net-R:R gate, board-lot sizing | A licensed, redistributable market-data feed (the desk reads Yahoo/PSE Edge under a personal posture and refuses non-loopback traffic by default) |
 | Official PSE Daily Quotation Report ingestion (live templates + operator upload) for net foreign flow | A stable, guaranteed exchange DQR URL (operator supplies or mirrors it) |
 | Deterministic disclosure classification + structural trap flags | Fundamental database (the model reads uploaded books, the desk stores no financials) |
 | PSEi regime strip (close, SMA50/200, foreign flow with provenance, USD/PHP, US 10Y / Brent / EPHE) | Full PSE universe (`PseTickerCatalog` is ~58 names; research reaches any ticker) |
@@ -45,7 +45,7 @@ The product is research tooling, **not investment advice**.
 
 ## Success criteria
 
-- `dotnet test backend/PseSignalDesk.slnx` passes (**363 tests** as of 2026-11-25).
+- `dotnet test backend/PseSignalDesk.slnx` passes (**369 tests** as of 2026-11-26).
 - `npm test` in `frontend/` passes (**42 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/queryCache.test.ts`).
 - `npm run build` in `frontend/` passes (`tsc --noEmit` + Vite build), with each dialog and the Pro table in their own chunk.
 - The terminal is usable one-thumbed on a 320px phone and dense on a 2560px desktop from the **same payload**: dialogs become bottom sheets, wide tables fall back to cards, and no mobile variant fetches a different endpoint.

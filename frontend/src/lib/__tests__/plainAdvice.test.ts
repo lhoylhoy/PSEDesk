@@ -18,6 +18,7 @@ import {
   describeMaxDrawdownPct,
   describeOutcomeStatus,
   describePayoffRatio,
+  describePlainVerdict,
   describePortfolioAlert,
   describePositionAction,
   describeProfitFactor,
@@ -277,6 +278,21 @@ function holdingFixture(overrides: Partial<PositionAdvice> = {}): PositionAdvice
   };
 }
 
+// ── Non-solicitation copy: the desk describes its model, it does not tell anyone to trade ─────
+
+test('verdict badges report model qualification instead of soliciting a trade', () => {
+  assert.equal(describePlainVerdict('TRADE').label, 'Qualifies (Full)');
+  assert.equal(describePlainVerdict('SMALL_SIZE').label, 'Qualifies (Half)');
+  assert.equal(describePlainVerdict('WATCH_ONLY').label, 'Watch Only');
+
+  // An unknown verdict is never sold as a buy.
+  assert.equal(describePlainVerdict('SOMETHING_NEW').buyable, false);
+
+  for (const verdict of ['TRADE', 'SMALL_SIZE', 'WATCH_ONLY'] as const) {
+    assert.doesNotMatch(describePlainVerdict(verdict).label, /buy now|strong buy/i);
+  }
+});
+
 test('the market call is a traffic light with one instruction attached', () => {
   assert.equal(describeMarketCall('RIDE_THE_WAVE').label, 'Green light');
   assert.equal(describeMarketCall('BE_SELECTIVE').label, 'Amber light');
@@ -326,7 +342,7 @@ test('the trust pulse reads the ledger verbatim and admits an empty one', () => 
 
 test('the own-it verdict keeps the server action and adds the fee-paid pesos', () => {
   const holding = describeHoldingVerdict(holdingFixture());
-  assert.equal(holding.label, 'Keep holding');
+  assert.equal(holding.label, 'Hold — plan on track');
   assert.equal(holding.urgent, false);
   assert.match(holding.detail, /2,087\.00 in your pocket/);
 
@@ -380,8 +396,8 @@ test('the newest stored session is what "latest" means, not today', () => {
 });
 
 test('the primary button re-runs a stored day instead of promising the latest one', () => {
-  assert.equal(describeRunLabel(false, true), 'Get Latest Advice');
-  assert.equal(describeRunLabel(false, false), 'Run pipeline');
+  assert.equal(describeRunLabel(false, true), 'Run Latest Screen');
+  assert.equal(describeRunLabel(false, false), 'Run screen');
   assert.equal(describeRunLabel(true, true), 'Re-run This Day');
   assert.equal(describeRunLabel(true, false), 'Re-run session');
 });

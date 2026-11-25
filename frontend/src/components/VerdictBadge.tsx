@@ -42,7 +42,7 @@ export function verdictDescription(verdict: EdgeVerdict | string): string {
 interface VerdictBadgeProps {
   verdict: EdgeVerdict | string;
   className?: string;
-  /** Simple mode: "Strong Buy" / "Buy Small" / "Wait" instead of the desk codes. */
+  /** Simple mode: "Qualifies (Full)" / "Qualifies (Half)" / "Watch Only" instead of the desk codes. */
   friendly?: boolean;
 }
 

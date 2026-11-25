@@ -8,7 +8,7 @@ import type { Horizon } from '../types/signals';
 export interface HorizonMeta {
   /** Short tab/word form, e.g. "Week". */
   label: string;
-  /** Table heading, e.g. "Top 10 weekly buys". */
+  /** Table heading, e.g. "Week model · 10 names screened". */
   bookTitle: string;
   /** One-line mandate under the heading. */
   mandate: string;
@@ -27,51 +27,51 @@ export interface HorizonMeta {
 export const horizonMeta: Record<Horizon, HorizonMeta> = {
   DAY: {
     label: 'Day',
-    bookTitle: 'Top 10 day trades',
+    bookTitle: 'Day model · 10 names screened',
     mandate:
       'Opening-range momentum inside the 09:30–15:35 PHT session. Plans are clamped to the PSE static band and flat by the closing auction.',
     stance: 'Intraday momentum',
     holding: 'same session',
     friendlyTab: 'Quick (Today)',
-    friendlyTitle: 'Quick trades for today',
+    friendlyTitle: 'Today’s screened names (intraday)',
     friendlySummary:
-      'You buy and sell on the same trading day. This is the fastest and riskiest choice — only use money you can afford to lose.',
+      'Entries and exits land on the same trading day. This is the fastest and riskiest horizon — the model only ever sizes money you can afford to lose.',
   },
   WEEK: {
     label: 'Week',
-    bookTitle: 'Top 10 weekly buys',
+    bookTitle: 'Week model · 10 names screened',
     mandate:
       'VCP and Stage-2 momentum holds of one to three weeks, sized for fee drag and board-lot granularity.',
     stance: 'Swing long',
     holding: '1–3 weeks',
     friendlyTab: 'Short-Term (1–3 Wks)',
-    friendlyTitle: "Today's Best Short-Term Stock Picks (1–3 Weeks)",
+    friendlyTitle: 'Short-term names screened (1–3 weeks)',
     friendlySummary:
-      'Hold for about one to three weeks. The desk looks for stocks in a steady uptrend that have paused briefly and are now turning back up.',
+      'Planned holding is about one to three weeks. The model looks for stocks in a steady uptrend that have paused briefly and are now turning back up.',
   },
   MONTH: {
     label: 'Month',
-    bookTitle: 'Top 10 monthly books',
+    bookTitle: 'Month model · 10 names screened',
     mandate:
       'Quality-and-value compounders with improving estimates, rebalanced monthly around PH macro and sector rotation.',
     stance: 'Core accumulation',
     holding: '1–3 months',
     friendlyTab: 'Medium (1–3 Mos)',
-    friendlyTitle: 'Best Medium-Term Stock Picks (1–3 Months)',
+    friendlyTitle: 'Medium-term names screened (1–3 months)',
     friendlySummary:
-      'Hold for one to three months. The desk favours solid, well-priced companies with improving prospects and a supportive Philippine backdrop.',
+      'Planned holding is one to three months. The model favours solid, well-priced companies with improving prospects and a supportive Philippine backdrop.',
   },
   YEAR: {
     label: 'Year',
-    bookTitle: 'Top 10 yearly compounders',
+    bookTitle: 'Year model · 10 names screened',
     mandate:
       'Multi-year compounders bought in Weinstein Stage 2 with dividend support, reviewed each quarter rather than each close.',
     stance: 'Compound',
     holding: '12+ months',
     friendlyTab: 'Long-Term (1+ Yr)',
-    friendlyTitle: 'Best Long-Term Stocks to Grow Money (1+ Year)',
+    friendlyTitle: 'Long-term names screened (1+ year)',
     friendlySummary:
-      'Hold for a year or more. The desk looks for strong companies in long-term uptrends that also pay dividends, reviewed every quarter rather than every close.',
+      'Planned holding is a year or more. The model looks for strong companies in long-term uptrends that also pay dividends, reviewed every quarter rather than every close.',
   },
 };
 

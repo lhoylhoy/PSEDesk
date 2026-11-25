@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { portfolioApi, researchApi, signalsApi } from './api/signalsApi';
 import { AdviceCardList } from './components/AdviceCardList';
 import { DropPanel } from './components/DropPanel';
+import { LegalDisclaimerGate } from './components/LegalDisclaimerGate';
 import { QuotationReportImportButton } from './components/QuotationReportImportButton';
 import { RegimeStrip } from './components/RegimeStrip';
 import { RidingNowStrip } from './components/RidingNowStrip';
@@ -12,6 +13,11 @@ import { TechnicalDisclosure } from './components/ui/TechnicalDisclosure';
 import { TooltipProvider } from './components/ui/Tooltip';
 import { formatCompactPeso, formatTimestamp, formatWeekday } from './lib/formatters';
 import { horizonMeta } from './lib/horizons';
+import {
+  clearLegalAcceptance,
+  hasAcceptedCurrentLegalVersion,
+  recordLegalAcceptance,
+} from './lib/legalConsent';
 import {
   describeFriendlyError,
   describeHistoryBanner,
@@ -69,6 +75,9 @@ const SignalTable = lazy(async () => ({
 
 export default function App() {
   const [horizon, setHorizon] = useState<Horizon>('WEEK');
+  // A first run must read the legal notice before it can reach a model verdict. The flag lives in
+  // localStorage (see lib/legalConsent.ts); everything else about the reader stays unrecorded.
+  const [legalAccepted, setLegalAccepted] = useState(() => hasAcceptedCurrentLegalVersion());
   // Persisted presentation layer: plain-English advice by default, dense terminal on demand.
   const [viewMode, setViewMode] = useViewMode();
   const [theme, setTheme] = useTheme();
@@ -95,6 +104,18 @@ export default function App() {
     setPortfolioToken((token) => token + 1);
   }, []);
   const consumeDraft = useCallback(() => setTradeDraft(null), []);
+
+  // The gate shows again when the notice changes, so a reader can never be silently held to an
+  // older disclosure.
+  const acceptLegalNotice = useCallback(() => {
+    recordLegalAcceptance();
+    setLegalAccepted(true);
+  }, []);
+
+  const reviewLegalNotice = useCallback(() => {
+    clearLegalAcceptance();
+    setLegalAccepted(false);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -238,16 +259,13 @@ export default function App() {
       const run = await signalsApi.runNow(horizon, selectedDate);
       setNotice(
         viewMode === 'simple'
-          ? `Fresh advice for ${formatWeekday(run.runDate)}: ${run.tradeCount + run.smallSizeCount} stock${
-              run.tradeCount + run.smallSizeCount === 1 ? '' : 's'
-            } worth buying now, ${run.watchOnlyCount} to wait on, and about ${run.recommendedCashPct.toFixed(
-              0,
-            )}% of your money kept in cash.`
-          : `${run.items.length} names ranked for ${formatWeekday(run.runDate)} · ${run.tradeCount} trade / ${
-              run.smallSizeCount
-            } small / ${run.watchOnlyCount} watch · ${run.recommendedCashPct.toFixed(0)}% cash · ${
-              run.drops.length
-            } exit${run.drops.length === 1 ? '' : 's'} reconciled against the prior run.`,
+          ? `Fresh screen for ${formatWeekday(run.runDate)}: ${run.tradeCount + run.smallSizeCount} name${run.tradeCount + run.smallSizeCount === 1 ? '' : 's'
+          } cleared the fee-adjusted test, ${run.watchOnlyCount} stayed watch-only, and the model kept about ${run.recommendedCashPct.toFixed(
+            0,
+          )}% in cash.`
+          : `${run.items.length} names ranked for ${formatWeekday(run.runDate)} · ${run.tradeCount} trade / ${run.smallSizeCount
+          } small / ${run.watchOnlyCount} watch · ${run.recommendedCashPct.toFixed(0)}% cash · ${run.drops.length
+          } exit${run.drops.length === 1 ? '' : 's'} reconciled against the prior run.`,
       );
 
       if (selectedDate === run.runDate) {
@@ -328,14 +346,12 @@ export default function App() {
     (result: QuotationReportImportResult) => {
       setError(null);
       setNotice(
-        `Imported the PSE Daily Quotation Report for ${formatWeekday(result.tradeDate)} · ${
-          result.matchedTickerCount
+        `Imported the PSE Daily Quotation Report for ${formatWeekday(result.tradeDate)} · ${result.matchedTickerCount
         } tickers matched · ${result.updatedMetricCount} metrics updated · market net foreign ${formatCompactPeso(
           result.marketNetForeignFlowPhp,
-        )}${
-          result.suspendedTickers.length > 0
-            ? ` · ${result.suspendedTickers.length} suspended (${result.suspendedTickers.join(', ')})`
-            : ''
+        )}${result.suspendedTickers.length > 0
+          ? ` · ${result.suspendedTickers.length} suspended (${result.suspendedTickers.join(', ')})`
+          : ''
         }.`,
       );
 
@@ -462,7 +478,7 @@ export default function App() {
                   <summary className="cursor-pointer text-[10px] text-slate-500">
                     Technical details
                   </summary>
-                  <p className="mt-1 break-words font-mono text-[10px] leading-relaxed text-slate-500">
+                  <p className="mt-1 wrap-break-word font-mono text-[10px] leading-relaxed text-slate-500">
                     {error.technical}
                   </p>
                 </details>
@@ -502,60 +518,60 @@ export default function App() {
                   <DropPanel drops={drops} friendly />
                 </>
               ) : (
-              <>
-                <div className="flex flex-wrap items-end justify-between gap-2 px-1">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-100">
-                      {formatWeekday(run.runDate)} · {horizonMeta[horizon].label} book · {items.length} ranked
-                      names
-                    </h2>
-                    <p className="mt-0.5 text-[11px] text-slate-500">
-                      Generated {formatTimestamp(run.createdAtUtc)} · drift recomputed server-side ·{' '}
-                      {run.tradeCount} trade / {run.smallSizeCount} small / {run.watchOnlyCount} watch ·{' '}
-                      {run.recommendedCashPct.toFixed(0)}% cash ·{' '}
-                      {drops.length} exit{drops.length === 1 ? '' : 's'} versus the prior session
-                    </p>
+                <>
+                  <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-100">
+                        {formatWeekday(run.runDate)} · {horizonMeta[horizon].label} book · {items.length} ranked
+                        names
+                      </h2>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        Generated {formatTimestamp(run.createdAtUtc)} · drift recomputed server-side ·{' '}
+                        {run.tradeCount} trade / {run.smallSizeCount} small / {run.watchOnlyCount} watch ·{' '}
+                        {run.recommendedCashPct.toFixed(0)}% cash ·{' '}
+                        {drops.length} exit{drops.length === 1 ? '' : 's'} versus the prior session
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {refreshing && data ? (
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
+                          Refreshing…
+                        </span>
+                      ) : null}
+                      <QuotationReportImportButton
+                        date={displayDate}
+                        disabled={busy !== null}
+                        onImported={handleQuotationImported}
+                        onError={handleQuotationError}
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {refreshing && data ? (
-                      <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
-                        Refreshing…
-                      </span>
-                    ) : null}
-                    <QuotationReportImportButton
-                      date={displayDate}
-                      disabled={busy !== null}
-                      onImported={handleQuotationImported}
-                      onError={handleQuotationError}
-                    />
-                  </div>
-                </div>
 
-                <Suspense
-                  fallback={
-                    <div
-                      className="panel h-96 animate-pulse"
-                      aria-label="Loading the ranked table"
+                  <Suspense
+                    fallback={
+                      <div
+                        className="panel h-96 animate-pulse"
+                        aria-label="Loading the ranked table"
+                      />
+                    }
+                  >
+                    <SignalTable
+                      items={items}
+                      horizon={horizon}
+                      onSelect={setActiveTicker}
+                      onTakeTrade={handleTakeSignal}
+                      recommendedCashPct={run.recommendedCashPct}
                     />
-                  }
-                >
-                  <SignalTable
-                    items={items}
-                    horizon={horizon}
-                    onSelect={setActiveTicker}
-                    onTakeTrade={handleTakeSignal}
-                    recommendedCashPct={run.recommendedCashPct}
-                  />
-                </Suspense>
-                <DropPanel drops={drops} />
-              </>
+                  </Suspense>
+                  <DropPanel drops={drops} />
+                </>
               )
             ) : (
               <section className="panel flex flex-col items-start gap-3 p-6">
                 <h2 className="text-sm font-semibold text-slate-100">
                   {viewMode === 'simple'
                     ? data.dates.length === 0
-                      ? 'No prices yet — get your first advice'
+                      ? 'No prices yet — run the first screen'
                       : 'Prices are loaded, but no advice has been computed yet'
                     : data.dates.length === 0
                       ? 'No live session stored yet'
@@ -563,20 +579,21 @@ export default function App() {
                 </h2>
                 {viewMode === 'simple' ? (
                   <p className="max-w-2xl text-xs leading-relaxed text-slate-400">
-                    Press <span className="font-semibold text-slate-200">Get Latest Advice</span> and the desk
-                    downloads today’s PSE prices and company filings, then tells you which stocks are worth buying, at
-                    what price, and where to cut your losses. The first run needs an internet connection.
+                    Press <span className="font-semibold text-slate-200">Run Latest Screen</span> and the desk
+                    downloads today’s PSE prices and company filings, then reports which stocks clear its
+                    fee-adjusted test, the Peso levels the model used, and where its cut-loss sits. The first run
+                    needs an internet connection.
                   </p>
                 ) : (
                   <p className="max-w-2xl text-xs leading-relaxed text-slate-400">
                     {data.dates.length === 0
                       ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
-                      : 'This session has a live market snapshot but no ranked list for this horizon. Run the pipeline to score the liquid universe, retrieve the matching playbooks, call the desk model and persist the Top 10.'}
+                      : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
                   <Button variant="primary" busy={busy === 'run'} onClick={handleRunNow} disabled={busy !== null}>
-                    {viewMode === 'simple' ? 'Get Latest Advice' : 'Run pipeline'}
+                    {viewMode === 'simple' ? 'Run Latest Screen' : 'Run screen'}
                   </Button>
                   {viewMode === 'simple' ? null : (
                     <Button variant="secondary" onClick={() => setKnowledgeOpen(true)}>
@@ -597,7 +614,7 @@ export default function App() {
                     <p className="text-[11px] leading-relaxed text-slate-400">
                       {data.dates.length === 0
                         ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
-                        : 'This session has a live market snapshot but no ranked list for this horizon. Run the pipeline to score the liquid universe, retrieve the matching playbooks, call the desk model and persist the Top 10.'}
+                        : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
                     </p>
                   </TechnicalDisclosure>
                 ) : null}
@@ -613,7 +630,19 @@ export default function App() {
               ? 'PSE Signal Desk · four holding periods · prices already include broker fees · Manila time (UTC+8)'
               : 'PSE Signal Desk · four horizons · board-lot rounded plans · Manila time (UTC+8)'}
           </span>
-          <span>Research tooling only, not investment advice.</span>
+          <span className="flex flex-wrap items-center gap-2">
+            <span>
+              Research tooling only, not investment advice. Prices from Yahoo Finance and PSE Edge under a
+              personal, non-commercial posture.
+            </span>
+            <button
+              type="button"
+              onClick={reviewLegalNotice}
+              className="underline decoration-dotted underline-offset-2 hover:text-slate-400"
+            >
+              Review the notice
+            </button>
+          </span>
         </footer>
 
         {activeItem ? (
@@ -688,6 +717,7 @@ export default function App() {
             />
           </Suspense>
         ) : null}
+        {legalAccepted ? null : <LegalDisclaimerGate onAccept={acceptLegalNotice} />}
       </div>
     </TooltipProvider>
   );

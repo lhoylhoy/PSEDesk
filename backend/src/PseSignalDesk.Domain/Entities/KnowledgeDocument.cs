@@ -1,7 +1,7 @@
 namespace PseSignalDesk.Domain.Entities;
 
 /// <summary>
-/// One curated playbook or uploaded trading book indexed into the SQLite RAG library.
+/// One curated playbook or uploaded research document indexed into the SQLite RAG library.
 /// The document row carries the horizon/category tags and the content hash so an
 /// unchanged file is never re-chunked or re-embedded on startup.
 /// </summary>

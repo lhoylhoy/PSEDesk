@@ -149,7 +149,7 @@ export interface PortfolioSettingsUpdate {
   targetAnnualVolPct?: number;
 }
 
-/** Payload for logging a position ("Take Trade"). */
+/** Payload for recording a paper position ("Record a trade"). */
 export interface OpenTradeInput {
   ticker: string;
   shares: number;

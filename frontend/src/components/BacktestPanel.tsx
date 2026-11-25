@@ -124,8 +124,9 @@ function Curve({ result }: { result: BacktestResult }) {
 
 /**
  * Causal walk-forward replay: the horizon's own entry, stop and time-stop rules replayed on
- * the real tape with one position at a time and the full round-trip fee. A 503 from the API
- * is shown verbatim — the desk never fabricates a curve.
+ * the real tape with a five-position book, the portfolio heat and sector caps, the full
+ * round-trip fee and a board-lot slippage estimate. A 503 from the API is shown verbatim — the
+ * desk never fabricates a curve.
  */
 export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelProps) {
   const simple = viewMode === 'simple';
@@ -211,8 +212,13 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
       ) : null}
       <p className="max-w-3xl text-[11px] leading-relaxed text-slate-400">
         {simple
-          ? `A practice run on real past prices: one trade at a time, about 1% of the practice money risked per trade, board lots, broker fees and a realistic fill cost included. It is then compared with just buying the whole market (the PSEi) and holding it. Nothing here looks into the future — every entry is decided only on prices that came before it.`
-          : 'One position at a time, 1% of equity risked at the stop, board-lot rounded, charged the full round-trip fee plus a board-lot slippage estimate, and measured against holding PSEI.PS over the identical window. Alpha is the slippage-adjusted net return minus the index — the desk pays friction, the benchmark does not. Every entry is decided on the bars that preceded it: no look-ahead, no re-optimised parameters, no synthetic fill.'}
+          ? `A simulated run on real past prices — not a real account. Up to five trades at once, about 1% of the practice money risked per trade inside a 6% total risk limit, at most two names and 35% of equity per sector, board lots, the full 0.690% round-trip broker fee and a realistic fill cost. It is then compared with just buying the whole market (the PSEi) and holding it. Nothing here looks into the future: every entry is decided only on prices that came before it.`
+          : 'Up to five concurrent positions, 1% of equity risked at the stop inside a 6% portfolio heat cap, at most two names and 35% of equity per sector, fractional-Kelly sizing, board-lot rounded, charged the 0.690% statutory round trip plus a board-lot slippage estimate, with the money-manager weights refitted every 60 sessions, and measured against holding PSEI.PS over the identical window. Alpha is the slippage-adjusted net return minus the index — the desk pays friction, the benchmark does not. Every entry is decided on the bars that preceded it: no look-ahead, no re-optimised parameters, no synthetic fill.'}
+      </p>
+      <p className="mt-2 max-w-3xl rounded-lg border border-line/70 bg-ink-850/60 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+        These are hypothetical results from one simulated path. They are not the record of a real
+        account, they exclude taxes and your broker’s own pricing, and a favourable past path does not
+        repeat. Past or simulated performance is not a reliable indicator of future results.
       </p>
 
       <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -261,9 +267,9 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
           />
         ) : null}
         <Tile
-          label={simple ? 'A year at this pace' : 'CAGR'}
+          label={simple ? 'Simulated CAGR' : 'CAGR'}
           value={formatPercent(result.cagrPct, 1)}
-          detail={simple ? 'if the year kept going like this' : 'compound annual growth'}
+          detail={simple ? 'annualised · not a forecast' : 'compound annual growth'}
           tone={(result.cagrPct ?? 0) >= 0 ? 'text-mint-400' : 'text-rose-400'}
         />
         <Tile

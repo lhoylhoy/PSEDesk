@@ -111,7 +111,13 @@ public static class MarketDirectionService
         }
 
         var confidence = GradeConfidence(score, pillars);
-        var (headline, actionSummary) = BuildCopy(call, direction, steppedDown, run, actionableCount);
+        var (headline, actionSummary) = BuildCopy(
+            call,
+            direction,
+            steppedDown,
+            run,
+            actionableCount,
+            snapshot.MarketRegime == MarketRegime.BEARISH);
 
         if (reasons.Count < 2)
         {
@@ -374,7 +380,8 @@ public static class MarketDirectionService
         string direction,
         bool steppedDown,
         SignalRun? run,
-        int actionableCount)
+        int actionableCount,
+        bool bearish)
     {
         var cashPct = run is { RecommendedCashPct: > 0m }
             ? (int)Math.Round(run.RecommendedCashPct, MidpointRounding.AwayFromZero)
@@ -385,32 +392,36 @@ public static class MarketDirectionService
                 _ => 80
             };
 
+        // Descriptive model posture only: the sentence reports what the desk's own sizing did,
+        // it never instructs the reader to place an order.
         var picksText = run is null
             ? string.Empty
             : actionableCount == 0
-                ? " No pick cleared its fees today, so there is nothing to buy."
-                : $" {actionableCount} pick{(actionableCount == 1 ? string.Empty : "s")} cleared the fee-adjusted edge test.";
+                ? " No setup cleared its fee-adjusted edge test, so the list stays empty."
+                : $" {actionableCount} setup{(actionableCount == 1 ? string.Empty : "s")} cleared the fee-adjusted edge test.";
 
         if (steppedDown)
         {
             return (
-                "The tape is leaning up — but there is nothing worth chasing",
-                $"Keep about {cashPct}% in cash. Good setups are scarce today, so let the market come to you.{picksText}");
+                "The tape is leaning up — but nothing cleared the hurdle",
+                $"Model posture holds about {cashPct}% cash. Qualifying setups are scarce in this session.{picksText}");
         }
 
         return call switch
         {
             RideTheWave => (
                 "Ride the wave — the market is leaning up",
-                $"Keep about {cashPct}% in cash and buy only the strongest setups below.{picksText}"),
+                $"Model posture holds about {cashPct}% cash and focuses on the highest-ranked setups below.{picksText}"),
             BeSelective => (
                 direction == DownTrend
                     ? "Choose very carefully — the market is leaning down"
                     : "Be selective — the market is not clearly trending",
-                $"Keep about {cashPct}% in cash and only take the clearest, fee-paid setups.{picksText}"),
+                $"Model posture holds about {cashPct}% cash and accepts only setups that clear their fees.{picksText}"),
             _ => (
-                "Keep your money in cash for now",
-                $"Keep about {cashPct}% in cash. Fewer trades work when the index is falling, so protecting your capital comes first.{picksText}")
+                "Defensive tape — model stands in cash",
+                bearish
+                    ? $"Model posture holds about {cashPct}% cash because fewer setups succeed in a bearish regime.{picksText}"
+                    : $"Model posture holds about {cashPct}% cash because few setups in this tape clear their fees.{picksText}")
         };
     }
 

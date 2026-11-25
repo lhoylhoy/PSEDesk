@@ -6,8 +6,8 @@ namespace PseSignalDesk.WebApi.Controllers;
 
 /// <summary>
 /// REST surface for the AI Money Manager's knowledge base: list the indexed playbooks and
-/// uploads, re-index the shipped Markdown files, upload a trading book and delete an
-/// uploaded book. Built-in playbooks are protected from deletion.
+/// uploads, re-index the shipped Markdown files, upload personal research notes or licensed
+/// documents, and delete an upload. Built-in playbooks are protected from deletion.
 /// </summary>
 [ApiController]
 [Route("api/knowledge")]
@@ -49,8 +49,11 @@ public sealed class KnowledgeController : ControllerBase
     }
 
     /// <summary>
-    /// Uploads a Markdown, plain-text or PDF trading book. The file is scoped to the
-    /// selected horizons so it never outranks the horizon-specific playbooks.
+    /// Uploads a Markdown, plain-text or PDF document to ground the reasoning model. The uploader
+    /// must attest that they hold the rights to index the document, that it contains no personal
+    /// information or material non-public information, and that its retrieved excerpts will be
+    /// sent to the configured Ollama Cloud endpoint. The file is scoped to the selected horizons
+    /// so it never outranks the horizon-specific playbooks.
     /// </summary>
     [HttpPost("upload")]
     [RequestSizeLimit(MaxUploadBytes)]
@@ -59,15 +62,30 @@ public sealed class KnowledgeController : ControllerBase
         [FromForm] string? title,
         [FromForm] string? horizons,
         [FromForm] string? categories,
-        CancellationToken cancellationToken)
+        [FromForm] bool confirmRightsAndCloudProcessing = false,
+        CancellationToken cancellationToken = default)
     {
+        if (!confirmRightsAndCloudProcessing)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Rights and cloud-processing confirmation required",
+                Detail = "Confirm that you hold the rights or permission to index this document, that it " +
+                         "contains no personal information or material non-public information, and that its " +
+                         "retrieved passages are sent to the configured Ollama Cloud endpoint. Send " +
+                         "confirmRightsAndCloudProcessing=true with the upload."
+            });
+        }
+
         if (file is null || file.Length == 0)
         {
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Missing file",
-                Detail = "Attach the trading book as multipart form data in the 'file' field (Markdown, TXT or PDF)."
+                Detail = "Attach a research note or licensed document as multipart form data in the 'file' " +
+                         "field (Markdown, TXT or PDF)."
             });
         }
 
@@ -123,7 +141,7 @@ public sealed class KnowledgeController : ControllerBase
     }
 
     /// <summary>
-    /// Deletes an uploaded book. Built-in playbooks are read-only (HTTP 409).
+    /// Deletes an uploaded document. Built-in playbooks are read-only (HTTP 409).
     /// </summary>
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)

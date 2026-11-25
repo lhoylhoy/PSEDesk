@@ -63,7 +63,7 @@ export function DropPanel({ drops, friendly = false }: DropPanelProps) {
         <p className="mt-4 rounded-xl border border-dashed border-line/80 bg-ink-950/40 px-4 py-6 text-center text-xs text-slate-500">
           {friendly
             ? 'Nothing changed versus the last list — the same names are still in play.'
-            : 'No names left the Top 10 versus the previous session.'}
+            : 'No names left the ranked list versus the previous session.'}
         </p>
       ) : (
         <ul className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">

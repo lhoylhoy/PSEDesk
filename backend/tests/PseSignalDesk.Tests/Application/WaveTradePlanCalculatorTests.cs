@@ -152,7 +152,7 @@ public sealed class WaveTradePlanCalculatorTests
         Assert.Equal(2_298.15m, advice.UnrealizedNetPnlPhp!.Value);
         Assert.Equal(0.28m, advice.UnrealizedR);
         Assert.Equal(500, advice.RecommendedTrimShares);
-        Assert.Contains("Keep holding", advice.Headline, StringComparison.Ordinal);
+        Assert.Contains("Plan unchanged", advice.Headline, StringComparison.Ordinal);
         Assert.Contains("PHP 92.50", advice.Explanation, StringComparison.Ordinal);
     }
 
@@ -164,7 +164,7 @@ public sealed class WaveTradePlanCalculatorTests
 
         Assert.Equal("MOVE_STOP_TO_BREAKEVEN", advice.Action);
         Assert.Equal(100.70m, advice.SuggestedStopPrice);
-        Assert.Contains("free ride", advice.Headline, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Break-even stop", advice.Headline, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("PHP 100.70", advice.Explanation, StringComparison.Ordinal);
     }
 
@@ -178,7 +178,7 @@ public sealed class WaveTradePlanCalculatorTests
 
         Assert.Equal("TRAIL_STOP_EMA20", advice.Action);
         Assert.Equal(108m, advice.SuggestedStopPrice);
-        Assert.Contains("Ride the wave", advice.Headline, StringComparison.Ordinal);
+        Assert.Contains("trail the stop", advice.Headline, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -190,11 +190,11 @@ public sealed class WaveTradePlanCalculatorTests
             "ICT", 100m, 115m, 1_000, 5m, 112m, horizon: SignalHorizon.WEEK);
 
         Assert.Equal("STOP_BREACHED", stopped.Action);
-        Assert.Contains("Sell now", stopped.Headline, StringComparison.Ordinal);
+        Assert.Contains("Cut-loss level breached", stopped.Headline, StringComparison.Ordinal);
         Assert.True(stopped.NetReturnPct < 0m);
 
         Assert.Equal("TARGET_REACHED", target.Action);
-        Assert.Contains("Take profit", target.Headline, StringComparison.Ordinal);
+        Assert.Contains("Target reached", target.Headline, StringComparison.Ordinal);
         Assert.True(target.NetReturnPct > 0m);
     }
 

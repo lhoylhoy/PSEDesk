@@ -8,8 +8,9 @@ namespace PseSignalDesk.Tests.Application;
 /// <summary>
 /// The market call is the first thing a beginner reads, so these tests pin the promises it
 /// makes: five deterministic pillars around a neutral 50, a hard cash override on a bearish
-/// regime, a "nothing worth chasing" step-down when the list is empty, and an honest
-/// treatment of unreported dials (never a fabricated 0% or PHP 0).
+/// regime, a "nothing cleared the hurdle" step-down when the list is empty, descriptive
+/// rather than imperative copy, and an honest treatment of unreported dials (never a
+/// fabricated 0% or PHP 0).
 /// </summary>
 public sealed class MarketDirectionServiceTests
 {
@@ -27,7 +28,7 @@ public sealed class MarketDirectionServiceTests
         Assert.Equal(MarketDirectionService.HighConfidence, forecast.Confidence);
         Assert.Contains("Ride the wave", forecast.Headline, StringComparison.Ordinal);
         Assert.Contains("20%", forecast.ActionSummary, StringComparison.Ordinal);
-        Assert.Contains("2 picks", forecast.ActionSummary, StringComparison.Ordinal);
+        Assert.Contains("2 setups", forecast.ActionSummary, StringComparison.Ordinal);
         Assert.InRange(forecast.Reasons.Count, 2, 4);
         Assert.All(forecast.Reasons, reason => Assert.False(string.IsNullOrWhiteSpace(reason)));
     }
@@ -60,8 +61,10 @@ public sealed class MarketDirectionServiceTests
         Assert.Contains(
             forecast.Reasons,
             reason => reason.Contains("No pick cleared its fees", StringComparison.Ordinal));
-        Assert.Contains("nothing worth chasing", forecast.Headline, StringComparison.Ordinal);
-        Assert.Contains("nothing to buy", forecast.ActionSummary, StringComparison.Ordinal);
+        Assert.Contains("cleared the hurdle", forecast.Headline, StringComparison.Ordinal);
+        Assert.Contains("list stays empty", forecast.ActionSummary, StringComparison.Ordinal);
+        // The copy is descriptive: it must never tell the reader to place an order.
+        Assert.DoesNotContain("you ", forecast.Headline + " " + forecast.ActionSummary, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

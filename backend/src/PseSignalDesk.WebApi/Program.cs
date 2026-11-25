@@ -70,6 +70,21 @@ builder.Services
     .AddOptions<KnowledgeBaseOptions>()
     .Bind(builder.Configuration.GetSection(KnowledgeBaseOptions.SectionName));
 
+// Deployment-scope guardrails (personal-use market data + optional operator key). Bound from the
+// "Compliance" section; the key itself is meant to arrive through PSEDESK_OPERATOR_API_KEY so it
+// never has to be written into appsettings.json.
+builder.Services
+    .AddOptions<ComplianceOptions>()
+    .Bind(builder.Configuration.GetSection(ComplianceOptions.SectionName))
+    .PostConfigure(options =>
+    {
+        var environmentOperatorKey = builder.Configuration["PSEDESK_OPERATOR_API_KEY"];
+        if (!string.IsNullOrWhiteSpace(environmentOperatorKey))
+        {
+            options.OperatorApiKey = environmentOperatorKey.Trim();
+        }
+    });
+
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? new[] { "http://localhost:5173" };
@@ -87,11 +102,18 @@ builder.Services.AddHttpClient<IOllamaSignalEngine, OllamaSignalEngine>((service
     client.Timeout = TimeSpan.FromSeconds(Math.Max(30, options.RequestTimeoutSeconds));
 });
 
-builder.Services.AddHttpClient<IMarketDataProvider, PseMarketDataProvider>(client =>
+builder.Services.AddHttpClient<IMarketDataProvider, PseMarketDataProvider>((serviceProvider, client) =>
 {
+    var marketOptions = serviceProvider.GetRequiredService<IOptions<MarketDataOptions>>().Value;
     client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+
+    // A transparent, application-identifying User-Agent. The desk used to impersonate a desktop
+    // Chrome build to get past upstream bot checks; that misrepresents the client and breaches
+    // the feeds' terms of use, so it is configurable instead.
+    if (!string.IsNullOrWhiteSpace(marketOptions.UserAgent))
+    {
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(marketOptions.UserAgent.Trim());
+    }
 });
 
 builder.Services.AddHttpClient<OllamaEmbeddingClient>(client =>
@@ -139,6 +161,10 @@ app.UseExceptionHandler();
 app.UseMiddleware<RequestCancellationMiddleware>();
 
 app.UseCors("FrontendPolicy");
+
+// Refuses non-loopback traffic in PersonalLocal mode (the scraped Yahoo Finance / PSE Edge feed
+// may not be redistributed off this machine) and enforces the optional operator key on writes.
+app.UseMiddleware<ComplianceGuardMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

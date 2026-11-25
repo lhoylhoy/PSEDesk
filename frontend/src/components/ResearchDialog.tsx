@@ -92,7 +92,7 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * "I already own it": the server's ladder verdict (stop breached → target hit → trail → lock
+ * The holding scenario: the server's ladder verdict (stop breached → target hit → trail → lock
  * break-even → hold) with the fee-paid result of the reader's own cost basis. Nothing here is
  * inferred in the browser.
  */
@@ -421,8 +421,8 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
   const [research, setResearch] = useState<TickerResearch | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  // Two questions, one dialog: "should I buy it" and "I already own it". The second tab sends
-  // the reader's own cost to the server, which grades the position against its own ladder.
+  // Two scenarios, one dialog: a fresh entry, and a position the reader already holds. The second
+  // tab sends the reader's own cost to the server, which grades the position against its own ladder.
   const [tab, setTab] = useState<'buy' | 'own'>('buy');
   const [averageCost, setAverageCost] = useState('');
   const [sharesHeld, setSharesHeld] = useState('');
@@ -577,7 +577,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
             </DialogTitle>
             <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
               {simple
-                ? 'Type the company name you know — Jollibee, Meralco, PLDT — or its PSE symbol. The desk will say whether it is worth buying, where to take profit and where to cut your losses.'
+                ? 'Type the company name you know — Jollibee, Meralco, PLDT — or its PSE symbol. The model prices the entry, the target and the cut-loss on that name and reports what it would size.'
                 : 'Any PSE symbol, ranked or not. The desk pulls the live OHLCV series plus the latest PSE Edge disclosures and prices the ATR plan, the odds and the board-lot ticket on the server.'}
             </DialogDescription>
           </div>
@@ -621,7 +621,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
                 disabled={!canTake}
                 className="flex-1 sm:flex-none"
               >
-                {simple ? 'Practise This Trade' : `Take trade ${ticket ? ` · ${formatInteger(ticket.shares)} sh` : ''}`}
+                {simple ? 'Practise This Trade' : `Record in blotter ${ticket ? ` · ${formatInteger(ticket.shares)} sh` : ''}`}
               </Button>
             ) : null}
           </div>
@@ -671,7 +671,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
           ) : null}
         </form>
 
-        {/* Simple mode asks two questions in one dialog: should I buy, and what about what I own. */}
+        {/* Simple mode runs two model scenarios in one dialog: a fresh entry, and one already held. */}
         <Tabs
           value={tab}
           className="mt-3"
@@ -686,8 +686,8 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
           }}
         >
           <TabsList>
-            <TabsTrigger value="buy">{simple ? 'Buy plan' : 'New entry'}</TabsTrigger>
-            <TabsTrigger value="own">{simple ? 'I already own it' : 'Existing position'}</TabsTrigger>
+            <TabsTrigger value="buy">{simple ? 'Entry scenario' : 'New entry'}</TabsTrigger>
+            <TabsTrigger value="own">{simple ? 'Holding scenario' : 'Existing position'}</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -748,7 +748,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
             </div>
             <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600">
               {simple
-                ? 'The desk compares your cost with today’s price after broker fees, then says hold, trim, take profit or cut — using the same four steps as the buy plan.'
+                ? 'The desk compares your cost with today’s price after broker fees, then reports where the position sits on the same four-step ladder the entry plan uses.'
                 : 'The server grades the position against its own stop / target / trail ladder. Shares only scale the peso result; they never change the verdict.'}
             </p>
           </form>
