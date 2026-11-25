@@ -119,7 +119,7 @@ Verification: `dotnet test PseSignalDesk.slnx` → **363 passed / 0 failed**; `n
 - [x] `.gitignore` for .NET build/test artefacts, restored NuGet caches (`**/.nuget/`, `*.nupkg`), Node/Vite (`node_modules`, `dist`, `*.tsbuildinfo`), SQLite files, `.env` overrides (`.env.example` tracked), editor/OS noise and the stray `/Library/` folder — verified against 26 sample paths with `git check-ignore -v` (2026-11-25).
 - [x] `.vscode/launch.json` + `.vscode/tasks.json`: API launch (build on launch) and attach,
       Chrome terminal attach, full-stack compound, plus backend build/test and frontend build/dev
-      tasks.
+      tasks, and `backend: free port 5236` (SIGTERM a stale `dotnet run` orphan before relaunching).
 - [x] `frontend/.env.example`.
 - [x] Memory bank (this directory) + `.clinerules/memory-bank.md` protocol.
 

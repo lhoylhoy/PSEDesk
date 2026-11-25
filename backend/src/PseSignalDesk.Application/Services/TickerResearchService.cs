@@ -17,24 +17,34 @@ namespace PseSignalDesk.Application.Services;
 /// </summary>
 public sealed class TickerResearchService
 {
+    /// <summary>
+    /// Notional the research page prices its simulated round-trip slippage at. It matches the
+    /// pod-shop clip the trainer and the governor assume, so a researched name and a published
+    /// pick are friction-priced on the same scale.
+    /// </summary>
+    public const decimal ResearchSizingNotionalPhp = 50_000m;
+
     private readonly IMarketDataProvider _marketData;
     private readonly ISignalRepository _signals;
     private readonly QuantitativeFilterService _quantFilter;
     private readonly ProbabilisticEdgeService _edge;
     private readonly PortfolioService _portfolio;
+    private readonly SignalOutcomeService? _outcomes;
 
     public TickerResearchService(
         IMarketDataProvider marketData,
         ISignalRepository signals,
         QuantitativeFilterService quantFilter,
         ProbabilisticEdgeService edge,
-        PortfolioService portfolio)
+        PortfolioService portfolio,
+        SignalOutcomeService? outcomes = null)
     {
         _marketData = marketData;
         _signals = signals;
         _quantFilter = quantFilter;
         _edge = edge;
         _portfolio = portfolio;
+        _outcomes = outcomes;
     }
 
     /// <summary>
@@ -139,39 +149,58 @@ public sealed class TickerResearchService
             ? netForeign / metric.AvgTurnover20dPhp
             : (decimal?)null;
 
+        // On-demand research must be priced by the same dials the daily run uses, or the same
+        // name would show different odds depending on which door the reader came in through.
+        // The regime is recomputed causally from the PSEi bars just fetched; the last stored
+        // session is the only honest fallback when the index series is unavailable.
+        var regime = ResolveRegime(indexBars, latestSnapshot?.MarketRegime);
+        var feeRate = PseBoardLotService.ComputeEffectiveRoundTripFeeRate(
+            plan.Entry,
+            ResearchSizingNotionalPhp,
+            metric.AvgTurnover20dPhp,
+            metric.AtrPct);
+        var learnedModel = await TryLoadLearnedModelAsync(horizon, cancellationToken);
+        var calibrationOffsetPct = await TryLoadCalibrationOffsetPctAsync(horizon, cancellationToken);
+
         var assessment = _edge.EvaluateSetup(new SetupEdgeRequest(
             plan.Entry,
             plan.StopLoss,
             plan.Target,
             metric.QuantPreScore,
-            MarketRegime.NEUTRAL,
+            regime,
             profile,
             empiricalWinRate,
             metric.RelativeStrength63d,
             metric.VolatilityContractionRatio,
             metric.WeinsteinStage,
-            BreadthAboveSma50Pct: null,
+            BreadthAboveSma50Pct: latestSnapshot?.BreadthAboveSma50Pct,
             TrapFlags: trapFlags,
             AtrPct: metric.AtrPct,
             TrailingDividendYieldPct: metric.TrailingDividendYieldPct,
             SectorQuadrant: SectorRotationService.QuadrantFor(sectorRotation, metric.Sector),
             TickSpreadPct: tickSpreadPct,
             UpDownVolumeRatio20d: metric.UpDownVolumeRatio20d,
+            CalibrationOffsetPct: calibrationOffsetPct,
+            SlippageInclusiveFeeRate: feeRate,
             NetForeignTurnoverRatio: foreignTurnoverRatio,
             Us10YClosePct: latestSnapshot?.Us10YClosePct,
-            Sector: metric.Sector));
+            Sector: metric.Sector,
+            LearnedModel: learnedModel));
 
         OrderTicketDto? ticket = null;
 
         try
         {
+            // The ticket is sized off the very assessment the page shows, so the peso figure and
+            // the Kelly stake can never disagree.
             ticket = await _portfolio.GetOrderTicketAsync(
                 ticker,
                 plan.Entry,
                 plan.StopLoss,
                 plan.Target,
                 assessment.Verdict,
-                cancellationToken);
+                cancellationToken,
+                assessment);
         }
         catch (PortfolioRuleViolationException)
         {
@@ -354,6 +383,85 @@ public sealed class TickerResearchService
         }
 
         return await _signals.GetMetricAsync(snapshot.TradeDate, ticker, cancellationToken);
+    }
+
+    /// <summary>
+    /// The index regime the research prices against. With a live PSEi series it is recomputed
+    /// causally from that series (close versus its own 50- and 200-session averages); otherwise
+    /// the stored session's regime is used, and only when neither exists does it fall back to
+    /// NEUTRAL rather than inventing a read.
+    /// </summary>
+    private static MarketRegime ResolveRegime(
+        IReadOnlyList<OhlcvBar> indexBars,
+        MarketRegime? storedRegime)
+    {
+        var closes = indexBars.Select(bar => bar.Close).ToList();
+        var sma50 = QuantitativeFilterService.ComputeSma(closes, QuantitativeFilterService.SmaShortPeriod);
+        var sma200 = QuantitativeFilterService.ComputeSma(closes, QuantitativeFilterService.SmaLongPeriod);
+
+        if (sma50 is not decimal shortAverage || sma200 is not decimal longAverage)
+        {
+            return storedRegime ?? MarketRegime.NEUTRAL;
+        }
+
+        var close = closes[^1];
+
+        return close >= shortAverage && close >= longAverage
+            ? MarketRegime.BULLISH
+            : close < shortAverage && close < longAverage
+                ? MarketRegime.BEARISH
+                : MarketRegime.NEUTRAL;
+    }
+
+    /// <summary>
+    /// The promoted money-manager model for this horizon, or null when none has earned
+    /// promotion. A storage failure must not fail a research request, so it degrades to the
+    /// structural prior.
+    /// </summary>
+    private async Task<LearnedEdgeModel?> TryLoadLearnedModelAsync(
+        SignalHorizon horizon,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return LearnedEdgeModel.FromActive(await _signals.GetTrainedModelAsync(horizon, cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The desk's own walk-forward calibration offset for this horizon: how far the published
+    /// probabilities have run above or below the outcomes they actually produced. Zero when the
+    /// ledger has nothing graded yet.
+    /// </summary>
+    private async Task<decimal> TryLoadCalibrationOffsetPctAsync(
+        SignalHorizon horizon,
+        CancellationToken cancellationToken)
+    {
+        if (_outcomes is null)
+        {
+            return 0m;
+        }
+
+        try
+        {
+            return await _outcomes.ComputeLiveCalibrationOffsetPctAsync(horizon, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return 0m;
+        }
     }
 
     private static string Format(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);

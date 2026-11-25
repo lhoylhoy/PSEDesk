@@ -195,6 +195,9 @@ public sealed class TickerResearchServiceTests
             LatestSnapshot = new DailyMarketSnapshot
             {
                 TradeDate = new DateOnly(2026, 11, 24),
+                // The research now also prices the market-regime dial off the stored snapshot, so
+                // the stub declares a neutral tape: the delta under test is the sector dial alone.
+                MarketRegime = MarketRegime.NEUTRAL,
                 SectorRotationJson = MarketDataMapper.SerializeSectorRotation(leading)
             }
         };
@@ -206,6 +209,35 @@ public sealed class TickerResearchServiceTests
         Assert.Equal(
             0.02m,
             decimal.Round(withRotation.WinProbability - withoutRotation.WinProbability, 4));
+    }
+
+    [Fact]
+    public async Task ResearchAsync_prices_the_causal_regime_instead_of_the_stored_label()
+    {
+        var bars = BuildOscillatingBars(260);
+
+        var storedBullish = await CreateService(
+            new StubMarketDataProvider(BuildStock(bars), isTracked: true),
+            RepositoryWithRegime(MarketRegime.BULLISH)).ResearchAsync("ICT", SignalHorizon.WEEK);
+
+        // Same stored session, but the PSEi series the feed serves is in a downtrend: research must
+        // price the tape it can measure, and it must charge the same regime dial the daily run
+        // does, so the odds come in below the stored bullish reading.
+        var causalBearish = await CreateService(
+            new StubMarketDataProvider(BuildStock(bars), isTracked: true) { IndexBars = BuildDecliningIndexBars(260) },
+            RepositoryWithRegime(MarketRegime.BULLISH)).ResearchAsync("ICT", SignalHorizon.WEEK);
+
+        Assert.True(
+            causalBearish.WinProbability < storedBullish.WinProbability,
+            $"a bearish index priced {causalBearish.WinProbability} against a stored bullish {storedBullish.WinProbability}");
+
+        // And the stored label cannot leak back in: the same measurable tape yields the same odds
+        // whichever word the last snapshot used.
+        var contradictingLabel = await CreateService(
+            new StubMarketDataProvider(BuildStock(bars), isTracked: true) { IndexBars = BuildDecliningIndexBars(260) },
+            RepositoryWithRegime(MarketRegime.BEARISH)).ResearchAsync("ICT", SignalHorizon.WEEK);
+
+        Assert.Equal(causalBearish.WinProbability, contradictingLabel.WinProbability);
     }
 
     [Fact]
@@ -458,6 +490,44 @@ public sealed class TickerResearchServiceTests
                 Low: Math.Min(price, close) - 2.0m,
                 Close: close,
                 Volume: 1_000_000));
+
+            price = close;
+        }
+
+        return bars;
+    }
+
+    private static StubSignalRepository RepositoryWithRegime(MarketRegime regime) =>
+        new()
+        {
+            LatestSnapshot = new DailyMarketSnapshot
+            {
+                TradeDate = new DateOnly(2026, 11, 24),
+                MarketRegime = regime
+            }
+        };
+
+    /// <summary>
+    /// A steadily declining PSEi: the close sits under both the 50- and 200-session averages, so
+    /// the causal regime read is bearish no matter what the stored snapshot claims.
+    /// </summary>
+    private static List<OhlcvBar> BuildDecliningIndexBars(int barCount)
+    {
+        var bars = new List<OhlcvBar>(barCount);
+        var date = new DateOnly(2025, 1, 6);
+        var price = 8_400m;
+
+        for (var index = 0; index < barCount; index++)
+        {
+            var close = decimal.Round(price * 0.997m, 2);
+
+            bars.Add(new OhlcvBar(
+                date.AddDays(index),
+                Open: price,
+                High: price,
+                Low: close,
+                Close: close,
+                Volume: 1_000_000L));
 
             price = close;
         }

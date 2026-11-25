@@ -20,6 +20,14 @@
       "group": "test"
     },
     {
+      "label": "backend: free port 5236",
+      "detail": "SIGTERM whatever still listens on :5236 — usually a `dotnet run` orphaned to PPID 1 when a terminal closed — so the API launch configuration can bind.",
+      "type": "shell",
+      "command": "pids=$(lsof -nP -iTCP:5236 -sTCP:LISTEN -t); if [ -n \"$pids\" ]; then echo \"freeing :5236 — SIGTERM to $pids\"; kill -TERM $pids; sleep 2; lsof -nP -iTCP:5236 -sTCP:LISTEN || echo ':5236 is free now'; else echo ':5236 is already free'; fi",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
       "label": "frontend: build",
       "type": "shell",
       "command": "npm run build",

@@ -235,12 +235,12 @@ public sealed class SignalPipelineService
         // The run response carries order tickets sized against the desk's own book. A book
         // failure (empty account, storage hiccup) must never break a completed signal run, so
         // the tickets are best-effort and simply absent when the context cannot be built.
-        OrderTicketContext? ticketContext = null;
+        BookSizingSnapshot? book = null;
         if (_portfolio is not null)
         {
             try
             {
-                ticketContext = await _portfolio.GetOrderTicketContextAsync(cancellationToken: cancellationToken);
+                book = await _portfolio.GetBookSizingSnapshotAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -252,7 +252,7 @@ public sealed class SignalPipelineService
             }
         }
 
-        return SignalRunMapper.ToDto(run, metricsByTicker, ticketContext);
+        return SignalRunMapper.ToDto(run, metricsByTicker, book);
     }
 
     /// <summary>

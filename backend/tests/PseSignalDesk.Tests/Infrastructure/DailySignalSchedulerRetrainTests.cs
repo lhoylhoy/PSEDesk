@@ -1,3 +1,4 @@
+using PseSignalDesk.Application.Models;
 using PseSignalDesk.Infrastructure.Scheduling;
 
 namespace PseSignalDesk.Tests.Infrastructure;
@@ -5,9 +6,48 @@ namespace PseSignalDesk.Tests.Infrastructure;
 /// <summary>
 /// The weekly refit has to land on the first session the tape actually trades, otherwise a
 /// Monday holiday silently skips the week and the live picks keep pricing with stale weights.
+/// A cold boot must also fit the books without waiting for that slot, but only while a horizon
+/// has never been trained — a rejected refit is a decision, not a cold start.
 /// </summary>
 public sealed class DailySignalSchedulerRetrainTests
 {
+    [Fact]
+    public void NeedsBootstrap_true_while_any_horizon_has_never_been_trained()
+    {
+        var models = new[]
+        {
+            Model("DAY", TrainedModelStatus.Learned, isActive: true),
+            Model("WEEK", TrainedModelStatus.Untrained, isActive: false),
+            Model("MONTH", TrainedModelStatus.Learned, isActive: true),
+            Model("YEAR", TrainedModelStatus.Learned, isActive: true)
+        };
+
+        Assert.True(DailySignalSchedulerService.NeedsBootstrap(models));
+    }
+
+    [Fact]
+    public void NeedsBootstrap_false_once_every_horizon_carries_a_fitted_model()
+    {
+        var models = new[]
+        {
+            Model("DAY", TrainedModelStatus.Learned, isActive: true),
+            Model("WEEK", TrainedModelStatus.PriorFallback, isActive: false),
+            Model("MONTH", TrainedModelStatus.Learned, isActive: true),
+            Model("YEAR", TrainedModelStatus.PriorFallback, isActive: false)
+        };
+
+        // PRIOR_FALLBACK means the refit ran and the safety gate rejected it; retraining on every
+        // boot would only burn the market feed to reach the same verdict.
+        Assert.False(DailySignalSchedulerService.NeedsBootstrap(models));
+    }
+
+    private static TrainedModelSummaryDto Model(string horizon, string status, bool isActive) =>
+        TrainedModelPresenter.ToDto(null, horizon) with
+        {
+            Status = status,
+            IsActive = isActive
+        };
+
     [Fact]
     public void ShouldRetrainThisWeek_true_on_the_first_session_after_the_weekend()
     {

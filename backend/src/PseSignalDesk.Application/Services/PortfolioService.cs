@@ -41,6 +41,17 @@ public sealed class PortfolioService
     /// </summary>
     public async Task<OrderTicketContext?> GetOrderTicketContextAsync(
         string? ticker = null,
+        CancellationToken cancellationToken = default) =>
+        (await GetBookSizingSnapshotAsync(cancellationToken))?.For(ticker);
+
+    /// <summary>
+    /// Reads the book <b>once</b> and returns a snapshot that can size every candidate on a run
+    /// against its own sector, ATR, pyramid state and cap room. Before this existed a signal run
+    /// built a single ticker-less context, so every ticket on the list was sized as if it were
+    /// the first position in an empty book: no sector cap, no ATR-aware slippage, and no
+    /// pyramid rules. Null when the account has no equity.
+    /// </summary>
+    public async Task<BookSizingSnapshot?> GetBookSizingSnapshotAsync(
         CancellationToken cancellationToken = default)
     {
         var (account, equityPhp, openRiskPhp) = await LoadCapitalAsync(cancellationToken);
@@ -50,8 +61,6 @@ public sealed class PortfolioService
         }
 
         var (_, drawdownPct) = await UpdatePeakAndDrawdownAsync(account, equityPhp, cancellationToken);
-
-        var normalizedTicker = (ticker ?? string.Empty).Trim().ToUpperInvariant();
         var open = await _portfolio.GetOpenTradesAsync(cancellationToken);
         var snapshot = await _signals.GetLatestSnapshotAsync(cancellationToken);
         var metrics = snapshot is null
@@ -59,88 +68,33 @@ public sealed class PortfolioService
             : await _signals.GetMetricsAsync(snapshot.TradeDate, cancellationToken);
         var metricsByTicker = metrics.ToDictionary(metric => metric.Ticker, StringComparer.OrdinalIgnoreCase);
 
-        metricsByTicker.TryGetValue(normalizedTicker, out var targetMetric);
-        var sector = targetMetric?.Sector;
-
-        decimal? sectorExposurePct = null;
-        var sectorPositionCount = 0;
-
-        if (!string.IsNullOrWhiteSpace(sector))
-        {
-            var sectorTrades = open
-                .Where(trade => metricsByTicker.TryGetValue(trade.Ticker, out var tradeMetric) &&
-                                string.Equals(tradeMetric.Sector, sector, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            sectorPositionCount = sectorTrades.Count;
-            sectorExposurePct = decimal.Round(
-                sectorTrades.Sum(trade => trade.BuyCostPhp) / equityPhp * 100m,
-                2,
-                MidpointRounding.AwayFromZero);
-        }
-
-        var existingTrade = open
-            .FirstOrDefault(trade => string.Equals(trade.Ticker, normalizedTicker, StringComparison.OrdinalIgnoreCase));
-
-        // A same-ticker ticket is a pyramid candidate, so the context carries how far the open
-        // position already is in R, whether its stop is at break-even, how many adds it has
-        // taken and how much of the position cap it already occupies.
-        decimal? existingUnrealizedR = null;
-        var existingStopAtBreakEven = false;
-
-        if (existingTrade is not null)
-        {
-            var markPrice = targetMetric?.ClosePrice is decimal close && close > 0m ? close : existingTrade.EntryPrice;
-            var markProceedsPhp = PseBoardLotService.ComputeSellNetProceedsPhp(existingTrade.Shares, markPrice);
-
-            existingUnrealizedR = existingTrade.InitialNetRiskPhp > 0m
-                ? decimal.Round(
-                    (markProceedsPhp - existingTrade.BuyCostPhp) / existingTrade.InitialNetRiskPhp,
-                    4,
-                    MidpointRounding.AwayFromZero)
-                : 0m;
-
-            existingStopAtBreakEven = existingTrade.CurrentStopLoss >=
-                                      PseBoardLotService.ComputeBreakEvenStopPrice(existingTrade.EntryPrice);
-        }
-
-        return new OrderTicketContext(
-            decimal.Round(equityPhp, 2, MidpointRounding.AwayFromZero),
-            account.CashBalancePhp,
-            account.MaxRiskPerTradePct,
-            account.SmallSizeRiskMultiplier,
-            account.MaxPositionPct,
-            decimal.Round(openRiskPhp / equityPhp * 100m, 2, MidpointRounding.AwayFromZero),
-            account.MaxPortfolioHeatPct,
-            DrawdownPct: drawdownPct,
-            SoftDrawdownThresholdPct: account.SoftDrawdownThresholdPct,
-            HardDrawdownThresholdPct: account.HardDrawdownThresholdPct,
-            RegimeVolPct: snapshot?.PseiRealizedVol20dPct,
-            TargetAnnualVolPct: account.TargetAnnualVolPct,
-            SectorExposurePct: sectorExposurePct,
-            MaxSectorExposurePct: account.MaxSectorExposurePct,
-            SectorPositionCount: sectorPositionCount,
-            MaxPositionsPerSector: account.MaxPositionsPerSector,
-            Sector: sector,
-            ExistingEntryPrice: existingTrade?.EntryPrice,
-            AtrPct: targetMetric?.AtrPct,
-            ExistingUnrealizedR: existingUnrealizedR,
-            ExistingStopAtBreakEven: existingStopAtBreakEven,
-            ExistingPyramidCount: existingTrade?.PyramidCount ?? 0,
-            ExistingPositionCostPhp: existingTrade?.BuyCostPhp);
+        return new BookSizingSnapshot(
+            account,
+            equityPhp,
+            openRiskPhp,
+            drawdownPct,
+            snapshot?.PseiRealizedVol20dPct,
+            open,
+            metricsByTicker);
     }
 
     /// <summary>
     /// Order ticket for one candidate. Levels are normalized onto the PSE tick grid first,
     /// so the ticket always describes an order the exchange would accept.
     /// </summary>
+    /// <param name="edge">
+    /// The edge assessment this candidate was priced on, when the caller already has it. Passing
+    /// it lets the governor size off the real quarter-Kelly stake instead of a flat risk unit;
+    /// null keeps the pre-edge sizing exactly.
+    /// </param>
     public async Task<OrderTicketDto> GetOrderTicketAsync(
         string ticker,
         decimal entryPrice,
         decimal stopLoss,
         decimal targetPrice,
         EdgeVerdict verdict,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        EdgeAssessment? edge = null)
     {
         var context = await GetOrderTicketContextAsync(ticker, cancellationToken) ??
                       throw new PortfolioRuleViolationException(
@@ -149,7 +103,7 @@ public sealed class PortfolioService
         var plan = PseBoardLotService.NormalizeTradePlan(entryPrice, stopLoss, targetPrice);
         var turnoverPhp = await ResolveTurnoverAsync(ticker, cancellationToken);
 
-        return OrderTicketCalculator.Build(context, plan.Entry, plan.StopLoss, plan.Target, verdict, turnoverPhp);
+        return OrderTicketCalculator.Build(context, plan.Entry, plan.StopLoss, plan.Target, verdict, turnoverPhp, edge);
     }
 
     /// <summary>

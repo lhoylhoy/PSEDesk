@@ -222,12 +222,118 @@ public sealed class BacktestServiceTests
         Assert.True(trade.NetR > 0m, $"the trailed exit realized only {trade.NetR}R");
     }
 
+    [Fact]
+    public async Task RunAsync_holds_several_names_at_once_without_breaking_the_position_cap()
+    {
+        var bars = BuildOscillatingBars(BarCount);
+        var service = CreatePortfolioService(BuildPortfolio(bars, count: 8), bars);
+
+        var result = await service.RunAsync(SignalHorizon.WEEK, LastDate(BarCount), lookbackDays: 900);
+
+        // A one-slot blotter used to turn every setup into a serial bet. The book now holds a
+        // basket, so the same tape must produce overlapping clips — but never more than the cap.
+        Assert.True(
+            MaxConcurrent(result.Trades) == BacktestService.MaxOpenPositions,
+            $"the replay opened only {MaxConcurrent(result.Trades)} clip(s) at a time: " +
+            string.Join(" | ", result.Trades.Select(t => $"{t.Ticker} {t.EntryDate}->{t.ExitDate}")));
+
+        Assert.True(
+            result.Trades.Select(trade => trade.Ticker).Distinct(StringComparer.OrdinalIgnoreCase).Count() >= 2,
+            "the multi-slot book traded a single name, so nothing about slots was exercised");
+    }
+
+    [Fact]
+    public async Task RunAsync_keeps_one_sector_inside_its_name_and_exposure_caps()
+    {
+        var bars = BuildOscillatingBars(BarCount);
+        var service = CreatePortfolioService(BuildPortfolio(bars, count: 6, sharedSector: "Banks"), bars);
+
+        var result = await service.RunAsync(SignalHorizon.WEEK, LastDate(BarCount), lookbackDays: 900);
+
+        Assert.True(result.TotalTrades >= 1, "the crowded-sector run never traded, so the cap proves nothing");
+
+        // Every name sits in Banks, so the per-sector name cap — not the board — decides how many
+        // of them the book may hold at once. Two clips fit under the 35% notional ceiling; a third
+        // would have been a single-theme bet.
+        Assert.True(
+            MaxConcurrent(result.Trades) == BacktestService.MaxPositionsPerSector,
+            $"the book held {MaxConcurrent(result.Trades)} banking names against a cap of " +
+            $"{BacktestService.MaxPositionsPerSector}: " +
+            string.Join(" | ", result.Trades.Select(t => $"{t.Ticker} {t.EntryDate}->{t.ExitDate}")));
+
+        // Every name sits in Banks, so the per-sector name cap and the notional ceiling are the
+        // only things standing between the book and a single-theme bet.
+        Assert.True(
+            MaxConcurrent(result.Trades) <= BacktestService.MaxPositionsPerSector,
+            $"the book held {MaxConcurrent(result.Trades)} banking names against a cap of {BacktestService.MaxPositionsPerSector}");
+
+        foreach (var trade in result.Trades)
+        {
+            var concurrentOutlayPhp = result.Trades
+                .Where(other => other.EntryDate <= trade.EntryDate && other.ExitDate > trade.EntryDate)
+                .Sum(other => PseBoardLotService.ComputeBuyTotalCostPhp(other.Shares, other.EntryPrice));
+
+            Assert.True(
+                concurrentOutlayPhp <= BacktestService.StartingCapitalPhp *
+                (BacktestService.MaxSectorExposurePct / 100m),
+                $"one sector carried {concurrentOutlayPhp:N2} against a ceiling of " +
+                $"{BacktestService.StartingCapitalPhp * (BacktestService.MaxSectorExposurePct / 100m):N2}");
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_never_spends_more_cash_than_the_book_holds()
+    {
+        var bars = BuildOscillatingBars(BarCount);
+        var service = CreatePortfolioService(BuildPortfolio(bars, count: 8), bars);
+
+        var result = await service.RunAsync(SignalHorizon.WEEK, LastDate(BarCount), lookbackDays: 900);
+
+        Assert.True(result.TotalTrades >= 1);
+
+        // Sizing is derived from equity, so a fully invested book can compute a clip the free
+        // cash cannot settle. The replay must trim it to whole lots — fees and the entry
+        // slippage included — instead of overdrawing the account.
+        foreach (var trade in result.Trades)
+        {
+            var concurrentOutlayPhp = result.Trades
+                .Where(other => other.EntryDate <= trade.EntryDate && other.ExitDate > trade.EntryDate)
+                .Sum(other => PseBoardLotService.ComputeBuyTotalCostPhp(other.Shares, other.EntryPrice)
+                              + other.SlippagePhp);
+
+            Assert.True(
+                concurrentOutlayPhp <= BacktestService.StartingCapitalPhp,
+                $"the book committed {concurrentOutlayPhp:N2} of a {BacktestService.StartingCapitalPhp:N2} account");
+        }
+
+        Assert.All(result.EquityCurve, point => Assert.True(point.EquityPhp > 0m));
+    }
+
     private static BacktestService CreateService(
         IReadOnlyList<OhlcvBar> bars,
         IReadOnlyList<OhlcvBar>? indexBars = null)
     {
+        var stocks = bars.Count == 0
+            ? Array.Empty<StockMarketData>()
+            : new[] { BuildStock("ICT", "Transportation", bars) };
+
+        return CreatePortfolioService(stocks, bars, indexBars);
+    }
+
+    /// <summary>Replays an arbitrary board, so the slot, heat and sector caps can be exercised.</summary>
+    private static BacktestService CreatePortfolioService(
+        IReadOnlyList<StockMarketData> stocks,
+        IReadOnlyList<OhlcvBar> bars,
+        IReadOnlyList<OhlcvBar>? indexBars = null)
+    {
+        var lastBar = stocks
+            .SelectMany(stock => stock.Bars)
+            .Select(bar => bar.Date)
+            .DefaultIfEmpty(LastDate(BarCount))
+            .Max();
+
         var batch = new MarketDataBatch(
-            bars.Count > 0 ? bars[^1].Date : LastDate(BarCount),
+            lastBar,
             PseiClose: 8_500m,
             PseiSma50: 8_400m,
             PseiSma200: 8_100m,
@@ -235,23 +341,52 @@ public sealed class BacktestServiceTests
             UsdPhp: 58.3m,
             MarketRegime: MarketRegime.BULLISH,
             RegimeNote: "Risk-on tape.",
-            Stocks: bars.Count == 0
-                ? Array.Empty<StockMarketData>()
-                : new[]
-                {
-                    new StockMarketData(
-                        "ICT",
-                        CompanyName: "International Container Terminal Services, Inc.",
-                        Sector: "Transportation",
-                        Bars: bars,
-                        NetForeignTodayPhp: null,
-                        Disclosures: Array.Empty<StockDisclosure>())
-                },
+            Stocks: stocks,
             Source: "unit-test",
             IndexBars: indexBars);
 
         return new BacktestService(new StubMarketDataProvider(batch), new QuantitativeFilterService());
     }
+
+    private static StockMarketData BuildStock(string ticker, string sector, IReadOnlyList<OhlcvBar> bars) =>
+        new(
+            ticker,
+            CompanyName: $"{ticker} Holdings, Inc.",
+            Sector: sector,
+            Bars: bars,
+            NetForeignTodayPhp: null,
+            Disclosures: Array.Empty<StockDisclosure>());
+
+    /// <summary>
+    /// A board whose names all share the same qualifying tape — either spread over their own
+    /// sectors or crammed into one — so the caps, not the setups, decide what is funded.
+    /// </summary>
+    private static IReadOnlyList<StockMarketData> BuildPortfolio(
+        IReadOnlyList<OhlcvBar> bars,
+        int count,
+        string? sharedSector = null)
+    {
+        var tickers = new[] { "ICT", "SM", "BDO", "ALI", "JFC", "TEL", "MER", "AC" };
+
+        return tickers
+            .Take(Math.Clamp(count, 1, tickers.Length))
+            .Select((ticker, index) => BuildStock(
+                ticker,
+                sharedSector ?? $"Sector {index + 1}",
+                bars))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// The most clips the book held at once, measured at each entry: a position counts while its
+    /// interval still spans the session a new clip was opened on.
+    /// </summary>
+    private static int MaxConcurrent(IReadOnlyList<BacktestTradeDto> trades) =>
+        trades.Count == 0
+            ? 0
+            : trades.Max(trade => trades.Count(
+                other => other.EntryDate <= trade.EntryDate && other.ExitDate > trade.EntryDate));
+
 
     private static DateOnly LastDate(int barCount) => new DateOnly(2025, 1, 6).AddDays(barCount - 1);
 

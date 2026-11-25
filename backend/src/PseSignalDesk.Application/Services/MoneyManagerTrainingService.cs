@@ -9,12 +9,15 @@ namespace PseSignalDesk.Application.Services;
 
 /// <summary>
 /// The desk's self-training layer. It replays the real PSE tape, labels every qualifying
-/// session with the horizon's own ATR-barrier outcome (stop first on ambiguity, fees paid),
-/// fits the twelve scale-free factor weights on the first 70% of the labelled trades, purges
-/// and embargoes the overlap with the forward windows, and then grades the fit on the last
-/// 30% it never saw. A model is promoted to live pricing only when the held-out sample is
-/// large enough and its Brier score beats the neutral baseline; otherwise the row is stored
-/// inactive so the terminal can explain the fallback instead of hiding it.
+/// session with the horizon's own ATR-barrier outcome <b>priced the way the desk actually
+/// trades</b> (tick grid, round-trip slippage, the +1R break-even / +1.5R EMA20 ladder and a
+/// causal PSEi bearish gate), fits the twelve scale-free factor weights on the first 70% of the
+/// labelled trades as a <b>residual</b> over the structural prior, purges and embargoes the
+/// overlap with the forward windows, and then grades the fit on the last 30% it never saw. A
+/// model is promoted to live pricing only when the held-out sample is large enough, its Brier
+/// score and log loss beat the neutral baseline, and the trades it would actually have funded
+/// carry positive expectancy; otherwise the row is stored inactive so the terminal can explain
+/// the fallback instead of hiding it.
 /// </summary>
 public sealed class MoneyManagerTrainingService
 {
@@ -48,21 +51,46 @@ public sealed class MoneyManagerTrainingService
     /// <summary>Fallback stake multiplier when no held-out slice exists to search on.</summary>
     public const decimal NeutralKellyFraction = 0.25m;
 
+    /// <summary>
+    /// Notional the trainer assumes when it prices a simulated trade's round-trip slippage.
+    /// A pod-shop clip, not a hero position: at this size the estimate is dominated by the
+    /// tick spread, which is the friction that actually differs between a PHP 1 and a PHP 400 name.
+    /// </summary>
+    public const decimal DefaultPositionBudgetPhp = 50_000m;
+
+    /// <summary>
+    /// Hard ceiling on the equity fraction one simulated trade may risk when the held-out Kelly
+    /// scan is scored. This is what keeps <see cref="OptimalKelly"/> in pod-shop units: a full
+    /// Kelly fraction is a probability edge, the scan multiplies it by a candidate scalar and
+    /// this cap keeps the product inside a defensible 0–2.5% of equity per trade instead of the
+    /// 15–35% of bankroll the pre-fix compounding implied.
+    /// </summary>
+    public const decimal MaxHeldOutStakeFraction = 0.025m;
+
+    /// <summary>Floor on a trial's magnitude weight, so a scratch still counts.</summary>
+    public const decimal MinimumMagnitudeWeight = 0.50m;
+
+    /// <summary>Ceiling on a trial's magnitude weight, so one monster winner cannot dominate.</summary>
+    public const decimal MaximumMagnitudeWeight = 2.00m;
+
     private readonly IMarketDataProvider _marketData;
     private readonly QuantitativeFilterService _quantFilter;
     private readonly ISignalRepository _repository;
+    private readonly ProbabilisticEdgeService _edge;
     private readonly ILogger<MoneyManagerTrainingService>? _logger;
 
     public MoneyManagerTrainingService(
         IMarketDataProvider marketData,
         QuantitativeFilterService quantFilter,
         ISignalRepository repository,
-        ILogger<MoneyManagerTrainingService>? logger = null)
+        ILogger<MoneyManagerTrainingService>? logger = null,
+        ProbabilisticEdgeService? edge = null)
     {
         _marketData = marketData;
         _quantFilter = quantFilter;
         _repository = repository;
         _logger = logger;
+        _edge = edge ?? new ProbabilisticEdgeService();
     }
 
     /// <summary>Fits and persists one horizon's model from a fresh live fetch.</summary>
@@ -151,14 +179,21 @@ public sealed class MoneyManagerTrainingService
 
     /// <summary>
     /// Replays each liquid ticker bar by bar and labels every qualifying session with the
-    /// horizon's own barrier outcome. One metric pass feeds all four horizons: only the
-    /// eligibility gates, the barrier multiples and the forward window differ per book.
+    /// horizon's own barrier outcome. Liquidity is judged <b>causally</b> on the 20-day turnover
+    /// of the session being labelled, never on today's turnover: a name that was tradable in
+    /// 2022 and has since dried up still belongs in the training set (and a name that only
+    /// became liquid recently does not get four years of hindsight credit). Sessions on which
+    /// the closed PSEi prefix was under both its 50- and 200-day average are skipped, because
+    /// the live `TRADE` gate and the causal replay refuse to fund a long there either.
+    /// One metric pass feeds all four horizons: only the eligibility gates, the barrier
+    /// multiples and the forward window differ per book.
     /// </summary>
     private Dictionary<SignalHorizon, List<TrainingTrial>> BuildTrials(MarketDataBatch batch)
     {
         var result = ProbabilisticEdgeService.AllHorizons
             .ToDictionary(horizon => horizon, _ => new List<TrainingTrial>());
         var indexBars = batch.IndexBars ?? Array.Empty<OhlcvBar>();
+        var indexRegime = CausalIndexRegime.Build(indexBars);
         var minBars = Math.Max(
             QuantitativeFilterService.MinBarsRequired,
             HorizonProfile.For(SignalHorizon.WEEK).MinHistoryBars);
@@ -171,20 +206,8 @@ public sealed class MoneyManagerTrainingService
                 continue;
             }
 
-            // Only names that are liquid *today* enter the training universe: learning the
-            // desk's weights from illiquid names would optimise a book it never trades.
-            var latest = _quantFilter.EvaluateStock(
-                stock with { Bars = bars },
-                batch.TradeDate,
-                indexBars,
-                computeEmpiricalBaseRate: false);
-
-            if (latest is null || latest.AvgTurnover20dPhp < MinimumTurnoverPhp)
-            {
-                continue;
-            }
-
             var prefilter = PrefixPrefilter.Build(bars);
+            var ema20 = BuildEma20Series(bars);
             var prefix = new List<OhlcvBar>(bars.Count);
             var indexPrefix = new List<OhlcvBar>(indexBars.Count);
             var indexCursor = 0;
@@ -204,6 +227,13 @@ public sealed class MoneyManagerTrainingService
                     continue;
                 }
 
+                // The same causal regime gate the live run and the replay apply: no long is
+                // learned on a session the desk would not have funded.
+                if (indexRegime.IsBearishAt(bars[index].Date))
+                {
+                    continue;
+                }
+
                 var metric = _quantFilter.EvaluateStock(
                     stock with { Bars = prefix },
                     bars[index].Date,
@@ -216,6 +246,7 @@ public sealed class MoneyManagerTrainingService
                 }
 
                 var features = TrainedModelFeatures.FromMetric(metric);
+                var regime = indexRegime.RegimeAt(bars[index].Date);
 
                 foreach (var horizon in ProbabilisticEdgeService.AllHorizons)
                 {
@@ -226,7 +257,7 @@ public sealed class MoneyManagerTrainingService
                         continue;
                     }
 
-                    var outcome = SimulateBarrier(bars, index, metric.ClosePrice, metric.Atr14, profile);
+                    var outcome = SimulateBarrier(bars, index, ema20, metric, profile);
                     if (outcome is null)
                     {
                         continue;
@@ -238,6 +269,8 @@ public sealed class MoneyManagerTrainingService
                         outcome.Value.ExitDate,
                         outcome.Value.Won,
                         outcome.Value.RealizedR,
+                        outcome.Value.NetRiskReward,
+                        ComputeStructuralPriorProbability(metric, profile, outcome.Value, regime),
                         features));
                 }
             }
@@ -246,7 +279,56 @@ public sealed class MoneyManagerTrainingService
         return result;
     }
 
-    /// <summary>The horizon's live entry gate, expressed only on the metric of that session.</summary>
+    /// <summary>
+    /// The probability the desk's own structural engine would have published for this exact
+    /// plan on this exact session, <b>before</b> any learned residual. It is the offset the
+    /// logistic fit learns on top of, which is what stops the twelve factors from being counted
+    /// twice (once by the heuristic prior, once by the weights).
+    /// <para>
+    /// Conviction is pinned to its neutral 50 — a training session has no model to be confident
+    /// about — and the breadth dial stays unreported rather than being zero-filled, exactly like
+    /// a live request that does not carry it.
+    /// </para>
+    /// </summary>
+    private decimal ComputeStructuralPriorProbability(
+        StockDailyMetric metric,
+        HorizonProfile profile,
+        TrainingOutcome outcome,
+        MarketRegime? regime)
+    {
+        var disclosures = MarketDataMapper.DeserializeDisclosures(metric.RecentDisclosuresJson);
+        var trapFlags = PseDisclosureClassifier.DetectTrapFlags(disclosures);
+        var foreignRatio = metric.NetForeignTodayPhp is decimal netForeign &&
+                           metric.AvgTurnover20dPhp > 0m
+            ? netForeign / metric.AvgTurnover20dPhp
+            : (decimal?)null;
+        var tickSpreadPct = outcome.PlanEntry > 0m
+            ? PseBoardLotService.ComputeTickSpreadRate(outcome.PlanEntry) * 100m
+            : 0m;
+
+        return _edge.EvaluateSetup(new SetupEdgeRequest(
+            outcome.PlanEntry,
+            outcome.StopLoss,
+            outcome.Target,
+            ConvictionScore: 50m,
+            regime ?? MarketRegime.NEUTRAL,
+            profile,
+            EmpiricalWinRate: null,
+            RelativeStrength63d: metric.RelativeStrength63d,
+            VolatilityContractionRatio: metric.VolatilityContractionRatio,
+            WeinsteinStage: metric.WeinsteinStage,
+            BreadthAboveSma50Pct: null,
+            TrapFlags: trapFlags,
+            AtrPct: metric.AtrPct,
+            TrailingDividendYieldPct: metric.TrailingDividendYieldPct,
+            SectorQuadrant: null,
+            TickSpreadPct: tickSpreadPct,
+            UpDownVolumeRatio20d: metric.UpDownVolumeRatio20d,
+            SlippageInclusiveFeeRate: outcome.FeeRate,
+            NetForeignTurnoverRatio: foreignRatio,
+            Sector: metric.Sector)).WinProbability;
+    }
+
     private static bool IsEligible(StockDailyMetric metric, HorizonProfile profile)
     {
         if (metric.AvgTurnover20dPhp < MinimumTurnoverPhp ||
@@ -276,30 +358,59 @@ public sealed class MoneyManagerTrainingService
     }
 
     /// <summary>
-    /// Labels one session with the horizon's own ATR-barrier outcome. The stop is checked
-    /// before the target on every bar (daily OHLC cannot order a same-session touch), and a
-    /// window that expires unresolved is graded on the fee-paid close, exactly the way the
-    /// forward ledger grades a live pick.
+    /// Labels one session the way the desk would actually have traded it, not the way a
+    /// frictionless textbook would:
+    /// <list type="bullet">
+    /// <item>the plan is landed on the PSE tick grid (and clamped inside the static band on
+    /// <c>DAY</c>), so the simulated stop and target are orderable prices;</item>
+    /// <item>the round-trip friction is the tick-spread plus square-root-impact estimate the
+    /// order ticket charges, not just the statutory fee;</item>
+    /// <item>the <c>+1R</c> break-even ratchet and the <c>+1.5R</c> causal EMA20 trail move the
+    /// stop exactly like <c>BacktestService</c> and the blotter do, so a runner that later
+    /// stalls is graded as a scratch instead of a full <c>-1R</c> loss.</item>
+    /// </list>
+    /// The stop is checked before the target on every bar (daily OHLC cannot order a
+    /// same-session touch) and a window that expires unresolved is graded on the net close.
     /// </summary>
     private static TrainingOutcome? SimulateBarrier(
         IReadOnlyList<OhlcvBar> bars,
         int entryIndex,
-        decimal entry,
-        decimal atr,
+        IReadOnlyList<decimal?> ema20,
+        StockDailyMetric metric,
         HorizonProfile profile)
     {
-        if (entry <= 0m || atr <= 0m)
+        var atr = metric.Atr14;
+        var rawEntry = PseBoardLotService.RoundToValidTick(metric.ClosePrice);
+
+        if (rawEntry <= 0m || atr <= 0m)
         {
             return null;
         }
 
-        var stop = entry - (profile.AtrStopMultiplier * atr);
-        if (stop <= 0m)
+        var rawStop = rawEntry - (profile.AtrStopMultiplier * atr);
+        var rawTarget = rawEntry + (profile.AtrTargetMultiplier * atr);
+        var plan = profile.Horizon == SignalHorizon.DAY
+            ? PseBoardLotService.NormalizeTradePlanWithinStaticLimits(rawEntry, rawEntry, rawStop, rawTarget)
+            : PseBoardLotService.NormalizeTradePlan(rawEntry, rawStop, rawTarget);
+
+        var feeRate = PseBoardLotService.ComputeEffectiveRoundTripFeeRate(
+            plan.Entry,
+            DefaultPositionBudgetPhp,
+            metric.AvgTurnover20dPhp,
+            metric.AtrPct);
+
+        var netRisk = PseBoardLotService.ComputeNetRiskPerShare(plan.Entry, plan.StopLoss, feeRate);
+        var netReward = PseBoardLotService.ComputeNetRewardPerShare(plan.Entry, plan.Target, feeRate);
+
+        if (netRisk <= 0m || netReward <= 0m)
         {
             return null;
         }
 
-        var target = entry + (profile.AtrTargetMultiplier * atr);
+        var netRiskReward = decimal.Round(netReward / netRisk, 2, MidpointRounding.AwayFromZero);
+        var breakEvenStop = PseBoardLotService.ComputeBreakEvenStopPrice(plan.Entry);
+        var (buyRate, sellRate) = PseBoardLotService.SplitRoundTripFee(feeRate);
+        var stop = plan.StopLoss;
 
         for (var offset = 1; offset <= profile.ForwardWindowBars; offset++)
         {
@@ -307,39 +418,144 @@ public sealed class MoneyManagerTrainingService
 
             if (bar.Low <= stop)
             {
-                return new TrainingOutcome(bar.Date, false, NetRealizedR(entry, stop, stop));
+                var stopR = NetRealizedR(plan.Entry, stop, buyRate, sellRate, netRisk);
+
+                return new TrainingOutcome(
+                    bar.Date,
+                    stopR > 0m,
+                    stopR,
+                    plan.Entry,
+                    plan.StopLoss,
+                    plan.Target,
+                    netRiskReward,
+                    feeRate);
             }
 
-            if (bar.High >= target)
+            if (bar.High >= plan.Target)
             {
-                return new TrainingOutcome(bar.Date, true, NetRealizedR(entry, target, stop));
+                var targetR = NetRealizedR(plan.Entry, plan.Target, buyRate, sellRate, netRisk);
+
+                return new TrainingOutcome(
+                    bar.Date,
+                    true,
+                    targetR,
+                    plan.Entry,
+                    plan.StopLoss,
+                    plan.Target,
+                    netRiskReward,
+                    feeRate);
             }
+
+            if (offset == profile.ForwardWindowBars)
+            {
+                var expiryR = NetRealizedR(plan.Entry, bar.Close, buyRate, sellRate, netRisk);
+
+                return new TrainingOutcome(
+                    bar.Date,
+                    expiryR > 0m,
+                    expiryR,
+                    plan.Entry,
+                    plan.StopLoss,
+                    plan.Target,
+                    netRiskReward,
+                    feeRate);
+            }
+
+            // The exit ladder is evaluated on the closed bar, after that bar's own barriers:
+            // exactly the order the replay and the blotter use.
+            RatchetTrainingStop(
+                ref stop,
+                plan,
+                breakEvenStop,
+                netRisk,
+                buyRate,
+                sellRate,
+                bar.Close,
+                ema20[entryIndex + offset]);
         }
 
-        var expiry = bars[entryIndex + profile.ForwardWindowBars];
-        var expiryR = NetRealizedR(entry, expiry.Close, stop);
-
-        return new TrainingOutcome(expiry.Date, expiryR > 0m, expiryR);
+        return null;
     }
 
     /// <summary>
-    /// Realized R after the desk's fees, using the same risk denominator the live order ticket
-    /// uses so a learned expectancy is quoted in the units the desk trades. Each leg pays its own
-    /// rate: commission and VAT on entry, plus the 0.10% stock transaction tax on the sell leg.
+    /// The mechanical exit ladder, applied to a simulated training trade: at <c>+1R</c> the stop
+    /// ratchets to the fee-paid break-even tick and at <c>+1.5R</c> it trails one causally built
+    /// EMA20 behind. Both moves are one-way and neither may cross the target.
     /// </summary>
-    private static decimal NetRealizedR(decimal entry, decimal exit, decimal stop)
+    private static void RatchetTrainingStop(
+        ref decimal stop,
+        (decimal Entry, decimal StopLoss, decimal Target) plan,
+        decimal breakEvenStop,
+        decimal netRiskPerShare,
+        decimal buyRate,
+        decimal sellRate,
+        decimal markClose,
+        decimal? ema20)
     {
-        var netRisk = PseBoardLotService.ComputeNetRiskPerShare(entry, stop);
-        if (netRisk <= 0m || exit <= 0m)
+        if (netRiskPerShare <= 0m || markClose <= 0m)
+        {
+            return;
+        }
+
+        var unrealizedPerShare = (markClose * (1m - sellRate)) - (plan.Entry * (1m + buyRate));
+        var unrealizedR = unrealizedPerShare / netRiskPerShare;
+
+        if (unrealizedR >= 1.0m && stop < breakEvenStop && breakEvenStop < plan.Target)
+        {
+            stop = breakEvenStop;
+        }
+
+        if (unrealizedR < 1.5m || ema20 is not decimal ema)
+        {
+            return;
+        }
+
+        var trailedStop = PseBoardLotService.RoundToValidTick(ema);
+        if (trailedStop > stop && trailedStop < plan.Target)
+        {
+            stop = trailedStop;
+        }
+    }
+
+    /// <summary>
+    /// Realized R after the desk's <b>effective</b> round trip, using the same risk denominator
+    /// the live order ticket uses so a learned expectancy is quoted in the units the desk
+    /// trades. Each leg pays its own rate: the buy leg charges commission and VAT, the sell leg
+    /// adds the 0.10% stock transaction tax, and both carry half the spread/impact estimate.
+    /// </summary>
+    private static decimal NetRealizedR(
+        decimal entry,
+        decimal exit,
+        decimal buyRate,
+        decimal sellRate,
+        decimal netRiskPerShare)
+    {
+        if (netRiskPerShare <= 0m || exit <= 0m)
         {
             return 0m;
         }
 
-        var netPerShare = (exit - entry) -
-                          (entry * PseBoardLotService.BuyLegFeeRate) -
-                          (exit * PseBoardLotService.SellLegFeeRate);
+        var netPerShare = (exit * (1m - sellRate)) - (entry * (1m + buyRate));
 
-        return decimal.Round(netPerShare / netRisk, 4, MidpointRounding.AwayFromZero);
+        return decimal.Round(netPerShare / netRiskPerShare, 4, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Causal EMA20 per bar: each value is seeded from that ticker's own closes up to and
+    /// including that bar, so the trail can never peek forward.
+    /// </summary>
+    private static decimal?[] BuildEma20Series(IReadOnlyList<OhlcvBar> bars)
+    {
+        var series = new decimal?[bars.Count];
+        var closes = new List<decimal>(bars.Count);
+
+        for (var index = 0; index < bars.Count; index++)
+        {
+            closes.Add(bars[index].Close);
+            series[index] = QuantitativeFilterService.ComputeEma(closes);
+        }
+
+        return series;
     }
 
     /// <summary>
@@ -530,6 +746,15 @@ public sealed class MoneyManagerTrainingService
         var trainY = train.Select(trade => trade.Won ? 1d : 0d).ToArray();
         var validationY = validation.Select(trade => trade.Won ? 1d : 0d).ToArray();
 
+        // Residual learning: the structural prior enters the linear predictor as an offset, so
+        // the weights explain the edge the heuristic missed instead of restating it.
+        var trainOffsets = train.Select(trade => LogisticModelTrainer.Logit((double)trade.StructuralPrior)).ToArray();
+        var validationOffsets = validation.Select(trade => LogisticModelTrainer.Logit((double)trade.StructuralPrior)).ToArray();
+
+        // Date clusters and payoff magnitude: a 25-name index-surge session must not outvote 25
+        // idiosyncratic setups, and a +2.5R target hit must carry more weight than a +0.02R scratch.
+        var trainWeights = ComputeSampleWeights(train);
+
         var baseRate = ShrunkBaseRate(train);
         var baselineProbabilities = validationY.Select(_ => baseRate).ToArray();
         var baselineBrier = BrierScore(baselineProbabilities, validationY);
@@ -539,8 +764,15 @@ public sealed class MoneyManagerTrainingService
 
         foreach (var lambda in LambdaGrid)
         {
-            var fitted = LogisticModelTrainer.Fit(trainX, trainY, (double)lambda);
-            var probabilities = validationX.Select(row => LogisticModelTrainer.Predict(fitted, row)).ToArray();
+            var fitted = LogisticModelTrainer.Fit(
+                trainX,
+                trainY,
+                (double)lambda,
+                sampleWeights: trainWeights,
+                offsets: trainOffsets);
+            var probabilities = validationX
+                .Select((row, index) => LogisticModelTrainer.Predict(fitted, row, validationOffsets[index]))
+                .ToArray();
             var brier = BrierScore(probabilities, validationY);
             var logLoss = LogLoss(probabilities, validationY);
 
@@ -550,20 +782,34 @@ public sealed class MoneyManagerTrainingService
 
             if (improved)
             {
-                best = new FitChoice(fitted, lambda, brier, logLoss);
+                best = new FitChoice(fitted, lambda, brier, logLoss, probabilities);
             }
         }
 
         best ??= new FitChoice(
-            LogisticModelTrainer.Fit(trainX, trainY, (double)LambdaGrid[^1]),
+            LogisticModelTrainer.Fit(
+                trainX,
+                trainY,
+                (double)LambdaGrid[^1],
+                sampleWeights: trainWeights,
+                offsets: trainOffsets),
             LambdaGrid[^1],
             baselineBrier,
-            baselineLogLoss);
+            baselineLogLoss,
+            baselineProbabilities);
 
         var trainedBrier = best.Brier;
+
+        // The held-out trades the model would actually have *funded*: positive expected value at
+        // the model's own probability and the friction the ticket charges. A fit that only
+        // improves calibration while funding losing trades is not a money manager.
+        var policyExpectancyR = ComputePolicyExpectancyR(validation, best.ValidationProbabilities);
+
         var isActive = validation.Count >= MinimumValidationTrials &&
                        train.Count + validation.Count >= MinimumTrials &&
-                       trainedBrier < baselineBrier;
+                       trainedBrier < baselineBrier &&
+                       best.LogLoss <= baselineLogLoss &&
+                       policyExpectancyR > 0m;
 
         var weights = new Dictionary<string, double>(StringComparer.Ordinal);
         var stats = new Dictionary<string, FeatureStat>(StringComparer.Ordinal);
@@ -597,7 +843,7 @@ public sealed class MoneyManagerTrainingService
             ValidationWinRate = decimal.Round(WinRate(validation), 4, MidpointRounding.AwayFromZero),
             ValidationExpectancyR = decimal.Round(ExpectancyR(validation), 4, MidpointRounding.AwayFromZero),
             ValidationProfitFactor = decimal.Round(ProfitFactor(validation), 4, MidpointRounding.AwayFromZero),
-            OptimalKellyFractionMultiplier = OptimalKelly(validation),
+            OptimalKellyFractionMultiplier = OptimalKelly(validation, best.ValidationProbabilities),
             Intercept = decimal.Round((decimal)best.Fitted.Intercept, 6, MidpointRounding.AwayFromZero),
             WeightsJson = TrainedModelJson.WriteWeights(weights),
             FeatureStatsJson = TrainedModelJson.WriteStats(stats),
@@ -656,7 +902,7 @@ public sealed class MoneyManagerTrainingService
             ValidationProfitFactor = decimal.Round(ProfitFactor(trials), 4, MidpointRounding.AwayFromZero),
             OptimalKellyFractionMultiplier = trials.Count == 0
                 ? NeutralKellyFraction
-                : OptimalKelly(trials),
+                : OptimalKelly(trials, trials.Select(_ => baseRate).ToArray()),
             Intercept = decimal.Round(
                 (decimal)Math.Log(baseRate / (1d - baseRate)),
                 6,
@@ -793,18 +1039,52 @@ public sealed class MoneyManagerTrainingService
     }
 
     /// <summary>
-    /// Scans the Kelly grid on the held-out trades, compounding them in exit order. The score
-    /// rewards log growth but charges half the peak-to-trough drawdown, so a stake that only
-    /// wins by taking a violent path is not selected.
+    /// Scans the Kelly grid on the held-out trades, compounding them in exit order. For every
+    /// trial <i>i</i> the model's own predicted probability and the friction-inclusive
+    /// <c>(reward/risk)</c> give the full-Kelly fraction
+    /// <c>f*_i = max(0, p_i - (1 - p_i) / b_i)</c>; only positive-EV setups are funded, and each
+    /// one risks <c>clamp(c * f*_i, 0, MaxHeldOutStakeFraction)</c> of equity. The score rewards
+    /// log growth but charges half the peak-to-trough drawdown, so a stake that only wins by
+    /// taking a violent path is not selected.
+    /// <para>
+    /// The multiplier returned is <c>c</c> — the fraction of full Kelly — in the units
+    /// <see cref="LearnedEdgeModel.KellyScale"/> rebases against the neutral 0.25x. It is
+    /// therefore a sizing preference, not a per-trade risk figure: 0.25 means "stake a quarter
+    /// of full Kelly", never "risk a quarter of the account".
+    /// </para>
     /// </summary>
-    private static decimal OptimalKelly(IReadOnlyList<TrainingTrial> validation)
+    private static decimal OptimalKelly(IReadOnlyList<TrainingTrial> validation, double[] probabilities)
     {
-        if (validation.Count == 0)
+        if (validation.Count == 0 || probabilities.Length != validation.Count)
         {
             return NeutralKellyFraction;
         }
 
-        var ordered = validation.OrderBy(trade => trade.ExitDate).ToList();
+        var ordered = validation
+            .Select((trade, index) => (Trade: trade, Probability: probabilities[index]))
+            .OrderBy(entry => entry.Trade.ExitDate)
+            .ToList();
+
+        var funded = ordered
+            .Select(entry =>
+            {
+                var probability = entry.Probability;
+                var rewardRisk = (double)entry.Trade.NetRiskReward;
+                var expectedValue = (probability * rewardRisk) - (1d - probability);
+                var fullKelly = rewardRisk > 0d
+                    ? Math.Max(0d, probability - ((1d - probability) / rewardRisk))
+                    : 0d;
+
+                return (entry.Trade, ExpectedValue: expectedValue, FullKelly: fullKelly);
+            })
+            .Where(entry => entry.ExpectedValue > 0d && entry.FullKelly > 0d)
+            .ToList();
+
+        if (funded.Count == 0)
+        {
+            return NeutralKellyFraction;
+        }
+
         var bestFraction = NeutralKellyFraction;
         var bestScore = double.MinValue;
 
@@ -814,14 +1094,19 @@ public sealed class MoneyManagerTrainingService
             var peak = 1d;
             var maxDrawdown = 0d;
 
-            foreach (var trade in ordered)
+            foreach (var (trade, _, fullKelly) in funded)
             {
-                equity *= Math.Max(0.01d, 1d + ((double)fraction * (double)trade.RealizedR));
+                var stake = Math.Clamp(
+                    (double)fraction * fullKelly,
+                    0d,
+                    (double)MaxHeldOutStakeFraction);
+
+                equity *= Math.Max(0.01d, 1d + (stake * (double)trade.RealizedR));
                 peak = Math.Max(peak, equity);
                 maxDrawdown = Math.Max(maxDrawdown, (peak - equity) / peak);
             }
 
-            var logGrowth = Math.Log(Math.Max(equity, 1e-9d)) / ordered.Count;
+            var logGrowth = Math.Log(Math.Max(equity, 1e-9d)) / funded.Count;
             var score = logGrowth - (0.5d * maxDrawdown);
 
             if (score > bestScore)
@@ -832,6 +1117,83 @@ public sealed class MoneyManagerTrainingService
         }
 
         return bestFraction;
+    }
+
+    /// <summary>
+    /// Mean realized R of the held-out trades the model would have funded (predicted
+    /// probability high enough to make expected value positive at that trade's own net
+    /// reward/risk). Zero when nothing qualifies, which fails the promotion gate.
+    /// </summary>
+    private static decimal ComputePolicyExpectancyR(
+        IReadOnlyList<TrainingTrial> validation,
+        double[] probabilities)
+    {
+        if (validation.Count == 0 || probabilities.Length != validation.Count)
+        {
+            return 0m;
+        }
+
+        var funded = new List<decimal>(validation.Count);
+
+        for (var index = 0; index < validation.Count; index++)
+        {
+            var rewardRisk = validation[index].NetRiskReward;
+
+            if (rewardRisk <= 0m)
+            {
+                continue;
+            }
+
+            var probability = (decimal)probabilities[index];
+            var expectedValue = (probability * rewardRisk) - (1m - probability);
+
+            if (expectedValue > 0m)
+            {
+                funded.Add(validation[index].RealizedR);
+            }
+        }
+
+        return funded.Count == 0
+            ? 0m
+            : decimal.Round(funded.Sum() / funded.Count, 4, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Per-trial fitting weight: <c>1 / sqrt(signals on the same entry date)</c> so one
+    /// market-wide beta session cannot dominate the fit, times
+    /// <c>clamp(0.5 + 0.5 * |RealizedR|, 0.5, 2.0)</c> so a target hit outranks a scratch. The
+    /// vector is normalised to mean 1, which keeps the L2 penalty on a comparable scale.
+    /// </summary>
+    private static double[] ComputeSampleWeights(IReadOnlyList<TrainingTrial> trials)
+    {
+        var weights = new double[trials.Count];
+        var perDate = trials
+            .GroupBy(trade => trade.EntryDate)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        for (var index = 0; index < trials.Count; index++)
+        {
+            var clusterWeight = 1d / Math.Sqrt(perDate[trials[index].EntryDate]);
+            var magnitude = Math.Clamp(
+                0.5d + (0.5d * Math.Abs((double)trials[index].RealizedR)),
+                (double)MinimumMagnitudeWeight,
+                (double)MaximumMagnitudeWeight);
+
+            weights[index] = clusterWeight * magnitude;
+        }
+
+        var mean = weights.Average();
+        if (mean <= 0d)
+        {
+            return weights.Select(_ => 1d).ToArray();
+        }
+
+        for (var index = 0; index < weights.Length; index++)
+        {
+            weights[index] /= mean;
+        }
+
+        return weights;
     }
 
     /// <summary>
@@ -853,6 +1215,80 @@ public sealed class MoneyManagerTrainingService
         return sessions;
     }
 
+    /// <summary>
+    /// Causal PSEi regime: the 50- and 200-session averages are recomputed from the index
+    /// prefix ending on each date, so the gate a historical session is judged against uses only
+    /// what the desk could have seen that afternoon. The live feed's own
+    /// <see cref="MarketDataBatch.MarketRegime"/> is today's reading and would leak the future
+    /// into a four-year replay.
+    /// </summary>
+    private sealed class CausalIndexRegime
+    {
+        private readonly List<(DateOnly Date, MarketRegime? Regime, bool IsBearish)> _readings;
+
+        private CausalIndexRegime(List<(DateOnly Date, MarketRegime? Regime, bool IsBearish)> readings) =>
+            _readings = readings;
+
+        public static CausalIndexRegime Build(IReadOnlyList<OhlcvBar> indexBars)
+        {
+            var readings = new List<(DateOnly, MarketRegime?, bool)>(indexBars.Count);
+            var closes = new List<decimal>(indexBars.Count);
+
+            foreach (var bar in indexBars.OrderBy(entry => entry.Date))
+            {
+                closes.Add(bar.Close);
+
+                var sma50 = QuantitativeFilterService.ComputeSma(closes, QuantitativeFilterService.SmaShortPeriod);
+                var sma200 = QuantitativeFilterService.ComputeSma(closes, QuantitativeFilterService.SmaLongPeriod);
+
+                if (sma50 is not decimal shortAverage || sma200 is not decimal longAverage)
+                {
+                    // Not enough index history yet: the regime is unknown and the gate stays open,
+                    // which is the same conservative default a live request without a regime uses.
+                    readings.Add((bar.Date, null, false));
+                    continue;
+                }
+
+                var regime = bar.Close >= shortAverage && bar.Close >= longAverage
+                    ? MarketRegime.BULLISH
+                    : bar.Close < shortAverage && bar.Close < longAverage
+                        ? MarketRegime.BEARISH
+                        : MarketRegime.NEUTRAL;
+
+                readings.Add((bar.Date, regime, regime == MarketRegime.BEARISH));
+            }
+
+            return new CausalIndexRegime(readings);
+        }
+
+        /// <summary>
+        /// True when the last index close on or before <paramref name="sessionDate"/> was under
+        /// both its 50- and 200-session average. Unknown history is never treated as bearish.
+        /// </summary>
+        public bool IsBearishAt(DateOnly sessionDate) =>
+            TryRead(sessionDate)?.IsBearish == true;
+
+        /// <summary>The causal regime in force at that session, or null when the index is unknown.</summary>
+        public MarketRegime? RegimeAt(DateOnly sessionDate) => TryRead(sessionDate)?.Regime;
+
+        private (DateOnly Date, MarketRegime? Regime, bool IsBearish)? TryRead(DateOnly sessionDate)
+        {
+            (DateOnly Date, MarketRegime? Regime, bool IsBearish)? found = null;
+
+            foreach (var reading in _readings)
+            {
+                if (reading.Date > sessionDate)
+                {
+                    break;
+                }
+
+                found = reading;
+            }
+
+            return found;
+        }
+    }
+
     /// <summary>One resolved historical trade with the factor snapshot taken at its entry.</summary>
     private sealed record TrainingTrial(
         string Ticker,
@@ -860,15 +1296,31 @@ public sealed class MoneyManagerTrainingService
         DateOnly ExitDate,
         bool Won,
         decimal RealizedR,
+        decimal NetRiskReward,
+        decimal StructuralPrior,
         decimal?[] Features);
 
-    private readonly record struct TrainingOutcome(DateOnly ExitDate, bool Won, decimal RealizedR);
+    /// <summary>
+    /// The graded outcome of one simulated session: the tick-grid plan it was priced on, the
+    /// friction-inclusive reward/risk that plan offered, and the effective round-trip rate that
+    /// produced <see cref="RealizedR"/>.
+    /// </summary>
+    private readonly record struct TrainingOutcome(
+        DateOnly ExitDate,
+        bool Won,
+        decimal RealizedR,
+        decimal PlanEntry,
+        decimal StopLoss,
+        decimal Target,
+        decimal NetRiskReward,
+        decimal FeeRate);
 
     private sealed record FitChoice(
         LogisticModelTrainer.FitResult Fitted,
         decimal Lambda,
         double Brier,
-        double LogLoss);
+        double LogLoss,
+        double[] ValidationProbabilities);
 
     private void LogFit(TrainedHorizonModel model) =>
         _logger?.LogInformation(

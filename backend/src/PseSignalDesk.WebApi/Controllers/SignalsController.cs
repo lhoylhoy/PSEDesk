@@ -547,9 +547,10 @@ public sealed class SignalsController : ControllerBase
         var metricsByTicker = metrics.ToDictionary(m => m.Ticker, StringComparer.OrdinalIgnoreCase);
 
         // Order tickets are sized against the desk's own equity and heat, so the list can
-        // render "Take Trade" numbers without the browser ever doing the arithmetic.
-        var ticketContext = await _portfolio.GetOrderTicketContextAsync(cancellationToken: cancellationToken);
-        var runDto = run is null ? null : SignalRunMapper.ToDto(run, metricsByTicker, ticketContext);
+        // render "Take Trade" numbers without the browser ever doing the arithmetic. One book
+        // read feeds every pick, and each pick is sized for its own sector and pyramid state.
+        var book = await _portfolio.GetBookSizingSnapshotAsync(cancellationToken);
+        var runDto = run is null ? null : SignalRunMapper.ToDto(run, metricsByTicker, book);
 
         // The trust pulse is the desk's own report card. A ledger read must never take the
         // whole terminal down, so any failure other than cancellation hides the pulse

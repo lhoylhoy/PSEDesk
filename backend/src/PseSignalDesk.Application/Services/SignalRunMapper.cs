@@ -17,7 +17,7 @@ public static class SignalRunMapper
     public static SignalRunDto ToDto(
         SignalRun run,
         IReadOnlyDictionary<string, StockDailyMetric> metricsByTicker,
-        OrderTicketContext? orderTicketContext = null)
+        BookSizingSnapshot? book = null)
     {
         var items = run.Items
             .OrderBy(i => i.Rank)
@@ -77,10 +77,13 @@ public static class SignalRunMapper
                     item.OutcomeExitPrice,
                     item.RealizedNetR,
                     item.BarsHeld,
-                    orderTicketContext is null
+                    // Sized against this candidate's own sector room, ATR and pyramid state, not a
+                    // run-wide ticker-less context: a second name in a full sector, or a legal add
+                    // to an open winner, is a different order from a fresh first position.
+                    book is null
                         ? null
                         : OrderTicketCalculator.Build(
-                            orderTicketContext with { AtrPct = metric?.AtrPct ?? orderTicketContext.AtrPct },
+                            book.For(item.Ticker),
                             item.EntryPrice,
                             item.StopLoss,
                             item.TargetPrice,

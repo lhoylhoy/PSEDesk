@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using PseSignalDesk.Application.Models;
 using PseSignalDesk.Application.Services;
 using PseSignalDesk.Domain.Enums;
 using PseSignalDesk.Domain.Services;
@@ -42,6 +43,12 @@ public sealed class DailySignalSchedulerService : BackgroundService
             "Daily PSE signal scheduler started. Fire time: {RunAt} PHT on PSE trading days, horizons: {Horizons}.",
             RunAt.ToString("HH:mm"),
             string.Join(", ", Horizons));
+
+        // A cold desk must not wait for the first weekly slot before it prices with a learned
+        // book, so the bootstrap refit is queued in the background: the scheduling loop below
+        // starts immediately, and a rate-limited or offline feed simply leaves the structural
+        // prior in force instead of delaying or crashing the desk.
+        _ = Task.Run(() => BootstrapRetrainAsync(stoppingToken), CancellationToken.None);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -185,6 +192,68 @@ public sealed class DailySignalSchedulerService : BackgroundService
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// True while some horizon still has no model row at all, i.e. the desk is pricing with the
+    /// structural prior because it has never been trained. A refit that ran and was rejected is
+    /// a decision — <see cref="TrainedModelStatus.PriorFallback"/> — not a cold start, so it does
+    /// not queue a bootstrap on every boot.
+    /// </summary>
+    public static bool NeedsBootstrap(IReadOnlyList<TrainedModelSummaryDto> models) =>
+        models.Any(model => !model.IsActive && model.Status == TrainedModelStatus.Untrained);
+
+    /// <summary>
+    /// Fits all four books once if the desk boots cold. Failures are logged and swallowed: the
+    /// structural prior stays in force and the next weekly slot tries again, so a rate-limited
+    /// market feed (HTTP 429) can delay the first model but never the desk.
+    /// </summary>
+    private async Task BootstrapRetrainAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var training = scope.ServiceProvider.GetRequiredService<MoneyManagerTrainingService>();
+
+            var stored = new List<TrainedModelSummaryDto>(Horizons.Length);
+
+            foreach (var horizon in Horizons)
+            {
+                stored.Add(await training.GetModelAsync(horizon, cancellationToken));
+            }
+
+            if (!NeedsBootstrap(stored))
+            {
+                _logger.LogInformation(
+                    "Bootstrap money-manager refit skipped: every horizon already carries a fitted model ({Statuses}).",
+                    string.Join(", ", stored.Select(model => $"{model.Horizon} {model.Status}")));
+                return;
+            }
+
+            var runDate = ManilaTimeZone.TodayPht();
+            _logger.LogInformation(
+                "Bootstrap money-manager refit starting for {Date}: {Horizons} still price with the structural prior.",
+                runDate,
+                string.Join(", ", stored.Where(model => model.Status == TrainedModelStatus.Untrained).Select(model => model.Horizon)));
+
+            var summaries = await training.TrainAllAsync(runDate, null, cancellationToken);
+
+            _logger.LogInformation(
+                "Bootstrap money-manager refit finished for {Date}: {Summary}.",
+                runDate,
+                string.Join(", ", summaries.Select(summary => $"{summary.Horizon} {summary.Status}")));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            // The desk stays up with the structural prior: a bootstrap is an optimisation, not a
+            // prerequisite for pricing a pick.
+            _logger.LogWarning(
+                ex,
+                "Bootstrap money-manager refit failed. The structural prior stays in force until the next weekly refit.");
+        }
     }
 
     /// <summary>

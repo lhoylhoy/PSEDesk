@@ -151,7 +151,7 @@ Committed in `.vscode/` (not gitignored):
 | File | Contents |
 | --- | --- |
 | `launch.json` | `API: PseSignalDesk.WebApi` (`coreclr`, `preLaunchTask: backend: build`, `ASPNETCORE_URLS=http://localhost:5236`, `justMyCode: false`), `API: attach to running process`, `Terminal: Chrome (run npm run dev first)` (`type: chrome`, `webRoot` = `frontend/`), compound `Full stack (API + Chrome, Vite already running)` |
-| `tasks.json` | `backend: build` (default build task), `backend: test`, `frontend: build`, `frontend: dev` (background, Vite problem matcher waiting for `Local: http://localhost:5173`) |
+| `tasks.json` | `backend: build` (default build task), `backend: test`, **`backend: free port 5236`** (SIGTERM any listener on 5236 and re-check — the one-click version of the stale-`dotnet run` remedy below), `frontend: build`, `frontend: dev` (background, Vite problem matcher waiting for `Local: http://localhost:5173`) |
 
 `justMyCode` is **false** on purpose. A client abort is normal control flow here: React
 StrictMode remounts every screen once in development, switching horizon/date cancels the previous
@@ -197,9 +197,14 @@ the API at all.
   --no-build` is still up fails with `System.IO.IOException: Failed to bind to address
   http://127.0.0.1:5236: address already in use.` (inner `SocketException`). The debugger
   instance is the victim, not the culprit — the stale terminal server (orphaned to PPID 1 after
-  a window reload) keeps the port. Find and free it with
-  `lsof -nP -iTCP:5236 -sTCP:LISTEN` then `kill <pid>` (SIGTERM; it exits within a few seconds
-  after the hosted-service shutdown), and only then press F5 again.
+  a window reload) keeps the port. Confirm with
+  `ps -o pid,ppid,lstart,command -p <pid>` (PPID 1 + `dotnet run --launch-profile http --no-build`
+  is the tell), then free it with `lsof -nP -iTCP:5236 -sTCP:LISTEN` and `kill <pid>` (SIGTERM to
+  the app host; it exits within a few seconds after the hosted-service shutdown) — or run the
+  `backend: free port 5236` task. `lsof` can list the dead socket for a few seconds after the
+  process is gone, so confirm with `curl http://127.0.0.1:5236/health` (connection refused = free)
+  or a real `bind()` before relaunching. The paused debuggee cannot recover from the bind failure:
+  stop that debug session (Shift+F5), then press F5 again.
 - **Client aborts are routine, not failures.** React StrictMode remounts (dev) and date/horizon
   switches cancel in-flight fetches; the API answers `499 ClientClosedRequest` through
   `RequestCancellationMiddleware`. The terminal defers its fetch by one macrotask so StrictMode

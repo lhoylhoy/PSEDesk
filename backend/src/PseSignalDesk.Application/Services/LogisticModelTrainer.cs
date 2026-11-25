@@ -5,6 +5,13 @@ namespace PseSignalDesk.Application.Services;
 /// money-manager factor weights. No third-party numerics package is pulled in: the design
 /// matrix is small (twelve standardized factors plus an intercept), so a damped Newton
 /// solve with partial pivoting is both sufficient and reviewable.
+/// <para>
+/// Two production concerns are supported explicitly: per-sample <b>weights</b> (one market-wide
+/// beta session must not outvote twenty idiosyncratic setups, and a +2.5R target hit must
+/// outrank a +0.02R scratch) and per-sample <b>offsets</b>, which turn the fit into residual
+/// learning — the structural prior enters the linear predictor as an offset and the weights
+/// capture only the edge the prior missed.
+/// </para>
 /// </summary>
 internal static class LogisticModelTrainer
 {
@@ -12,11 +19,25 @@ internal static class LogisticModelTrainer
     public sealed record FitResult(double Intercept, double[] Weights);
 
     /// <summary>
-    /// Fits <c>P(win) = sigmoid(intercept + w · z)</c> with an L2 penalty on the coefficients
-    /// (never the intercept). <paramref name="x"/> must already be standardized, so the
-    /// penalty is applied on a level playing field across factors.
+    /// Fits <c>P(win) = sigmoid(offset_i + intercept + w · z_i)</c> with an L2 penalty on the
+    /// coefficients (never the intercept). <paramref name="x"/> must already be standardized,
+    /// so the penalty is applied on a level playing field across factors.
     /// </summary>
-    public static FitResult Fit(double[][] x, double[] y, double lambda, int iterations = 30)
+    /// <param name="sampleWeights">
+    /// Optional relative weight per observation. Null (or a mismatched length) means every
+    /// trial counts once. Weights are used as given, so the caller normalises them.
+    /// </param>
+    /// <param name="offsets">
+    /// Optional per-observation prior log-odds. The fitted weights then explain the residual,
+    /// not the level the structural prior already establishes.
+    /// </param>
+    public static FitResult Fit(
+        double[][] x,
+        double[] y,
+        double lambda,
+        int iterations = 30,
+        double[]? sampleWeights = null,
+        double[]? offsets = null)
     {
         ArgumentNullException.ThrowIfNull(x);
         ArgumentNullException.ThrowIfNull(y);
@@ -29,6 +50,8 @@ internal static class LogisticModelTrainer
             return new FitResult(0d, new double[features]);
         }
 
+        var weighted = sampleWeights is not null && sampleWeights.Length == count;
+        var offset = offsets is not null && offsets.Length == count ? offsets : null;
         var beta = new double[features + 1];
 
         for (var iteration = 0; iteration < iterations; iteration++)
@@ -38,15 +61,16 @@ internal static class LogisticModelTrainer
 
             for (var row = 0; row < count; row++)
             {
-                var eta = beta[0];
+                var eta = beta[0] + (offset is null ? 0d : offset[row]);
                 for (var column = 0; column < features; column++)
                 {
                     eta += beta[column + 1] * x[row][column];
                 }
 
                 var probability = Sigmoid(eta);
-                var weight = Math.Max(probability * (1d - probability), 1e-6d);
-                var residual = y[row] - probability;
+                var rowWeight = weighted ? Math.Max(0d, sampleWeights![row]) : 1d;
+                var weight = rowWeight * Math.Max(probability * (1d - probability), 1e-6d);
+                var residual = rowWeight * (y[row] - probability);
 
                 gradient[0] += residual;
                 hessian[0, 0] += weight;
@@ -97,12 +121,17 @@ internal static class LogisticModelTrainer
         return new FitResult(beta[0], beta.Skip(1).ToArray());
     }
 
-    public static double Predict(FitResult model, double[] standardizedFeatures)
+    /// <summary>
+    /// Probability of a standardized feature row. <paramref name="offset"/> is the structural
+    /// prior log-odds the model was fitted on top of; pass the same value the fit saw (or zero
+    /// for a full-probability model).
+    /// </summary>
+    public static double Predict(FitResult model, double[] standardizedFeatures, double offset = 0d)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(standardizedFeatures);
 
-        var eta = model.Intercept;
+        var eta = model.Intercept + offset;
         var length = Math.Min(model.Weights.Length, standardizedFeatures.Length);
 
         for (var index = 0; index < length; index++)
@@ -117,6 +146,14 @@ internal static class LogisticModelTrainer
         eta >= 0d
             ? 1d / (1d + Math.Exp(-eta))
             : Math.Exp(eta) / (1d + Math.Exp(eta));
+
+    /// <summary>Inverse of <see cref="Sigmoid"/>, clamped so a 0%/100% prior stays finite.</summary>
+    public static double Logit(double probability)
+    {
+        var clamped = Math.Clamp(probability, 1e-6d, 1d - 1e-6d);
+
+        return Math.Log(clamped / (1d - clamped));
+    }
 
     /// <summary>
     /// Gaussian elimination with partial pivoting. Returns null when the system is singular,

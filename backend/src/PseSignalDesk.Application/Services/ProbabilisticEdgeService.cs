@@ -490,12 +490,14 @@ public sealed class ProbabilisticEdgeService
         }
 
         // The self-trained money-manager model: only a promoted model is ever present here,
-        // and it may move the odds by at most six points from its own base rate. This is the
-        // closed loop — the desk's own graded history prices the next pick.
+        // and it may move the odds by at most six points from the prior it was fitted against.
+        // The model learned the *residual* over this structural prior (its intercept and weights
+        // were fitted with logit(prior) as an offset), so applying the residual here updates the
+        // probability instead of counting stage/RS/VCP/ATR/accumulation a second time.
         var learnedTilt = 0m;
         if (request.LearnedModel is not null && request.LearnedFeatures is not null)
         {
-            learnedTilt = request.LearnedModel.Tilt(request.LearnedFeatures);
+            learnedTilt = request.LearnedModel.ResidualTilt(probability, request.LearnedFeatures);
             probability += learnedTilt;
         }
 
