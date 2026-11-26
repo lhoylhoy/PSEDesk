@@ -29,14 +29,14 @@ function ConvictionBar({ score }: { score: number }) {
           style={{ width }}
         />
       </div>
-      <span className="tabular text-xs font-semibold text-slate-200">{Math.round(score)}</span>
+      <span className="tabular type-caption font-semibold text-fg">{Math.round(score)}</span>
     </div>
   );
 }
 
 function rsiTone(value: number | undefined): string {
   if (value == null) {
-    return 'text-slate-500';
+    return 'text-fg-subtle';
   }
 
   if (value > 72) {
@@ -47,7 +47,7 @@ function rsiTone(value: number | undefined): string {
     return 'text-rose-400';
   }
 
-  return 'text-slate-200';
+  return 'text-fg';
 }
 
 interface ProSignalCardProps {
@@ -67,10 +67,16 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
   const openDetails = () => onSelect(item.ticker);
 
   return (
-    <li className="px-3 py-3">
+    // The whole card opens the detail modal, like the desktop row: a phone reader should not
+    // have to find the ticker or the Details button. The Take action and the trap-flag badge
+    // stop propagation so they keep their own behaviour.
+    <li
+      onClick={openDetails}
+      className="cursor-pointer px-4 py-3.5 transition hover:bg-ink-800/50"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2">
-          <span className="tabular mt-0.5 w-6 shrink-0 text-sm font-semibold text-slate-400">
+          <span className="tabular type-caption mt-0.5 w-6 shrink-0 font-semibold text-fg-subtle">
             {String(item.rank).padStart(2, '0')}
           </span>
           <div className="min-w-0">
@@ -80,16 +86,16 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
                 onClick={openDetails}
                 onPointerEnter={() => preloadTickerDetailDialog(item.ticker, horizon)}
                 onFocus={() => preloadTickerDetailDialog(item.ticker, horizon)}
-                className="font-mono text-sm font-semibold tracking-wide text-white transition hover:text-mint-400"
+                className="font-mono type-lead font-semibold text-fg transition hover:text-mint-400"
               >
                 {item.ticker}
               </button>
-              <span className="rounded border border-line/70 px-1 py-0.5 text-[9px] uppercase tracking-wider text-slate-500">
+              <span className="type-badge rounded border border-line/70 px-1.5 py-0.5 text-fg-subtle">
                 {item.sector}
               </span>
               <DriftBadge status={item.driftStatus} previousRank={item.previousRank} />
             </div>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500">{item.companyName}</p>
+            <p className="type-caption mt-1 truncate text-fg-subtle">{item.companyName}</p>
             {item.trapFlags && item.trapFlags.length > 0 ? (
               <Tooltip
                 label={
@@ -101,7 +107,8 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
               >
                 <span
                   tabIndex={0}
-                  className="mt-1 inline-flex items-center gap-1 rounded border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 text-[9px] uppercase tracking-wider text-amber-400"
+                  onClick={(event) => event.stopPropagation()}
+                  className="type-badge mt-1.5 inline-flex items-center gap-1 rounded border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-amber-400"
                 >
                   {item.trapFlags.length} flag{item.trapFlags.length === 1 ? '' : 's'}
                 </span>
@@ -119,29 +126,29 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
         </div>
       </div>
 
-      <dl className="mt-2 grid grid-cols-3 gap-1.5">
-        <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2 py-1.5">
-          <dt className="text-[9px] uppercase tracking-wider text-slate-500">Entry</dt>
-          <dd className="tabular text-xs font-semibold text-slate-100">
+      <dl className="mt-2.5 grid grid-cols-3 gap-1.5">
+        <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2.5 py-2">
+          <dt className="type-eyebrow text-fg-subtle">Entry</dt>
+          <dd className="tabular type-caption mt-0.5 font-semibold text-fg">
             {formatPrice(item.entryPrice)}
           </dd>
         </div>
-        <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2 py-1.5">
-          <dt className="text-[9px] uppercase tracking-wider text-slate-500">Stop</dt>
-          <dd className="tabular text-xs font-semibold text-rose-400/90">
+        <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2.5 py-2">
+          <dt className="type-eyebrow text-fg-subtle">Stop</dt>
+          <dd className="tabular type-caption mt-0.5 font-semibold text-rose-400/90">
             {formatPrice(item.stopLoss)}
           </dd>
         </div>
-        <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2 py-1.5">
-          <dt className="text-[9px] uppercase tracking-wider text-slate-500">Target</dt>
-          <dd className="tabular text-xs font-semibold text-mint-400">
+        <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2.5 py-2">
+          <dt className="type-eyebrow text-fg-subtle">Target</dt>
+          <dd className="tabular type-caption mt-0.5 font-semibold text-mint-400">
             {formatPrice(item.targetPrice)}
           </dd>
         </div>
       </dl>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="tabular text-[10px] text-slate-500">
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+        <p className="tabular type-caption text-fg-subtle">
           <span
             className={cn(
               'font-semibold',
@@ -157,15 +164,18 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
           <button
             type="button"
             onClick={openDetails}
-            className="tap rounded-lg border border-line/80 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300 transition hover:border-slate-500/60 hover:text-white"
+            className="tap type-caption rounded-lg border border-line/80 px-2.5 py-1.5 font-semibold text-fg-muted transition hover:border-mint-400/60 hover:text-fg"
           >
             Details
           </button>
           <button
             type="button"
             disabled={sizing.shares <= 0}
-            onClick={() => onTakeTrade(item)}
-            className="tap rounded-lg border border-mint-400/40 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-slate-600"
+            onClick={(event) => {
+              event.stopPropagation();
+              onTakeTrade(item);
+            }}
+            className="tap type-caption rounded-lg border border-mint-400/40 px-2.5 py-1.5 font-semibold text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-fg-faint"
           >
             Take
           </button>
@@ -184,18 +194,18 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
 
   return (
     <section className="panel overflow-hidden">
-      <header className="flex flex-wrap items-end justify-between gap-2 border-b border-line/70 px-4 py-3">
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line/70 px-4 py-4 sm:px-5">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">{meta.bookTitle}</h2>
-          <p className="mt-0.5 max-w-3xl text-[11px] text-slate-500">{meta.mandate}</p>
+          <h2 className="type-title text-fg">{meta.bookTitle}</h2>
+          <p className="type-caption measure mt-1.5 text-fg-subtle">{meta.mandate}</p>
         </div>
-        <span className="hidden text-[10px] uppercase tracking-[0.18em] text-slate-500 sm:block">
+        <span className="type-eyebrow hidden text-fg-subtle sm:block">
           {items.length} active names · edge-sized plans
         </span>
       </header>
 
       {items.length === 0 ? (
-        <p className="px-4 py-10 text-center text-xs text-slate-500">
+        <p className="type-body measure mx-auto px-4 py-12 text-center text-fg-subtle">
           This run returned no qualifying names. Re-run the pipeline after the next close.
         </p>
       ) : (
@@ -216,7 +226,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
           <div className="scroll-x hidden md:block">
             <table className="w-full min-w-248 border-collapse text-left">
             <thead>
-              <tr className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+              <tr className="type-eyebrow text-fg-subtle">
                 <th className="sticky-col w-12 px-3 py-2.5 font-medium">#</th>
                 <th className="sticky-col-2 px-3 py-2.5 font-medium">Name</th>
                 <th className="px-3 py-2.5 font-medium">Drift</th>
@@ -252,7 +262,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                   onFocus={() => preloadTickerDetailDialog(item.ticker, horizon)}
                   className="cursor-pointer border-t border-line/60 transition hover:bg-ink-800/60 focus-visible:bg-ink-800/60"
                 >
-                  <td className="sticky-col px-3 py-3 align-middle">
+                  <td className="sticky-col px-3 py-3.5 align-middle">
                     <span
                       aria-hidden
                       className={cn(
@@ -260,11 +270,11 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                         driftAccent[item.driftStatus],
                       )}
                     />
-                    <span className="tabular pl-1 text-sm font-semibold text-slate-400">
+                    <span className="tabular pl-1 text-sm font-semibold text-fg-muted">
                       {String(item.rank).padStart(2, '0')}
                     </span>
                   </td>
-                  <td className="sticky-col-2 px-3 py-3">
+                  <td className="sticky-col-2 px-3 py-3.5">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -272,15 +282,15 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                           event.stopPropagation();
                           onSelect(item.ticker);
                         }}
-                        className="font-mono text-sm font-semibold tracking-wide text-white transition hover:text-mint-400"
+                        className="font-mono type-lead font-semibold text-fg transition hover:text-mint-400"
                       >
                         {item.ticker}
                       </button>
-                      <span className="rounded border border-line/70 px-1 py-0.5 text-[9px] uppercase tracking-wider text-slate-500">
+                      <span className="type-badge rounded border border-line/70 px-1.5 py-0.5 text-fg-subtle">
                         {item.sector}
                       </span>
                     </div>
-                    <p className="mt-0.5 max-w-[16rem] truncate text-[11px] text-slate-500">
+                    <p className="type-caption mt-1 max-w-[16rem] truncate text-fg-subtle">
                       {item.companyName}
                     </p>
                     {item.trapFlags && item.trapFlags.length > 0 ? (
@@ -294,27 +304,27 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                       >
                         <span
                           tabIndex={0}
-                          className="mt-1 inline-flex items-center gap-1 rounded border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 text-[9px] uppercase tracking-wider text-amber-400"
+                          className="type-badge mt-1.5 inline-flex items-center gap-1 rounded border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-amber-400"
                         >
                           {item.trapFlags.length} flag{item.trapFlags.length === 1 ? '' : 's'}
                         </span>
                       </Tooltip>
                     ) : null}
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3.5">
                     <DriftBadge status={item.driftStatus} previousRank={item.previousRank} />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3.5">
                     <ConvictionBar score={item.convictionScore} />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3.5">
                     <Tooltip label={verdictDescription(item.edgeVerdict)}>
                       <span tabIndex={0}>
                         <VerdictBadge verdict={item.edgeVerdict} />
                       </span>
                     </Tooltip>
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs">
+                  <td className="tabular px-3 py-3.5 text-right type-caption">
                     <span
                       className={cn(
                         'font-semibold',
@@ -323,31 +333,31 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                     >
                       {formatProbability(item.winProbability)}
                     </span>
-                    <span className="text-slate-500"> vs {formatProbability(item.breakEvenWinRate)}</span>
+                    <span className="text-fg-subtle"> vs {formatProbability(item.breakEvenWinRate)}</span>
                     <p
                       className={cn(
-                        'mt-0.5 text-[10px]',
-                        item.expectedValueR > 0 ? 'text-slate-400' : 'text-rose-400/80',
+                        'type-caption mt-1',
+                        item.expectedValueR > 0 ? 'text-fg-muted' : 'text-rose-400/80',
                       )}
                     >
                       {formatR(item.expectedValueR)} EV
                     </p>
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-slate-100">
+                  <td className="tabular px-3 py-3.5 text-right type-caption text-fg">
                     {formatPrice(item.entryPrice)}
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-rose-400/90">
+                  <td className="tabular px-3 py-3.5 text-right type-caption text-rose-400/90">
                     {formatPrice(item.stopLoss)}
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-mint-400">
+                  <td className="tabular px-3 py-3.5 text-right type-caption text-mint-400">
                     {formatPrice(item.targetPrice)}
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-slate-300">
+                  <td className="tabular px-3 py-3.5 text-right type-caption text-fg-muted">
                     <Tooltip label={`Fee-adjusted reward-to-risk. Gross is ${formatRatio(item.riskRewardRatio)}.`}>
                       <span tabIndex={0}>{formatRatio(item.netRiskRewardRatio)}</span>
                     </Tooltip>
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-slate-400">
+                  <td className="tabular px-3 py-3.5 text-right type-caption text-fg-muted">
                     <Tooltip
                       label={
                         sizing.serverSized
@@ -361,11 +371,11 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                             )}-share board lot.`
                       }
                     >
-                      <span tabIndex={0} className={sizing.shares > 0 ? 'text-slate-200' : 'text-slate-500'}>
+                      <span tabIndex={0} className={sizing.shares > 0 ? 'text-fg' : 'text-fg-subtle'}>
                         {sizing.shares > 0 ? `${formatInteger(sizing.shares)} sh` : sizing.actionable ? 'no lot' : 'pass'}
                       </span>
                     </Tooltip>
-                    <p className="mt-0.5 text-[10px] text-slate-600">
+                    <p className="type-caption mt-1 text-fg-subtle">
                       {sizing.shares > 0
                         ? sizing.serverSized
                           ? `${formatCompactPeso(sizing.buyOutlayPhp)} all-in`
@@ -373,24 +383,24 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                         : `${sizing.kellyPct.toFixed(1)}% Kelly`}
                     </p>
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-slate-400">
+                  <td className="tabular px-3 py-3.5 text-right type-caption text-fg-muted">
                     {item.metrics ? formatCompactPeso(item.metrics.avgTurnover20dPhp) : '—'}
                   </td>
                   <td
                     className={cn(
-                      'tabular px-3 py-3 text-right text-xs',
+                      'tabular px-3 py-3.5 text-right type-caption',
                       rsiTone(item.metrics?.rsi14),
                     )}
                   >
                     {item.metrics ? item.metrics.rsi14.toFixed(1) : '—'}
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3.5 text-right">
                     <Tooltip label={item.thesis}>
                       <button
                         type="button"
                         aria-label={`Read the thesis for ${item.ticker}`}
                         onClick={(event) => event.stopPropagation()}
-                        className="tap inline-flex size-6 items-center justify-center rounded-full border border-line/80 text-[10px] font-semibold text-slate-400 transition hover:border-mint-400/50 hover:text-mint-400"
+                        className="tap type-caption inline-flex size-7 items-center justify-center rounded-full border border-line/80 font-semibold text-fg-muted transition hover:border-mint-400/50 hover:text-mint-400"
                       >
                         i
                       </button>
@@ -402,7 +412,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                         event.stopPropagation();
                         onTakeTrade(item);
                       }}
-                      className="tap mt-1 block w-full rounded border border-mint-400/40 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-slate-600"
+                      className="tap type-caption mt-1.5 block w-full rounded border border-mint-400/40 px-1 py-1 font-semibold text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-fg-faint"
                     >
                       Take
                     </button>
@@ -416,12 +426,12 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
         </>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 px-4 py-2 text-[10px] text-slate-600">
-        <span>
-          {tradeCount} TRADE · {smallSizeCount} SMALL_SIZE · {watchOnlyCount} WATCH_ONLY ·{' '}
+      <div className="type-caption flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line/60 px-4 py-3 text-fg-subtle sm:px-5">
+        <span className="tabular">
+          {tradeCount} trade · {smallSizeCount} small size · {watchOnlyCount} watch only ·{' '}
           {recommendedCashPct != null ? `${recommendedCashPct.toFixed(0)}% cash recommended` : `${fundedPicks} funded`}
         </span>
-        <span>Open any name for the odds, pre-mortem, full technicals, disclosures and rank history.</span>
+        <span className="measure">Open any name for the odds, pre-mortem, full technicals, disclosures and rank history.</span>
       </div>
     </section>
   );

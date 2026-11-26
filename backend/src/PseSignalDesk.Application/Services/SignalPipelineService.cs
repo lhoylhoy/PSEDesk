@@ -97,6 +97,12 @@ public sealed class SignalPipelineService
                     $"None of the {batch.Stocks.Count} live tickers had enough history to compute the 200-day trend for {runDate:yyyy-MM-dd}.");
             }
 
+            // Attribution before disqualification: the market-wide Edge page has no company
+            // column, so the screened names are re-read through their own company listing. This
+            // is what puts a rights offering or a tender offer in front of the trap screen
+            // instead of leaving it dependent on a headline that names its issuer.
+            metrics = await EnrichCompanyDisclosuresAsync(runDate, horizon, metrics, cancellationToken);
+
             // A one-day Edge page rolls over. Merge what is stored for the tickers into today's
             // filings before persisting, so an active rights offering or tender offer keeps
             // disqualifying the name for the following sessions.
@@ -359,6 +365,72 @@ public sealed class SignalPipelineService
             DeskMemory: deskMemory,
             LearnedModel: learnedModel);
     }
+
+    /// <summary>
+    /// Re-reads each screened name's disclosures from the exchange's per-company listing and folds
+    /// them into the metric that will be screened and persisted.
+    /// <para>
+    /// The market-wide page carries no company column, so a filing whose subject does not name its
+    /// issuer cannot be attributed at all — and the structural trap screen (rights offering,
+    /// tender offer, halt) then passes a name it should have rejected, without an error anywhere.
+    /// The fan-out is bounded by the provider (one GET per name, at most
+    /// <see cref="QuantitativeFilterService.MaxCandidates"/> of them) and entirely best-effort:
+    /// a provider that cannot answer leaves the market-wide attribution in place.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<StockDailyMetric>> EnrichCompanyDisclosuresAsync(
+        DateOnly runDate,
+        SignalHorizon horizon,
+        IReadOnlyList<StockDailyMetric> metrics,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var tickers = _quantFilter.SelectDisclosureFanout(
+                metrics,
+                horizon,
+                QuantitativeFilterService.MaxCandidates);
+
+            if (tickers.Count == 0)
+            {
+                return metrics;
+            }
+
+            var attributed = await _marketDataProvider.FetchCompanyDisclosuresAsync(
+                tickers,
+                runDate,
+                cancellationToken);
+
+            if (attributed.Count == 0)
+            {
+                return metrics;
+            }
+
+            return metrics
+                .Select(metric => attributed.TryGetValue(metric.Ticker, out var filings) && filings.Count > 0
+                    ? metric.WithDisclosures(MarketDataMapper.SerializeDisclosures(
+                        QuantitativeFilterService.MergeRollingDisclosures(
+                            MarketDataMapper.DeserializeDisclosures(metric.RecentDisclosuresJson),
+                            filings,
+                            runDate)))
+                    : metric)
+                .ToList();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "The per-company disclosure lookup failed for the {Horizon} run; the market-wide scrape stays in force.",
+                horizon);
+
+            return metrics;
+        }
+    }
+
 
     /// <summary>
     /// Builds the rolling disclosure view for this run. The stored ticker rows over the

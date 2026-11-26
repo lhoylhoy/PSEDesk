@@ -22,7 +22,7 @@ const verdictStyles: Record<
   WATCH_ONLY: {
     label: 'WATCH',
     icon: '○',
-    className: 'border-slate-500/40 bg-slate-500/10 text-slate-400',
+    className: 'border-slate-500/40 bg-slate-500/10 text-fg-muted',
     description:
       'Zero or negative expected value after the 0.690% round trip: a no-bet / pass kept for research context.',
   },
@@ -53,12 +53,12 @@ export function VerdictBadge({ verdict, className, friendly = false }: VerdictBa
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em]',
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 type-badge',
         style.className,
         className,
       )}
     >
-      <span aria-hidden className="text-[8px] leading-none">
+      <span aria-hidden className="text-2xs leading-none opacity-90">
         {style.icon}
       </span>
       {label}

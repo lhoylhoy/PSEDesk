@@ -5,29 +5,23 @@ import { formatCompactPeso, formatInteger, formatPrice, formatRatio } from '../l
 import { horizonMeta } from '../lib/horizons';
 import {
   computePlanPercentages,
-  describeConviction,
   describeEntryTiming,
-  describeOrderGuide,
   describePlainVerdict,
-  describeWinChance,
+  describeSignalRow,
   plainVerdictBadgeClass,
   type PlainOrderGuide,
 } from '../lib/plainAdvice';
-import { companyLabel, nicknameFor } from '../lib/pseNicknames';
-import { preloadPortfolioDialog, preloadTickerDetailDialog } from '../lib/preloaders';
+import { companyLabel } from '../lib/pseNicknames';
+import { preloadTickerDetailDialog } from '../lib/preloaders';
 import { computeRiskSizing, formatProbability, formatR } from '../lib/riskSizing';
 import { DriftBadge } from './DriftBadge';
-import { Button } from './ui/Button';
 import { InfoTip } from './ui/InfoTip';
-import { TechnicalDisclosure } from './ui/TechnicalDisclosure';
 
 interface AdviceCardListProps {
   items: SignalItem[];
   horizon: Horizon;
-  /** Opens the full detail dialog for a ticker. */
+  /** Opens the ticker's detail modal — the same sheet every row and the Pro table open. */
   onSelect: (ticker: string) => void;
-  /** Logs the pick's server ticket in the paper blotter. */
-  onTakeTrade: (item: SignalItem) => void;
 }
 
 /** The three prices a reader actually needs, in the order they use them. */
@@ -48,7 +42,7 @@ export function PlanSteps({
       hint: 'The most you should pay. Buying higher than this makes the plan worse than the desk priced.',
       price: entryPrice,
       note: 'the most you should pay',
-      tone: 'text-slate-100',
+      tone: 'text-fg',
     },
     {
       label: '2 · Sell at',
@@ -67,15 +61,15 @@ export function PlanSteps({
   ];
 
   return (
-    <ol className="grid grid-cols-1 gap-2 @sm:grid-cols-3">
+    <ol className="grid grid-cols-1 gap-2.5 @sm:grid-cols-3">
       {steps.map((step) => (
-        <li key={step.label} className="rounded-lg border border-line/70 bg-ink-900/70 px-2.5 py-2">
-          <p className="flex items-center gap-1 text-[9px] uppercase tracking-[0.14em] text-slate-500 simple-label">
+        <li key={step.label} className="rounded-lg border border-line/70 bg-ink-900/70 px-3.5 py-3">
+          <p className="flex items-center gap-1 type-eyebrow text-fg-subtle simple-label">
             {step.label}
             <InfoTip label={step.hint} term={step.label.replace(/^\d+ · /, '')} />
           </p>
-          <p className={cn('tabular mt-0.5 text-sm font-semibold', step.tone)}>{formatPrice(step.price)}</p>
-          <p className="tabular text-[10px] text-slate-500 simple-note">{step.note}</p>
+          <p className={cn('type-figure mt-1 text-base', step.tone)}>{formatPrice(step.price)}</p>
+          <p className="tabular type-caption mt-0.5 text-fg-subtle simple-note">{step.note}</p>
         </li>
       ))}
     </ol>
@@ -97,7 +91,7 @@ export function WavePlanGrid({ plan }: { plan: WaveTradePlan }) {
         plan.maxChasePrice > plan.idealBuyPrice
           ? `never pay above ${formatPrice(plan.maxChasePrice)}`
           : 'do not pay a higher price',
-      tone: 'text-slate-100',
+      tone: 'text-fg',
     },
     {
       label: '2 · Wrong below',
@@ -123,25 +117,25 @@ export function WavePlanGrid({ plan }: { plan: WaveTradePlan }) {
   ];
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
           className={cn(
-            'rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]',
+            'rounded-full border px-2 py-0.5 type-badge',
             timing.badgeClass,
           )}
         >
           {timing.label}
         </span>
-        <span className="text-[10px] leading-relaxed text-slate-500 simple-note">{timing.detail}</span>
+        <span className="type-caption measure text-fg-subtle simple-note">{timing.detail}</span>
       </div>
 
-      <ol className="grid grid-cols-2 gap-2 @xl:grid-cols-4">
+      <ol className="grid grid-cols-2 gap-2.5 @xl:grid-cols-4">
         {steps.map((step) => (
-          <li key={step.label} className="rounded-lg border border-line/70 bg-ink-900/70 px-2.5 py-2">
-            <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500 simple-label">{step.label}</p>
-            <p className={cn('tabular mt-0.5 text-sm font-semibold', step.tone)}>{formatPrice(step.price)}</p>
-            <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500 simple-note">{step.note}</p>
+          <li key={step.label} className="rounded-lg border border-line/70 bg-ink-900/70 px-3.5 py-3">
+            <p className="type-eyebrow text-fg-subtle simple-label">{step.label}</p>
+            <p className={cn('type-figure mt-1 text-base', step.tone)}>{formatPrice(step.price)}</p>
+            <p className="type-caption mt-1 text-fg-subtle simple-note">{step.note}</p>
           </li>
         ))}
       </ol>
@@ -159,7 +153,7 @@ export function WavePlanSteps({ item }: { item: SignalItem }) {
 }
 
 /** Friendly confidence meter; `pct` is only used for the bar width. */
-function Meter({
+export function Meter({
   label,
   pct,
   value,
@@ -175,15 +169,15 @@ function Meter({
   const width = `${Math.max(3, Math.min(100, pct))}%`;
 
   return (
-    <div className="rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2">
+    <div className="rounded-lg border border-line/70 bg-ink-900/70 px-3.5 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500 simple-label">{label}</p>
-        <p className="tabular text-xs font-semibold text-slate-200">{value}</p>
+        <p className="type-eyebrow text-fg-subtle simple-label">{label}</p>
+        <p className="type-figure text-base text-fg">{value}</p>
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink-700">
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink-700">
         <div className={cn('h-full rounded-full', barClass)} style={{ width }} />
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-slate-500 simple-note">{detail}</p>
+      <p className="type-caption measure mt-1.5 text-fg-subtle simple-note">{detail}</p>
     </div>
   );
 }
@@ -199,13 +193,13 @@ function Meter({
 export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: SignalItem }) {
   if (!guide.actionable) {
     return (
-      <div className="rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2">
-        <p className="text-[11px] font-semibold text-slate-300 simple-copy">Watch only — no ticket</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-400 simple-copy">{guide.orderTip}</p>
+      <div className="rounded-lg border border-line/70 bg-ink-900/70 px-3.5 py-3">
+        <p className="type-body font-semibold text-fg-muted simple-copy">Watch only — no ticket</p>
+        <p className="type-body measure mt-1 text-fg-muted simple-copy">{guide.orderTip}</p>
         {guide.warnings.length > 0 ? (
-          <ul className="mt-1.5 space-y-0.5">
+          <ul className="mt-2 space-y-1">
             {guide.warnings.map((warning) => (
-              <li key={warning} className="text-[10px] leading-relaxed text-amber-300/90 simple-note">
+              <li key={warning} className="type-caption measure text-amber-300/90 simple-note">
                 {warning}
               </li>
             ))}
@@ -216,42 +210,42 @@ export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: Signa
   }
 
   return (
-    <div className="rounded-lg border border-mint-400/25 bg-mint-400/5 px-3 py-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[11px] font-semibold text-slate-100 simple-copy">
+    <div className="rounded-lg border border-mint-400/25 bg-mint-400/5 px-3.5 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="type-body font-semibold text-fg simple-copy">
           Ticket: {formatInteger(guide.shares)} share{guide.shares === 1 ? '' : 's'}
-          <span className="font-normal text-slate-500">
+          <span className="font-normal text-fg-subtle">
             {' '}
             ({guide.lots} board lot{guide.lots === 1 ? '' : 's'} of {guide.boardLot})
           </span>
         </p>
-        <p className="tabular text-[11px] text-slate-300 simple-note">
+        <p className="tabular type-caption text-fg-muted simple-note">
           about {formatCompactPeso(guide.cashNeededPhp)} all-in
         </p>
       </div>
-      <p className="mt-1 text-[11px] leading-relaxed text-slate-400 simple-copy">
+      <p className="type-body measure mt-1.5 text-fg-muted simple-copy">
         If the price reaches the target the ticket keeps about{' '}
         <span className="font-semibold text-mint-400">{formatCompactPeso(guide.netGainAtTargetPhp)}</span> after broker
         fees; at the cut-loss it gives up about{' '}
         <span className="font-semibold text-rose-400">{formatCompactPeso(guide.netLossAtStopPhp)}</span>.
       </p>
-      <p className="mt-1 text-[11px] leading-relaxed text-slate-500 simple-copy">{guide.orderTip}</p>
+      <p className="type-body measure mt-1.5 text-fg-subtle simple-copy">{guide.orderTip}</p>
       {guide.warnings.length > 0 ? (
-        <ul className="mt-1.5 space-y-0.5">
+        <ul className="mt-2 space-y-1">
           {guide.warnings.map((warning) => (
-            <li key={warning} className="text-[10px] leading-relaxed text-amber-300/90 simple-note">
+            <li key={warning} className="type-caption measure text-amber-300/90 simple-note">
               {warning}
             </li>
           ))}
         </ul>
       ) : null}
       {guide.serverSized ? null : (
-        <p className="mt-1 text-[10px] text-slate-600 simple-note">
+        <p className="type-caption mt-1.5 text-fg-faint simple-note">
           Estimated size — this older session has no server order ticket.
         </p>
       )}
       {item ? (
-        <p className="mt-1 text-[10px] leading-relaxed text-slate-600 simple-note">
+        <p className="type-caption measure mt-1.5 text-fg-faint simple-note">
           Placing an order is your decision and your broker’s execution; nothing here is routed or sent.
         </p>
       ) : null}
@@ -261,23 +255,31 @@ export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: Signa
 
 function TechRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 border-b border-line/40 py-1 last:border-b-0">
-      <dt className="text-[10px] uppercase tracking-[0.12em] text-slate-500">{label}</dt>
-      <dd className="tabular text-right text-[11px] text-slate-300">{value}</dd>
+    <div className="flex items-baseline justify-between gap-3 border-b border-line/40 py-1.5 last:border-b-0">
+      {/* A field label, not an eyebrow: sentence case at the caption size reads faster
+          than an uppercase ribbon, and it keeps the drawer's hierarchy below its title. */}
+      <dt className="type-caption text-fg-subtle">{label}</dt>
+      <dd className="tabular type-caption text-right font-medium text-fg">{value}</dd>
     </div>
   );
 }
 
-/** Verbatim desk fields — the receipt behind every friendly sentence on the card. */
-function TechnicalRows({ item, guide }: { item: SignalItem; guide: PlainOrderGuide }) {
+/**
+ * The maths behind one ticket: how the pick scored, and what the ticket costs to carry.
+ * It deliberately stops at the sizing maths — the raw indicators, the deviation reason and
+ * the filings each own a drawer in the detail sheet, and one dialog should never print the
+ * same figure twice.
+ *
+ * Every value is a verbatim desk field, the receipt behind the friendly sentence on the row.
+ */
+export function MathRows({ item, guide }: { item: SignalItem; guide: PlainOrderGuide }) {
   const sizing = computeRiskSizing(item);
-  const metrics = item.metrics;
 
   return (
-    <div className="grid gap-4 @lg:grid-cols-2">
+    <div className="grid gap-5 @lg:grid-cols-2">
       <div>
-        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">Plan &amp; size</p>
-        <dl className="mt-1">
+        <p className="type-eyebrow text-fg-subtle">The pick</p>
+        <dl className="mt-1.5">
           <TechRow label="Verdict code" value={item.edgeVerdict} />
           <TechRow
             label="Drift"
@@ -290,6 +292,12 @@ function TechnicalRows({ item, guide }: { item: SignalItem; guide: PlainOrderGui
           <TechRow label="Break-even win rate" value={formatProbability(item.breakEvenWinRate, 1)} />
           <TechRow label="EV" value={formatR(item.expectedValueR)} />
           <TechRow label="Quarter-Kelly" value={`${(item.quarterKellyFraction * 100).toFixed(2)}%`} />
+        </dl>
+      </div>
+
+      <div>
+        <p className="type-eyebrow text-fg-subtle">The ticket</p>
+        <dl className="mt-1.5">
           <TechRow label="Board lot" value={`${formatInteger(guide.boardLot)} shares`} />
           <TechRow label="Size" value={`${formatInteger(guide.shares)} sh · ${guide.lots} lot`} />
           <TechRow label="Risk budget" value={formatCompactPeso(sizing.budgetPhp)} />
@@ -313,182 +321,76 @@ function TechnicalRows({ item, guide }: { item: SignalItem; guide: PlainOrderGui
           <TechRow label="Server sizing" value={guide.serverSized ? 'order ticket' : 'legacy estimate'} />
         </dl>
       </div>
-
-      <div>
-        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">Raw indicators</p>
-        <dl className="mt-1">
-          <TechRow label="Close" value={formatPrice(metrics?.closePrice)} />
-          <TechRow label="RSI14" value={metrics ? metrics.rsi14.toFixed(1) : '—'} />
-          <TechRow label="EMA20" value={formatPrice(metrics?.ema20)} />
-          <TechRow label="SMA50" value={formatPrice(metrics?.sma50)} />
-          <TechRow label="SMA200" value={formatPrice(metrics?.sma200)} />
-          <TechRow label="ATR14" value={formatPrice(metrics?.atr14)} />
-          <TechRow label="Volume vs 20D" value={metrics ? `${metrics.volumeRatioVs20d.toFixed(2)}×` : '—'} />
-          <TechRow label="20D turnover" value={formatCompactPeso(metrics?.avgTurnover20dPhp)} />
-          <TechRow
-            label="RS63 vs PSEi"
-            value={metrics?.relativeStrength63d != null ? `${metrics.relativeStrength63d.toFixed(1)} pts` : '—'}
-          />
-          <TechRow
-            label="CMF20"
-            value={metrics?.chaikinMoneyFlow20d != null ? metrics.chaikinMoneyFlow20d.toFixed(1) : '—'}
-          />
-          <TechRow label="Weinstein stage" value={metrics?.weinsteinStage ?? '—'} />
-          <TechRow label="Net foreign today" value={formatCompactPeso(metrics?.netForeignTodayPhp)} />
-          <TechRow label="Trap flags" value={item.trapFlags?.length ? item.trapFlags.join(', ') : '—'} />
-        </dl>
-
-        <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Why it moved
-        </p>
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{item.deviationReason}</p>
-
-        {item.disclosures.length > 0 ? (
-          <>
-            <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Filings on file
-            </p>
-            <ul className="mt-1 space-y-1">
-              {item.disclosures.slice(0, 4).map((disclosure) => (
-                <li key={`${disclosure.date}-${disclosure.headline}`} className="text-[10px] leading-relaxed text-slate-400">
-                  <span className="tabular text-slate-500">{disclosure.date}</span> · {disclosure.category} ·{' '}
-                  {disclosure.headline}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-      </div>
     </div>
   );
 }
 
-interface AdviceCardProps {
+interface SignalRowProps {
   item: SignalItem;
   horizon: Horizon;
+  /** Opens the ticker's detail modal. */
   onSelect: (ticker: string) => void;
-  onTakeTrade: (item: SignalItem) => void;
 }
 
-/** One plain-English trade plan: what to buy, when to sell, when to give up. */
-function AdviceCard({ item, horizon, onSelect, onTakeTrade }: AdviceCardProps) {
-  const verdict = describePlainVerdict(item.edgeVerdict);
-  const guide = describeOrderGuide(item);
-  const beatsBreakEven = item.winProbability >= item.breakEvenWinRate;
+/**
+ * One trade signal: four facts at a glance (which company, how strong the call is, what it
+ * costs to buy, where the plan ends). Tapping the row opens the ticker's detail modal with
+ * the whole "why" — the same sheet the Pro table's row already opens.
+ *
+ * Every figure is a server field — the row only renames and folds the same payload the Pro
+ * table prints in full. The row is a single button, so a phone reader gets one thumb-sized
+ * target, and `aria-haspopup="dialog"` tells a screen reader that a modal follows.
+ */
+function SignalRow({ item, horizon, onSelect }: SignalRowProps) {
+  const row = describeSignalRow(item);
 
   return (
-    /* `@container`: every grid inside a card measures the card, not the window — a card in
-       the 3-column ultra-wide layout reflows to the space it actually has. */
-    <article className="@container flex flex-col gap-3 rounded-xl border border-line/70 bg-ink-900/60 p-3.5">
-      <header className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="tabular text-[10px] font-semibold text-slate-500">#{item.rank}</span>
-            <button
-              type="button"
-              onClick={() => onSelect(item.ticker)}
-              onPointerEnter={() => preloadTickerDetailDialog(item.ticker, horizon)}
-              onFocus={() => preloadTickerDetailDialog(item.ticker, horizon)}
-              className="text-left text-base font-semibold leading-tight text-white transition hover:text-mint-400"
-            >
+    <li className="border-t border-line/60 first:border-t-0">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        onClick={() => onSelect(item.ticker)}
+        onPointerEnter={() => preloadTickerDetailDialog(item.ticker, horizon)}
+        onFocus={() => preloadTickerDetailDialog(item.ticker, horizon)}
+        className="tap flex w-full items-start gap-3 px-4 py-3.5 text-left transition hover:bg-ink-800/50 focus-visible:bg-ink-800/60"
+      >
+        <span className="tabular type-caption mt-0.5 w-6 shrink-0 font-semibold text-fg-subtle">
+          {String(item.rank).padStart(2, '0')}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="type-lead font-semibold text-fg">
               {companyLabel(item.ticker, item.companyName)}
-            </button>
-            <span className="rounded border border-line/70 bg-ink-850 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-slate-400">
+            </span>
+            <span className="rounded border border-line/70 bg-ink-850 px-1.5 py-0.5 font-mono text-2xs text-fg-muted">
               {item.ticker}
             </span>
             <span
               className={cn(
-                'rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]',
+                'rounded-full border px-2 py-0.5 type-badge',
                 plainVerdictBadgeClass(item.edgeVerdict),
               )}
             >
-              {verdict.label}
+              {row.verdictLabel}
             </span>
+            {row.entryChip ? (
+              <span className="rounded-full border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 type-caption font-semibold text-sky-300">
+                {row.entryChip}
+              </span>
+            ) : null}
             <DriftBadge status={item.driftStatus} previousRank={item.previousRank} friendly />
-          </div>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500 simple-note">
-            {nicknameFor(item.ticker) ? `${item.companyName} · ${item.sector}` : item.sector}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="tabular text-lg font-semibold text-slate-100">{formatPrice(item.entryPrice)}</p>
-          <p className="flex items-center justify-end gap-1 text-[10px] text-slate-500 simple-label">
-            buy price
-            <InfoTip
-              term="buy price"
-              label="The price the desk would pay today. It is the ceiling for this plan — anything higher and the reward no longer covers the risk."
-            />
-          </p>
-        </div>
-      </header>
-
-      <p className="text-xs leading-relaxed text-slate-300 simple-copy">{item.thesis}</p>
-
-      <WavePlanSteps item={item} />
-      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 simple-label">
-        Plan to hold for about{' '}
-        {item.wavePlan ? `up to ${item.wavePlan.maxHoldTradingDays} session${item.wavePlan.maxHoldTradingDays === 1 ? '' : 's'}` : horizonMeta[horizon].holding}
-      </p>
-
-      <OrderBox guide={guide} item={item} />
-
-      <Meter
-        label="Chance it reaches the target"
-        pct={item.winProbability * 100}
-        value={formatProbability(item.winProbability)}
-        detail={describeWinChance(item.winProbability, item.breakEvenWinRate)}
-        barClass={beatsBreakEven ? 'bg-sky-400' : 'bg-rose-400'}
-      />
-
-      {/*
-       * One calm line instead of a second bordered block. The promised figure (the chance the
-       * plan reaches its target) keeps the meter; the model's conviction becomes the sentence a
-       * first-time reader actually acts on, and the raw score stays in the drawer below.
-       */}
-      <p className="text-[10px] leading-relaxed text-slate-500 simple-note">
-        <span className="font-semibold text-slate-300">
-          Desk confidence {Math.round(item.convictionScore)} / 100
+          </span>
+          <span className="tabular type-caption mt-1.5 block text-fg-muted simple-note">{row.headline}</span>
+          <span className="type-caption mt-1 block text-fg-subtle simple-note">
+            {row.subline}
+          </span>
         </span>
-        {' · '}
-        {describeConviction(item.convictionScore)}
-      </p>
-
-      <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2">
-        <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-400 simple-label">
-          What would prove this wrong
-        </p>
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-300 simple-copy">{item.bearCase}</p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="primary"
-          disabled={!guide.actionable}
-          onClick={() => onTakeTrade(item)}
-          onPointerEnter={preloadPortfolioDialog}
-          onFocus={preloadPortfolioDialog}
-        >
-          Practise This Trade
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => onSelect(item.ticker)}
-          onPointerEnter={() => preloadTickerDetailDialog(item.ticker, horizon)}
-          onFocus={() => preloadTickerDetailDialog(item.ticker, horizon)}
-        >
-          Full Details
-        </Button>
-        <span className="text-[10px] text-slate-500 simple-note">
-          {guide.actionable
-            ? 'Adds it to your practice account — no real order is sent.'
-            : 'No board lot fits the paper account at this price.'}
+        <span className="type-caption mt-0.5 flex shrink-0 items-center gap-1 font-semibold text-fg-muted simple-label">
+          <span aria-hidden>▸</span>
+          <span className="hidden sm:inline">Why?</span>
         </span>
-      </div>
-
-      <TechnicalDisclosure title="Show the math behind this pick">
-        <TechnicalRows item={item} guide={guide} />
-      </TechnicalDisclosure>
-    </article>
+      </button>
+    </li>
   );
 }
 
@@ -497,42 +399,42 @@ function WatchList({ items, onSelect }: { items: SignalItem[]; onSelect: (ticker
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mt-4 rounded-xl border border-line/70 bg-ink-850/50">
+    <div className="mt-3 rounded-xl border border-line/70 bg-ink-850/50">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-ink-800/60"
+        className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-ink-800/60"
       >
         <span className="flex flex-wrap items-center gap-2">
-          <span aria-hidden className="text-[10px] text-slate-500">
+          <span aria-hidden className="text-2xs text-fg-subtle">
             {open ? '▾' : '▸'}
           </span>
-          <span className="text-[11px] font-semibold text-slate-300 simple-label">
+          <span className="type-body font-semibold text-fg-muted simple-label">
             Not yet — these {items.length} can wait
           </span>
         </span>
-        <span className="text-[10px] text-slate-500 simple-note">the reward after fees is too thin</span>
+        <span className="type-caption text-fg-subtle simple-note">the reward after fees is too thin</span>
       </button>
 
       {open ? (
-        <ul className="grid gap-2 border-t border-line/60 px-3 py-3 @md:grid-cols-2 @5xl:grid-cols-3">
+        <ul className="grid gap-2.5 border-t border-line/60 px-3.5 py-3.5 @md:grid-cols-2 @5xl:grid-cols-3">
           {items.map((item) => (
-            <li key={item.ticker} className="rounded-lg border border-line/70 bg-ink-900/70 px-2.5 py-2">
+            <li key={item.ticker} className="rounded-lg border border-line/70 bg-ink-900/70 px-3.5 py-3">
               <div className="flex items-baseline justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => onSelect(item.ticker)}
-                  className="text-left text-xs font-semibold text-slate-200 transition hover:text-mint-400"
+                  className="type-body text-left font-semibold text-fg transition hover:text-mint-400"
                 >
                   {companyLabel(item.ticker, item.companyName)}
                 </button>
-                <span className="tabular text-[10px] text-slate-500 simple-note">{formatPrice(item.entryPrice)}</span>
+                <span className="tabular type-caption text-fg-subtle simple-note">{formatPrice(item.entryPrice)}</span>
               </div>
-              <p className="truncate font-mono text-[10px] text-slate-500 simple-note">
+              <p className="truncate font-mono text-2xs text-fg-subtle simple-note">
                 {item.ticker} · {item.companyName}
               </p>
-              <p className="mt-1 text-[10px] leading-relaxed text-slate-400 simple-note">
+              <p className="type-caption measure mt-1.5 text-fg-muted simple-note">
                 {describePlainVerdict(item.edgeVerdict).explanation}
               </p>
             </li>
@@ -544,74 +446,57 @@ function WatchList({ items, onSelect }: { items: SignalItem[]; onSelect: (ticker
 }
 
 /**
- * Simple-mode home: the buyable names as plain trade cards, with every raw desk figure one
- * click away inside a per-card drawer. Nothing here is recomputed — the card only renames
- * server fields and reformats the server order ticket.
+ * Simple mode's home: one row per trade signal, ranked. Tapping a row opens the ticker's
+ * detail modal — the same sheet the Pro table's row opens — so the list itself never turns
+ * back into the wall of expanded plans it replaced.
+ *
+ * Nothing here is recomputed — a row only renames server fields, and the modal formats the
+ * server order ticket.
  */
-export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: AdviceCardListProps) {
+export function AdviceCardList({ items, horizon, onSelect }: AdviceCardListProps) {
   const meta = horizonMeta[horizon];
   const buyable = items.filter((item) => item.edgeVerdict !== 'WATCH_ONLY');
   const watchOnly = items.filter((item) => item.edgeVerdict === 'WATCH_ONLY');
-  const [showAll, setShowAll] = useState(false);
-  // Simple mode leads with the three names that matter most; the rest stay one tap away so
-  // a beginner is not asked to read ten plans to make one decision.
-  const visible = showAll ? buyable : buyable.slice(0, 3);
-  const hiddenCount = Math.max(0, buyable.length - visible.length);
 
   return (
-    <section className="panel @container p-4 sm:p-5">
-      <header className="flex flex-wrap items-end justify-between gap-2">
+    <section className="panel @container overflow-hidden">
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-4 py-4 sm:px-5">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">{meta.friendlyTitle}</h2>
-          <p className="mt-1 max-w-3xl text-[11px] leading-relaxed text-slate-500 simple-copy">{meta.friendlySummary}</p>
+          <h2 className="type-title text-fg">Today’s trade signals</h2>
+          <p className="type-caption measure mt-1.5 text-fg-subtle simple-copy">
+            {meta.friendlySummary}
+          </p>
         </div>
-        <span className="tabular rounded-full border border-line/80 bg-ink-850 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-slate-400">
-          {buyable.length} TO BUY · {watchOnly.length} TO WAIT
+        <span className="tabular type-badge rounded-full border border-line/80 bg-ink-850 px-2.5 py-1 text-fg-muted simple-label">
+          {buyable.length} to buy · {watchOnly.length} to wait
         </span>
       </header>
 
-      <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-slate-600 simple-label">
-        Ranked for {meta.friendlyTitle.toLowerCase()} · fees and board lots already priced in
+      <p className="type-eyebrow px-4 pb-3 text-fg-faint simple-label sm:px-5">
+        {meta.friendlyTitle} · fees and board lots already priced in · tap a row to open its details
       </p>
 
       {buyable.length === 0 ? (
-        <div className="mt-4 rounded-xl border border-dashed border-line/80 bg-ink-950/40 px-4 py-6 text-center">
-          <p className="text-xs font-semibold text-slate-300">Nothing cleared the test today</p>
-          <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-slate-500 simple-copy">
+        <div className="mx-4 mb-4 rounded-xl border border-dashed border-line/80 bg-ink-950/40 px-5 py-8 text-center sm:mx-5">
+          <p className="type-lead font-semibold text-fg-muted">Nothing cleared the test today</p>
+          <p className="type-body measure measure-tight mx-auto mt-2 text-fg-subtle simple-copy">
             That is a real answer, not a glitch — the model would rather hold cash than size a setup that does not
             pay its fees. The next session is screened as usual.
           </p>
         </div>
       ) : (
-        <div
-          className={cn(
-            'mt-3 grid gap-3',
-            // Card count first, width second: three buyable names get a 2-up grid as soon as
-            // the panel is wide enough, and a third column only when each card still has room
-            // for its own four-step plan (the card's internal grids are container queries too).
-            visible.length >= 3 ? '@4xl:grid-cols-2 @7xl:grid-cols-3' : '@4xl:grid-cols-2',
-          )}
-        >
-          {visible.map((item) => (
-            <AdviceCard key={item.ticker} item={item} horizon={horizon} onSelect={onSelect} onTakeTrade={onTakeTrade} />
+        <ul className="border-t border-line/60">
+          {buyable.map((item) => (
+            <SignalRow key={item.ticker} item={item} horizon={horizon} onSelect={onSelect} />
           ))}
-        </div>
+        </ul>
       )}
 
-      {buyable.length > 3 ? (
-        <button
-          type="button"
-          aria-expanded={showAll}
-          onClick={() => setShowAll((current) => !current)}
-          className="tap mt-3 w-full rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-ink-800/60 simple-label"
-        >
-          {showAll
-            ? 'Show just the top three'
-            : `Show ${hiddenCount} more buyable pick${hiddenCount === 1 ? '' : 's'}`}
-        </button>
+      {watchOnly.length > 0 ? (
+        <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+          <WatchList items={watchOnly} onSelect={onSelect} />
+        </div>
       ) : null}
-
-      {watchOnly.length > 0 ? <WatchList items={watchOnly} onSelect={onSelect} /> : null}
     </section>
   );
 }

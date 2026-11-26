@@ -1,8 +1,298 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (typeface pass — Google Sans Flex vendored into `public/fonts/`, one `@font-face`, preload, `npm run fonts` refresh script; **66 frontend tests, `npm run build` green**, backend untouched)
-**Last feature pass:** 2026-11-26 (typeface, on top of compliance hardening, the responsive pass, the brand mark + icon set, the header visual organization, the UI/UX legibility pass, the fast-model fix, the Yahoo-delisting pass, the accuracy pass, live-drift wiring, the performance pass and the feed-diagnostics pass — same day)
-**Current task:** none in flight. Every pass above is landed and verified but **not committed** — the operator asked for no commits unless explicitly requested.
+**Last updated:** 2026-11-26 (data-truth **slice 2** landed: every screened candidate gets its own PSE Edge company page keyed on the exchange's `cmpy_id`, so disclosure attribution is correct by construction and the trap pillar is enforced — **496 backend tests green + 1 skipped**, up from 484+1 — plus a tooling fix: `frontend: free port 5173` and a Vite launch config, because `strictPort: true` turned an orphaned dev server into a dead debug launch)
+**Last feature pass:** 2026-11-26 (per-company PSE Edge disclosures, on top of the feed health ledger, hand cursor, row-opens-modal, typography, signal list, typeface, compliance hardening, responsive pass, brand mark + icon set, header visual organization, UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and the feed-diagnostics pass — same day)
+**Current task:** slices 1 and 2 of 4 are done and verified. **Slices 3–4 are planned, not started** (see *Next* below). Everything is landed but **not committed** — the operator asked for no commits unless explicitly requested.
+
+## Session note (2026-11-26) — port 5173 held by an orphaned dev server
+
+Prompted by `error when starting dev server: Error: Port 5173 is already in use` (followed by *"Waiting for the
+debugger to disconnect"*) when launching the Vite dev server. `vite.config.ts` pins `strictPort: true`, so Vite
+never falls back to 5174 — a leftover server is a hard failure, not an inconvenience. Tooling only
+(`.vscode/tasks.json`, `.vscode/launch.json`) plus this memory bank: **no application code, no API contract, no
+dependency, no test count moved**.
+
+| Command | Result |
+| --- | --- |
+| `lsof -nP -iTCP:5173 -sTCP:LISTEN` | `node 85742` on `[::1]:5173`, with an `ESTABLISHED` peer from the VS Code process |
+| `ps -o pid,ppid,stat,lstart,etime,command -p 85742` | `PPID 85727`, started `17:22:34`, 45 min old; parent 85727 is `npm run dev` with **PPID 1** — orphaned, and it still answered `curl / → 200` |
+| `kill -TERM 85742 85727` | both gone; `lsof` empty; a real `bind()` probe on `127.0.0.1:5173` **and** `[::1]:5173` → OK; `curl` → `000` |
+| `frontend: free port 5173` against an occupied port | `freeing :5173 — SIGTERM to 95119` · `:5173 is free now` · `:5173 refuses connections`, exit 0 |
+| same task, port already free | `:5173 is already free` · `:5173 refuses connections`, exit 0 |
+| same task, SIGTERM-ignoring listener | SIGTERM → 6 s poll → `:5173 still held by 95767 after 6s — SIGKILL` → `:5173 is free now`, exit 0 |
+| `cd frontend && npm run dev` after the fix | `VITE v8.3.8 ready in 274 ms`, `Local: http://localhost:5173/`, `GET /` → **200**; server then stopped and the port left free |
+| config checks | `tasks.json` parses (6 tasks); `launch.json` parses with 4 configurations + the compound |
+
+**What changed**
+
+1. **`frontend: free port 5173` (new task)** — the mirror of `backend: free port 5236`: SIGTERM the listener,
+   poll for 6 s, escalate to SIGKILL, re-check, then finish with a real `curl` probe. Killing the *node child*
+   is sufficient — the orphaned `npm` parent exits with it.
+2. **`Frontend: Vite dev server (frees :5173 first)` (new launch config, `pwa-node`)** — runs `npm run dev`
+   with that task as `preLaunchTask`, so an F5 on the frontend cannot hit the error again, and a
+   `serverReadyAction` opens a debuggable Chrome once Vite prints `Local: …`.
+
+The port is **free now**, so the operator's own launch can bind immediately; nothing is committed.
+
+## Session note (2026-11-26) — per-company PSE Edge disclosures (data-truth slice 2)
+
+The trap pillar (`SRO_DILUTION`, `TENDER_OFFER_PIN`, `TRADING_HALT_RISK`) was inert because disclosure
+**attribution** was a headline-to-company-name match over a market-wide table that names the issuer only
+sometimes — a live run attributed filings to **3 of 60** names, so a rights offering titled just "Rights
+Offering" reached no ticker. This slice fetches each screened candidate's own Edge page instead. Backend only:
+**1 new source file** (`Infrastructure/MarketData/PseEdgeDisclosureSource.cs`), **7 edited**
+(`IMarketDataProvider` — one *defaulted* method so no existing fake broke; `QuantitativeFilterService`
+(`SelectDisclosureFanout`); `SignalPipelineService` (`EnrichCompanyDisclosuresAsync`); `MarketDataOptions`
+(`DisclosureCompanyFanoutLimit = 25`); `PseEdgeHistorySource` (`ReadCompanyId` delegates to the shared
+`EdgeSymbolSearch`); `PseMarketDataProvider`; `appsettings.json`), **1 new test file + 3 extended**. No
+dependency, no DTO, no fee, no golden snapshot, and nothing in `frontend/`.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo -v q` | `Passed! - Failed: 0, Passed: 496, Skipped: 1, Total: 497` (9 s) — 485 → 497, **+12**, no existing test edited |
+| `dotnet test --list-tests` | `PseEdgeCompanyDisclosuresTests` 8 (new), `QuantitativeFilterServiceTests` 38 → 40, `SignalPipelineServiceTests` 12 → 13, `PseMarketDataProviderTests` 33 → 34 |
+| live harness (`/tmp/livecheck`, real exchange, outside the repo) | JFC/SM/BDO/TEL resolved to an id, `ZZZZ` → **skip not failure**; **JFC 47 / BDO 41 / TEL 40 / SM 22 filings** with real dates; ledger `Ok — 4 of 5 screened name(s) filed through their own Edge page` |
+| same harness, full market-wide tape (`FetchAsync`) | `session 2026-11-25, 60 names, **3** with attributable filings` (BDO, SM, BPI) — the fallback's true ceiling |
+| live instance on `:5299` (`--no-launch-profile`, real `pse_signals.db`, stopped after) | `GET /api/research/SM` → **200** (2 588 B), `disclosures: []` — correct point-in-time: the only SM row is dated `2026-11-26`, after the stored session; `GET /api/health/feeds` → **200**, six feeds, `storedSessionCount: 1` |
+| `lsof -ti :5299` | empty — the operator's `:5236` instance was not touched |
+
+
+**The planned route was dead.** The plan said `companyPage/companyDisclosures.do?cmpy_id=<id>` and defaulted
+the template to *empty* so nothing could regress — which would have shipped an inert fan-out. The probe showed
+**HTTP 404**. The working call is `GET companyDisclosures/search.ax?keyword={cmpy_id}` (`keyword` is the hidden
+field the page's own search form posts): the company's newest-first 50-row table, `Total 424` for JFC. Because
+the route is now confirmed, the fan-out ships **on**; `DisclosureCompanyFanoutLimit = 0` is the documented
+rollback (zero per-company requests).
+
+**What it built**
+
+1. **`PseEdgeDisclosureSource`** — `internal sealed record EdgeFiling(DateOnly, string Headline, TimeOnly?
+   FiledAtPht)`, `EdgeSymbolSearch.ReadCompanyId(json, ticker)` (shared with the history source) and
+   `FetchAsync(ticker, sessionDate, ct)`: resolve the id, read the company table, filter to the rolling window
+   (`MaxRollingDisclosureLookbackDays`), newest-first, cache both responses 10 min
+   (`edge-symbol:{ticker}`, `edge-company-disclosures:{id}`), record success/skip/failure on
+   `FeedSource.PseEdgeDisclosures`. Every failure is soft (`MarketDataUnavailableException`/`JsonException` →
+   empty) because the market-wide attribution still stands.
+2. **`IMarketDataProvider.FetchCompanyDisclosuresAsync(tickers, sessionDate, ct)`** — a *defaulted* interface
+   method returning an empty map, so no existing fake broke; `PseMarketDataProvider` implements it with
+   `Parallel.ForEachAsync` at 8-way concurrency into a `lock`-guarded dictionary, then records **one
+   aggregated** ledger line rather than 25.
+3. **`QuantitativeFilterService.SelectDisclosureFanout(metrics, horizon, limit)`** — the liquidity-floor
+   candidates in pre-trap score order (`ComputeHorizonScore`, then turnover, then ticker), `Take(limit)`,
+   `limit <= 0` → empty. Tested against `SelectCandidates` so the two lists cannot drift.
+
+4. **`SignalPipelineService.EnrichCompanyDisclosuresAsync`** — runs **before** `MergeRollingDisclosuresAsync`
+   because attribution must precede disqualification: a rights offering only the company page names has to be in
+   the candidate's disclosures before the traps are read. Merges through
+   `MarketDataMapper.Deserialize/SerializeDisclosures` + `MergeRollingDisclosures`; any failure logs a warning
+   and keeps the market-wide attribution, so a disclosure outage never fails a run (proven by
+   `RunAsync_disqualifies_a_name_whose_rights_offering_only_the_company_page_names`).
+5. **Two parser bugs the probe exposed in the fallback, fixed.** The disclosure table prints
+   `Nov 26, 2026 05:20 PM`, which the numeric-only date regex missed — so the *timestamp* survived as a subject
+   and every row was back-dated to the session — and the PSE form/report numbers after the subject (`13-1`,
+   `C08413-2026`) became subjects too, turning one filing into three. `AnnounceDateRegex` + `BuildDate` read both
+   formats and `FilingIdentifierRegex` drops the identifier cells; pinned by
+   `FetchAsync_reads_the_live_disclosure_table_date_and_ignores_its_identifier_columns` against the captured
+   markup.
+
+**Next (the rest of the plan — not started)**
+
+- **Slice 3 — surface it.** When disclosures answer but attribute nothing, emit the existing
+  `SignalDtos.Warnings` line "trap flags are unenforced this session", and flag an index-proxy fallback the same
+  way. The ledger reports it after the fact; this puts it on the screen the picks are read from.
+- **Slice 4 — measure the model.** Migration `AddQuantRankToSignalItems` (`QuantPreScore`, `QuantRank`); a
+  model-vs-quant scorecard block (hit rate, Brier, mean realized R, model Top 10 vs quant Top 10 over the same
+  sessions and barriers); opt-in prompt archive (`Signals:ArchivePrompts`, default off) +
+  `POST /api/signals/eval-prompt-replay` behind the existing `Expensive` policy.
+- **Not observed yet:** a full live `run-now` (needs `OLLAMA_API_KEY`, unset here, and it would overwrite the
+  stored WEEK run), so the fan-out's ledger line has only been seen from the harness.
+- **Still out of scope:** `CorporateActionAdjuster` (splits still distort ATR/RS63/barriers), the dividends
+  feed, embedding access, and the F-03 prompt-fencing patch (`security_audit_report.md:1561`, drafted but
+  unapplied — keep it separate so a prompt change is never conflated with a data fix).
+
+## Session note (2026-11-26) — feed health ledger (data-truth slice 1)
+
+Prompted by the assessment "are our data sources reliable and is the model properly trained/measured?" — the short answer was *the model is untrained and its skill unmeasured, and the worst data defect is silent rather than loud*. This pass is the observability half: nothing about the pipeline's behaviour changed, it can now **say** what it read.
+
+Frontend untouched. **4 new source files** (`Application/Models/FeedHealthModels.cs`, `Application/Interfaces/IFeedHealthRegistry.cs`, `Infrastructure/Diagnostics/FeedHealthRegistry.cs`, `WebApi/Controllers/FeedHealthController.cs`) plus **4 edited** (`PseMarketDataProvider`, `PseEdgeHistorySource`, `OllamaEmbeddingClient`, `Program.cs` — the three services only to accept an optional registry) and **2 new + 1 extended test files**. No indicator, plan level, fee, prompt, DTO or existing status code moved; no dependency added.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx -c Debug --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo -v q` | `Passed! - Failed: 0, Passed: 484, Skipped: 1, Total: 485` (8 s) — **464 → 484**, +20, **zero existing tests edited** |
+| live instance (`ASPNETCORE_URLS=http://127.0.0.1:5299 dotnet run --no-launch-profile --no-build`, real `pse_signals.db`, stopped afterwards) | `GET /api/health/feeds` → **200** `application/json`: `overallStatus: Unknown` (no run yet), `storedFactsAvailable: true`, `latestStoredSessionDate: 2026-11-25`, `storedSessionCount: 1`, `configuration {pseEdgeHistoryEnabled: true, quotationReportTemplates: 0, embeddingsConfigured: false, embeddingModel: nomic-embed-text}`, all six feeds in enum order with `status: Unknown` |
+| `lsof -ti :5299` after shutdown | empty — the test instance was stopped; the operator's own `:5236` instance was **not** touched (the first attempt died on `address already in use` because `dotnet run` ignores `ASPNETCORE_URLS` without `--no-launch-profile`) |
+
+Not run here: a **full live `run-now`**, so the ledger has not yet been observed carrying real PSE Edge numbers (that needs `OLLAMA_API_KEY`, unset in this shell, and would overwrite the stored WEEK run). The disclosure-degraded state is proven by a stubbed test instead — `FetchAsync_reports_the_disclosure_feed_degraded_when_edge_answers_with_no_filings` drives the exact `200`/"no records found" page the live site serves.
+
+
+**What it built**
+
+1. **`IFeedHealthRegistry`** (Application) with four recording verbs — `RecordSuccess`, `RecordDegraded`, `RecordFailure`, `RecordSkipped` — plus `BeginRun()` and `Snapshot()`. `FeedHealthRegistry` (Infrastructure/Diagnostics, **singleton**, in memory) is thread-safe under one lock and keeps counters, last item count, a 240-char last message and the last success/failure timestamps per `FeedSource`.
+2. **Status is derived from counters, never from the last write.** 58 symbols are fetched concurrently, so `failures > 0 && successes == 0` → `Failed`; `failures > 0 || degraded > 0` → `Degraded`; `successes > 0` → `Ok`; only skips → `Degraded`; nothing observed → `Unknown`. A **skip** is not a fault (Edge listing no security, a Yahoo `404`, an unpublished DQR template) — but a feed that only ever skips is degraded.
+3. **Hooked at every upstream, one terminal observation per run.** Edge history records success/skip/failure at the parse seam; `FetchDisclosuresAsync` records one verdict for the whole scrape (`no filing rows` / `N filings, none attributable` → degraded, attributed → ok); charts record `404` as skip and non-2xx/timeout/transport as failure; the macro dials report `0/3` → failed, `1–2/3` → degraded; the DQR records not-published/skip, non-2xx/failure and unparseable/degraded; `OllamaEmbeddingClient` records the `401` that forces lexical retrieval.
+4. **`GET /api/health/feeds`** returns the six feeds, `overallStatus` (computed from the **load-bearing three** only, so a dark EPHE quote cannot paint the desk red), the stored-session facts and the configuration that explains an `Unknown`. `NoStore`; an unreadable store yields `storedFactsAvailable: false` with a fixed sentence instead of a `500` or a file path; the API key is never reflected (a test serialises the report and asserts the key string is absent).
+5. **Run-scoped vs process-scoped counters.** `BeginRun()` is the first line of `FetchAsync`: the five tape feeds start blank for the new session, while `Embeddings` (exercised at indexing time) and the timestamps survive. Cache hits still count, because recording happens after the body is parsed rather than at the HTTP layer — otherwise the second of four horizon runs would report the tape as unobserved.
+
+**Next** — slice 2 has since shipped (see the note at the top of this file); slices 3 and 4 remain as described
+there.
+
+## Session note (2026-11-26) — "clickable items should show hand cursor"
+
+Tailwind v4's preflight dropped the `button, [role="button"] { cursor: pointer }` rule that v3 shipped, so every
+control on the desk — the filled Run button, the four horizon tabs, a Simple signal row, a drawer toggle, a `?`
+pill, the trading-day picker, the `More` summary — computed `cursor: default` under a mouse and signalled
+clickability only through its hover tint. Frontend only: `src/index.css` plus this memory bank. **No backend
+file, no API contract, no new dependency, no new architectural layer**, and no server-owned number, label or
+verdict moved.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 240ms`, exit 0 (CSS `59,339` bytes) |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (503 ms, exit 0) |
+| built CSS audit | one rule emitted in `@layer base`: `button:not(:disabled),[role=button]:not([aria-disabled=true]),[role=tab]:not(…),[role=option]:not(…),[role=menuitem]:not(…),a[href],summary{cursor:pointer}`; `.cursor-pointer` utility still present for the Pro row/card |
+| layer probe (headless Chrome `--dump-dom` over the built stylesheet) | `button=pointer` · `button[disabled]=default` · utilities-layer `cursor: default` opt-out = `default` · utilities `cursor: not-allowed` = `not-allowed` · `summary=pointer` · `[role=tab]=pointer` · `[role=tab][aria-disabled=true]=auto` → **utilities still beat the base rule**, so a call site can override and a dead control never shows a hand |
+| real built app (`dist/` copy served on `127.0.0.1:5311`, legal gate + welcome seeded, 1280×940) | 19 rendered controls measured: `Open desk controls`, `Run Latest Screen`, `My Trades`, `More▾`, `How it works` / `Check a Stock` / `Past Results`, all four horizon tabs, `☀Light` / `☾Dark`, `Simple` / `Pro`, `Technical details` and `Review the notice` all compute `cursor=pointer`; the **disabled** trading-day picker computes `cursor=not-allowed` |
+
+**What changed**
+
+1. **`src/index.css` — one `@layer base` rule** beside the existing interactive-surface block: the hand on
+   `button:not(:disabled)`, `[role="button"|"tab"|"option"|"menuitem"]:not([aria-disabled="true"])`, `a[href]`
+   and `summary`. Disabled and `aria-disabled` controls keep the arrow (and their own
+   `disabled:cursor-not-allowed`), and a focusable tooltip badge (`<span tabIndex={0}>`) is deliberately left
+   as `auto` — it explains, it does not act.
+2. **Nothing else needed the class.** Every interactive surface in `src/` is already a `<button>`, a Radix
+   trigger that renders one, a `<summary>`, `<a>`, or a row/card that carries its own `cursor-pointer`
+   (`SignalTable`'s `<tr>`, `ProSignalCard`'s `<li>`), so the rule is the single source of truth instead of 100+
+   call-site classes. The two `<summary>` elements keep their explicit `cursor-pointer` as intent documentation.
+
+**Decision.** The cursor is a base-layer default, not a per-component prop. It matches how `.type-*`, `.shell`,
+`.scroll-x` and `.tap` already work here: one rule with a doc comment in `index.css`, utilities free to win.
+
+## Session note (2026-11-26) — "clicking a row should open a modal"
+
+The Simple list expanded a row **in place** (a single-open accordion) while every Pro row already opened
+`TickerDetailDialog`. Two ways to reach the same numbers, and the default surface disagreed with the
+reader's expectation. Frontend only: `AdviceCardList.tsx`, `TickerDetailDialog.tsx`, `SignalTable.tsx`,
+`TerminalHeader.tsx` (one hint string), `App.tsx`, plus `README.md` and this memory bank. **No backend
+file, no API contract, no new dependency, no new architectural layer**; every figure is the same server
+field, only laid out in the sheet.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && ./node_modules/.bin/tsc --noEmit` | clean (exit 0) |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (219 ms) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 249ms`, `TickerDetailDialog` still its own 19.92 kB chunk |
+| `grep -rn 'aria-haspopup' src` | one site, `AdviceCardList.tsx:385` (the row button) |
+| headless Chrome (CDP) on `localhost:5173` with the running API (`:5236`, run 17 / WEEK / 10 items) | **0** dialogs before the click; **3** rows carry `aria-haspopup="dialog"`; clicking row 1 opened `[role="dialog"]` titled **“Philippine National Bank”** containing the wave plan, `Ticket: 50 shares`, the win-chance meter (42%), the *Show the math* drawer and *Sizing & odds*; screenshot `/tmp/psedesk-row-modal.png` |
+| same session, Close path | the sheet's `Close` → **0** dialogs, list intact, the next row opened (“Aboitiz Equity”) immediately; a synthetic `keydown: Escape` (Radix `DismissableLayer`) → **0** dialogs |
+| Pro at 500px (`psedesk.viewMode=pro`) | **10** phone cards; clicking a card opened the same ticker sheet; its `Take` button opened **only** the portfolio blotter (no ticker sheet), i.e. the stop-propagation works |
+| same session, the math drawer after the `MathRows` narrowing | *Show the math behind this pick* opened (`aria-expanded="true"`) with **“The pick”** and **“The ticket”** columns (`Quarter-Kelly`, `Risk governor` present) and **no** `RSI14` / `Raw indicators` / `Volume vs 20D` / `Filings on file` / `Why it moved`; the deep drawer still carries `RSI 14`, `Weinstein stage`, `Rank trajectory`, `Recent disclosures` — each figure once; `/tmp/psedesk-math-drawer.png` |
+
+**What changed**
+
+1. **`AdviceCardList`** — `SignalRow` is now a single `<button aria-haspopup="dialog">` that calls
+   `onSelect(ticker)`; the accordion panel, `openTicker` state, `useId`/`aria-expanded`/`aria-controls`
+   and the row's `onTakeTrade` prop are gone (so `App` no longer passes it). The component keeps
+   exporting the pieces the modal reuses: `PlanSteps`, `WavePlanGrid`, `WavePlanSteps`, `Meter`
+   (now exported), `OrderBox`, and `MathRows` (was `TechnicalRows`; narrowed to the sizing maths so the
+   sheet never prints the indicator table twice).
+2. **`TickerDetailDialog`** (the modal every row opens) — its Simple branch now carries everything the
+   accordion used to: `WavePlanSteps` (four-step roadmap, legacy fallback intact) instead of the three
+   price tiles, the hold line, the `OrderBox`, the full-width win-chance `Meter`, the
+   “Desk confidence N / 100 · …” sentence, and a *Show the math behind this pick* drawer holding
+   `MathRows` — the sizing maths only (“The pick” / “The ticket”). The sheet's existing *Sizing & odds*
+   drawer, thesis, pre-mortem, the full indicator table with rank history and filings, and the citations
+   follow unchanged, so nothing was dropped and nothing is printed twice.
+3. **`SignalTable`** — the Pro phone card (`ProSignalCard`) is clickable anywhere and opens the same
+   modal; its `Take` button and trap-flag badge call `stopPropagation` so they keep their own actions.
+4. **Copy** — the list header reads “tap a row to open its details” (was “for the why”), the header's
+   Simple/Pro hint now says “tap a row to open its detail sheet”, and the row keeps its `▸ Why?`
+   affordance because the sheet *is* the why.
+
+**Decision.** One detail sheet, not two. The product copy used to promise “row = the why, Full Details =
+the sheet”, but the sheet already held the same thesis, plan, order box and odds — a second modal would
+have been a second code path over one payload. The row now opens that sheet, and the accordion's unique
+content moved into it.
+
+## Session note (2026-11-26) — typography, colour theory and whitespace
+
+Prompted by a straight design critique of the built UI: 9–11px type on the reading path, prose lines running
+well past 100 characters, 0.12–0.28em tracking used as decoration, sub-AA grey, and card padding that changed
+at every call site. Frontend only — `src/index.css` plus every `.tsx` under `src/` (28 files, mostly class
+lists). **No backend file, no API contract, no new dependency, no new architectural layer**, and no
+server-owned number, label or verdict moved.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 131 modules transformed`, `✓ built in 264ms`, exit 0, `dist/assets/index-*.css` 59.30 kB (11.0 kB gzip) |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (411 ms, exit 0) |
+| built-CSS audit | `.type-eyebrow`, `.type-badge`, `.type-caption`, `.type-body`, `.type-lead`, `.type-title`, `.type-figure`, `.measure`, `.measure-tight`, `.measure-wide` all emitted with their `62ch` / `46ch` / `78ch` caps; `--text-2xs:.6875rem`, `--tracking-label:.08em` present; `[data-view-mode=simple] .type-badge{letter-spacing:0;font-size:.75rem}` present; `text-slate-*` utility count **0**; `.tracking-label` **utility** gone (nothing uses it — the variable it fed is still referenced by `.type-eyebrow`) |
+| `grep -rn -E 'text-\[(8\|9\|10\|11\|12)px\]\|text-slate-\|text-white' src` | 3 hits, all comments / one `@apply` inside `index.css` — **0** in `.tsx` |
+| `grep -rn 'uppercase' src` | only `.type-eyebrow`'s own `text-transform` plus one code comment; no `uppercase` utility on any element |
+| `grep -rln 'type-badge' src` | 15 files: `index.css`, `VerdictBadge`, `DriftBadge`, `RegimeStrip`, `SignalTable`, `DropPanel`, `TerminalHeader`, `AdviceCardList`, `MarketDirectionHero`, `PortfolioDialog`, `TickerDetailDialog`, `ResearchDialog`, `ModelTrainerPanel`, `KnowledgeBaseDialog`, `WelcomeSetupBanner` |
+
+Not run: a real-browser capture (headless Chrome still hangs on the seeded app here) and `dotnet test` (no
+backend file changed), so the visual result is verified through the emitted CSS and the type roles, not pixels.
+
+**What it built**
+
+1. **The ramp.** Five sizes with an 11px floor (`--text-2xs`), and role classes instead of repeated class
+   strings: `.type-eyebrow` (the only legal uppercase + 0.08em), `.type-badge` (**new** — 11px/600/0.02em and
+   deliberately *not* uppercase, for chips that carry words like “Qualifies (Full)”), `.type-caption`,
+   `.type-body` (13px/1.65 + `text-wrap: pretty`), `.type-lead`, `.type-title`, `.type-figure`. Colour stays
+   composable at the call site.
+2. **Measure.** `.measure` / `.measure-tight` / `.measure-wide` in `ch` (62/46/78) replace `max-w-3xl`
+   (48rem); the old cap let an 11px paragraph run ~130 characters per line. `text-wrap: balance` on h1–h3.
+3. **Colour.** `text-slate-400/500/600` → `text-fg-muted/subtle/faint`, `text-slate-100…300` → `text-fg(-muted)`,
+   `text-white` → `text-fg` (21 sites). The `fg` ramp is re-measured for light theme rather than inverted, and
+   light-theme `mint-400` moved `#0b8a5f` → `#087a53` (4.02:1 → 4.95:1). `--color-slate-*` stays for badge tints.
+4. **Whitespace.** Inner cards `px-3.5 py-3`, panels `p-4 sm:p-5`, rows `px-4 py-3.5`, stacks `space-y-1`
+   (warnings) / `gap-2.5` (steps) / `gap-4`–`gap-5` (sections). The table header, footer and both dialog
+   surfaces moved to the same rhythm.
+5. **Controls are sentence case.** `Button`, `TabsTrigger`, the segmented controls, the `More` summary and the
+   menu items dropped `uppercase tracking-label` and sit at 12px (13px in Simple via `.ui-button`/`.ui-tab`).
+
+**Decision.** `.type-eyebrow` keeps uppercase because a rubric label (“PLAN & SIZE”, “TAPE · WEEK HORIZON”) is
+scanned, not read; anything that carries a *sentence* — a friendly verdict chip, a table field label, a form
+label, a menu row — uses `.type-badge`, `.type-caption` or `.type-body` instead, so no sentence is shouted at 11px.
+
+## Session note (2026-11-26) — "keep it ultra simple: a list of trade signals"
+
+Prompted by "as a common person I just expect to see a list of trade signals, expanding it will tell me
+the details of why — if the user understands trades then we offer pro views right?". The answer is yes,
+and `Simple | Pro` already existed; the *Simple* screen was what disagreed with it: a full market-call
+hero (traffic light, 10–90 gauge, reasons, sector chips, trust line, three summary cards) followed by
+three **already-expanded** plan cards and a "show more" toggle. A first-time reader had to read three
+trade plans before choosing one.
+
+Frontend only: `AdviceCardList.tsx`, `MarketDirectionHero.tsx`, `App.tsx`, `TerminalHeader.tsx`,
+`lib/plainAdvice.ts`, `lib/__tests__/plainAdvice.test.ts`, `RidingNowStrip.tsx` (**deleted**), plus the
+docs and memory bank. **No backend file, no API contract, no new dependency, no new layer**; Pro, the
+ticker/research dialogs and every server-owned number are untouched.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (≈0.38 s, exit 0) — 66 → 71 with five `describeSignalRow` cases |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 131 modules transformed`, `✓ built in 211ms`, exit 0 |
+
+Not run: a real-browser capture (headless Chrome still hangs on the seeded app here) and `dotnet test`
+(nothing in `backend/` changed).
+
+**What it built** *(the accordion described below was replaced by the row-opens-modal pass at the top of this file — the row content and `describeSignalRow` are unchanged, the panel now lives in `TickerDetailDialog`)*. `AdviceCardList` now renders **every** buyable pick in rank order as one
+`<button aria-expanded>` row — rank, company name, ticker, verdict, entry chip, drift, `Buy … · Target …
+· Cut-loss …` and the entry-timing line — with a single-open accordion panel holding the thesis, the
+four-step `WavePlanGrid` (or the legacy `PlanSteps`), the hold line, the `OrderBox`, the win-chance meter,
+the confidence line, the pre-mortem, `Practise This Trade` / `Full Details` and the *Show the math*
+drawer. The top-three slice, the “Show N more” button and `RidingNowStrip` are gone; “inside the band”
+became an `entryChip` on the row, sourced from the server's `EntryStatus`. `MarketDirectionHero` is a
+**call bar** (traffic light + instruction + one sentence) with the gauge, reasons, sector flows, trust
+line, summary cards and institutional tiles in one *Why this call* drawer whose collapsed pills preview
+PSEi, cash and horizon. `describeSignalRow` in `plainAdvice.ts` composes only existing copy. The
+`Simple | Pro` switch keeps its labels/persisted value and gained a `title` + `aria-description` hint.
+
+**Decision.** The market call stays in Simple, but as one bar: dropping it leaves a list context-free on
+a risk-off day, and keeping the hero re-creates the wall the list replaces.
 
 ## Session note (2026-11-26) — "use Google Flex Sans as main font"
 
@@ -309,7 +599,7 @@ Read-only inventory; no source file changed. Two different lists exist and they 
 | **Tracked universe** (static metadata, no prices) | `backend/src/PseSignalDesk.Infrastructure/MarketData/PseTickerCatalog.cs` → `PseTickerCatalog.All` | `GET /api/research/catalog` → `ResearchController.GetCatalog()` → `TickerResearchService.GetCatalog()` → `IMarketDataProvider.GetCatalog()` | **64 names** (verified live: ICT … RCR) |
 | **Tickers on the desk** (the ranked book) | SQLite `SignalItems.Ticker` rows joined to `SignalRuns` | `GET /api/signals/latest?horizon=…` → `run.items[].ticker` | whatever the last stored run for that horizon produced |
 
-Rendering: Pro → `frontend/src/components/SignalTable.tsx`; Simple → `AdviceCardList.tsx` + `RidingNowStrip.tsx`; detail sheet → `TickerDetailDialog.tsx`; catalog search → `ResearchDialog.tsx` + `lib/pseNicknames.ts`.
+Rendering: Pro → `frontend/src/components/SignalTable.tsx`; Simple → `AdviceCardList.tsx` (one row per signal under `MarketDirectionHero`'s call bar; the row opens the detail sheet); detail sheet → `TickerDetailDialog.tsx`; catalog search → `ResearchDialog.tsx` + `lib/pseNicknames.ts`.
 
 Local `backend/src/PseSignalDesk.WebApi/pse_signals.db` at the time of the check: runs **14 (WEEK, 9 names)** and **15 (MONTH, 10 names)**, both `RunDate 2026-11-25`; **no DAY or YEAR run**, so those two horizons legitimately render the "Market data loaded, no signal run yet" empty state. `DailyMarketSnapshots` 1 row / `StockDailyMetrics` 60 rows, all `2026-11-25`.
 
@@ -359,7 +649,7 @@ A single-operator research desk for the Philippine Stock Exchange, with all four
 - **Sizing.** `OrderTicketCalculator` builds one ticket per pick from a `BookSizingSnapshot` (risk budget, free cash, heat, sector room, 2% of 20-day turnover, governor multipliers, the live-drift throttle, slippage/ADV participation, execution guidance), settles the fees including the PHP 20 commission floor, and routes a same-ticker order into a legal pyramid add.
 - **Grading and replay.** The forward-outcome ledger grades only plans the tape actually filled; `BacktestService` replays the same rules causally (point-in-time filings, median liquidity, fees dated to each trade, gap-open stop fills) into a multi-slot, benchmarked equity curve with a rolling walk-forward refit.
 - **Paper book.** A cash ledger with raise-stop, close, trim and pyramid merge, plus expectancy / profit factor / payoff telemetry, drawdown posture and alerts.
-- **Terminal.** **Simple** (market call, then at most three plan cards) and **Pro** (dense table and tiles) read one payload; persisted light/dark, bottom-sheet dialogs, card fallbacks from 320px up, a zero-dependency SWR cache with intent preloaders, and a first-run legal gate.
+- **Terminal.** **Simple** (a compact call bar, then one row per trade signal; the row opens the ticker's detail sheet) and **Pro** (dense table and tiles) read one payload; persisted light/dark, bottom-sheet dialogs, card fallbacks from 320px up, a zero-dependency SWR cache with intent preloaders, and a first-run legal gate.
 - **Knowledge base.** 8 built-in documents / 46 sections in SQLite, BM25 + cosine RRF retrieval with mandatory guardrails and horizon/sector/trap boosts, optional embeddings, and uploads behind a rights attestation.
 
 ## Verified in the Yahoo-delisting pass (2026-11-26)

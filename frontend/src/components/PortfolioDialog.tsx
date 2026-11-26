@@ -71,10 +71,10 @@ type TabKey = 'book' | 'take' | 'closed' | 'settings';
 type PositionAct = 'breakeven' | 'trail' | 'trim' | 'close';
 
 const inputClass =
-  'rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-[11px] normal-case tracking-normal text-slate-200 outline-none placeholder:text-slate-600 focus:border-mint-400/50';
+  'rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-xs normal-case tracking-normal text-fg outline-none placeholder:text-fg-faint focus:border-mint-400/50';
 
 const actionTone: Record<string, string> = {
-  HOLD: 'border-line/70 text-slate-400',
+  HOLD: 'border-line/70 text-fg-muted',
   STOP_BREACHED: 'border-rose-400/40 bg-rose-400/10 text-rose-400',
   TARGET_REACHED: 'border-mint-400/40 bg-mint-400/10 text-mint-400',
   MOVE_STOP_TO_BREAKEVEN: 'border-amber-400/40 bg-amber-400/10 text-amber-400',
@@ -122,7 +122,7 @@ function pnlTone(value: number): string {
     return 'text-mint-400';
   }
 
-  return value < 0 ? 'text-rose-400' : 'text-slate-300';
+  return value < 0 ? 'text-rose-400' : 'text-fg-muted';
 }
 
 function Field({
@@ -136,9 +136,9 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</span>
+      <span className="type-eyebrow text-fg-subtle">{label}</span>
       {children}
-      {hint ? <span className="text-[10px] text-slate-600">{hint}</span> : null}
+      {hint ? <span className="text-2xs text-fg-faint">{hint}</span> : null}
     </label>
   );
 }
@@ -146,7 +146,7 @@ function Field({
 function EquityCurve({ points }: { points: PortfolioEquityPoint[] }) {
   if (points.length < 2) {
     return (
-      <p className="text-[11px] text-slate-500">
+      <p className="text-xs text-fg-subtle">
         The realized curve appears once the blotter has settled at least two trades.
       </p>
     );
@@ -176,7 +176,7 @@ function EquityCurve({ points }: { points: PortfolioEquityPoint[] }) {
           className="text-mint-400"
         />
       </svg>
-      <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+      <div className="mt-1 flex justify-between text-2xs text-fg-subtle">
         <span>{formatDate(points[0].date)}</span>
         <span className="tabular">
           {formatPrice(min)} – {formatPrice(max)}
@@ -199,10 +199,10 @@ function StatTile({
   tone?: string;
 }) {
   return (
-    <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={cn('tabular mt-1 text-sm font-semibold text-slate-100', tone)}>{value}</p>
-      {detail ? <p className="tabular mt-0.5 text-[10px] text-slate-500">{detail}</p> : null}
+    <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3.5 py-3">
+      <p className="type-eyebrow text-fg-subtle">{label}</p>
+      <p className={cn('tabular mt-1 text-sm font-semibold text-fg', tone)}>{value}</p>
+      {detail ? <p className="tabular mt-0.5 text-2xs text-fg-subtle">{detail}</p> : null}
     </div>
   );
 }
@@ -229,10 +229,10 @@ function PositionCard({
     <li className="rounded-xl border border-line/70 bg-ink-850/70 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold leading-tight text-white">
+          <p className="truncate text-sm font-semibold leading-tight text-fg">
             {companyLabel(position.ticker, position.companyName)}
           </p>
-          <p className="font-mono text-[10px] tracking-wider text-slate-500">
+          <p className="font-mono text-2xs tracking-wider text-fg-subtle">
             {position.ticker} · {formatInteger(position.shares)} shares · bought {formatDate(position.openedDate)}
             {position.pyramidCount > 0 ? ` · +${position.pyramidCount} add` : ''}
             {showR ? ` · ${formatR(position.unrealizedNetR)} net` : ''}
@@ -242,37 +242,37 @@ function PositionCard({
           <p className={cn('tabular text-sm font-semibold', pnlTone(position.unrealizedNetPnlPhp))}>
             {formatPrice(position.unrealizedNetPnlPhp)}
           </p>
-          <p className="text-[10px] text-slate-500">now {formatPrice(position.lastPrice)}</p>
+          <p className="text-2xs text-fg-subtle">now {formatPrice(position.lastPrice)}</p>
         </div>
       </div>
 
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
-        <div className="rounded-lg border border-line/60 bg-ink-900/60 px-2 py-1.5">
-          <dt className="text-slate-500">Bought at</dt>
-          <dd className="tabular mt-0.5 text-xs text-slate-200">{formatPrice(position.entryPrice)}</dd>
+      <dl className="mt-2.5 grid grid-cols-3 gap-2">
+        <div className="rounded-lg border border-line/60 bg-ink-900/60 px-3 py-2.5">
+          <dt className="type-caption text-fg-subtle">Bought at</dt>
+          <dd className="tabular type-figure mt-1 text-sm text-fg">{formatPrice(position.entryPrice)}</dd>
         </div>
-        <div className="rounded-lg border border-line/60 bg-ink-900/60 px-2 py-1.5">
-          <dt className="text-slate-500">Sell at</dt>
-          <dd className="tabular mt-0.5 text-xs text-mint-400">{formatPrice(position.targetPrice)}</dd>
+        <div className="rounded-lg border border-line/60 bg-ink-900/60 px-3 py-2.5">
+          <dt className="type-caption text-fg-subtle">Sell at</dt>
+          <dd className="tabular type-figure mt-1 text-sm text-mint-400">{formatPrice(position.targetPrice)}</dd>
         </div>
-        <div className="rounded-lg border border-line/60 bg-ink-900/60 px-2 py-1.5">
-          <dt className="text-slate-500">Cut at</dt>
-          <dd className="tabular mt-0.5 text-xs text-rose-400">{formatPrice(position.currentStopLoss)}</dd>
+        <div className="rounded-lg border border-line/60 bg-ink-900/60 px-3 py-2.5">
+          <dt className="type-caption text-fg-subtle">Cut at</dt>
+          <dd className="tabular type-figure mt-1 text-sm text-rose-400">{formatPrice(position.currentStopLoss)}</dd>
         </div>
       </dl>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <span
           className={cn(
-            'inline-flex rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider',
-            actionTone[position.action] ?? 'border-line/70 text-slate-400',
+            'inline-flex rounded border px-1.5 py-0.5 type-badge',
+            actionTone[position.action] ?? 'border-line/70 text-fg-muted',
           )}
         >
           {action.label}
         </span>
         <Button
           variant="secondary"
-          className="ml-auto h-7 px-2 text-[9px]"
+          className="ml-auto h-7 px-2 text-2xs"
           busy={pending === `close-${position.id}`}
           disabled={pending !== null}
           onClick={() => onAct(position, 'close')}
@@ -282,7 +282,7 @@ function PositionCard({
         {position.recommendedTrimShares > 0 ? (
           <Button
             variant="ghost"
-            className="h-7 px-2 text-[9px]"
+            className="h-7 px-2 text-2xs"
             busy={pending === `trim-${position.id}`}
             disabled={pending !== null}
             onClick={() => onAct(position, 'trim')}
@@ -293,7 +293,7 @@ function PositionCard({
         {position.currentStopLoss < position.breakEvenStopPrice ? (
           <Button
             variant="ghost"
-            className="h-7 px-2 text-[9px]"
+            className="h-7 px-2 text-2xs"
             busy={pending === `breakeven-${position.id}`}
             disabled={pending !== null}
             onClick={() => onAct(position, 'breakeven')}
@@ -304,7 +304,7 @@ function PositionCard({
         {position.ema20 != null && position.ema20 > position.currentStopLoss ? (
           <Button
             variant="ghost"
-            className="h-7 px-2 text-[9px]"
+            className="h-7 px-2 text-2xs"
             busy={pending === `trail-${position.id}`}
             disabled={pending !== null}
             onClick={() => onAct(position, 'trail')}
@@ -314,16 +314,16 @@ function PositionCard({
         ) : null}
       </div>
 
-      <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+      <p className="mt-1.5 type-caption text-fg-subtle">
         {position.actionNote || action.description}
       </p>
       {position.pyramidCount > 0 ? (
-        <p className="mt-1 text-[10px] leading-relaxed text-slate-600">
+        <p className="mt-1 type-caption measure text-fg-faint">
           {describePyramidCount(position.pyramidCount)}
         </p>
       ) : null}
       {position.recommendedTrimShares > 0 ? (
-        <p className="mt-1 text-[10px] leading-relaxed text-slate-600">
+        <p className="mt-1 type-caption measure text-fg-faint">
           {describeTrimGuidance(position.recommendedTrimShares, position.ticker)}
         </p>
       ) : null}
@@ -427,7 +427,7 @@ function BookTab({
 
       {summary.sectorExposure && summary.sectorExposure.length > 0 ? (
         <div className="mt-3">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Sector exposure</p>
+          <p className="type-eyebrow text-fg-subtle">Sector exposure</p>
           <ul className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {summary.sectorExposure.map((sector) => {
               const used = sector.maxSectorExposurePct > 0
@@ -436,12 +436,12 @@ function BookTab({
               const breached = sector.exposurePct >= sector.maxSectorExposurePct;
 
               return (
-                <li key={sector.sector} className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2">
+                <li key={sector.sector} className="rounded-xl border border-line/70 bg-ink-850/80 px-3.5 py-3">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="truncate text-xs font-semibold text-slate-100" title={sector.sector}>
+                    <p className="truncate text-xs font-semibold text-fg" title={sector.sector}>
                       {sector.sector}
                     </p>
-                    <p className={cn('tabular text-[11px]', breached ? 'text-rose-400' : 'text-slate-400')}>
+                    <p className={cn('tabular text-xs', breached ? 'text-rose-400' : 'text-fg-muted')}>
                       {formatPercent(sector.exposurePct, 1, false)} /{' '}
                       {formatPercent(sector.maxSectorExposurePct, 0, false)}
                     </p>
@@ -452,7 +452,7 @@ function BookTab({
                       style={{ width: `${used}%` }}
                     />
                   </div>
-                  <p className="mt-1 text-[10px] text-slate-500">
+                  <p className="mt-1 text-2xs text-fg-subtle">
                     {sector.positionCount} of {sector.maxPositionsPerSector} names
                   </p>
                 </li>
@@ -465,7 +465,7 @@ function BookTab({
       {summary.alerts.length > 0 ? (
         <ul className="mt-3 space-y-1 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
           {summary.alerts.map((alert) => (
-            <li key={alert} className="text-[11px] leading-relaxed text-amber-400/90">
+            <li key={alert} className="type-body measure text-amber-400/90">
               {simple ? describePortfolioAlert(alert) : alert}
             </li>
           ))}
@@ -473,7 +473,7 @@ function BookTab({
       ) : null}
 
       {summary.positions.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-8 text-center text-xs text-slate-500">
+        <p className="mt-6 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-8 text-center text-xs text-fg-subtle">
           {simple
             ? 'No trades yet. Open an advice card and press Practise This Trade — the desk fills in everything.'
             : 'No open positions. Take a qualifying pick from the signal table, or research any PSE name on demand.'}
@@ -504,7 +504,7 @@ function BookTab({
           >
           <table className="w-full min-w-232 border-collapse text-left">
             <thead>
-              <tr className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+              <tr className="type-eyebrow text-fg-subtle">
                 <th className="sticky-col px-3 py-2.5 font-medium">Name</th>
                 <th className="px-3 py-2.5 text-right font-medium">Shares</th>
                 <th className="px-3 py-2.5 text-right font-medium">Entry</th>
@@ -522,29 +522,29 @@ function BookTab({
               {summary.positions.map((position) => (
                 <tr key={position.id} className="border-t border-line/60 align-top">
                   <td className="sticky-col px-3 py-3">
-                    <p className="font-mono text-xs font-semibold tracking-wide text-white">{position.ticker}</p>
-                    <p className="mt-0.5 max-w-56 truncate text-[10px] text-slate-500">
+                    <p className="font-mono text-xs font-semibold tracking-wide text-fg">{position.ticker}</p>
+                    <p className="mt-0.5 max-w-56 truncate text-2xs text-fg-subtle">
                       {position.companyName || position.sector}
                     </p>
-                    <p className="text-[10px] text-slate-600">
+                    <p className="text-2xs text-fg-faint">
                       {position.horizon} · {formatDate(position.openedDate)} · {position.sessionsHeld} session
                       {position.sessionsHeld === 1 ? '' : 's'}
                       {position.pyramidCount > 0 ? ` · +${position.pyramidCount} add` : ''}
                     </p>
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-slate-300">
+                  <td className="tabular px-3 py-3 text-right text-xs text-fg-muted">
                     {formatInteger(position.shares)}
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-slate-300">
+                  <td className="tabular px-3 py-3 text-right text-xs text-fg-muted">
                     {formatPrice(position.entryPrice)}
-                    <p className="text-[10px] text-slate-600">{formatPrice(position.buyCostPhp)} cost</p>
+                    <p className="text-2xs text-fg-faint">{formatPrice(position.buyCostPhp)} cost</p>
                   </td>
-                  <td className="tabular px-3 py-3 text-right text-xs text-slate-100">
+                  <td className="tabular px-3 py-3 text-right text-xs text-fg">
                     {formatPrice(position.lastPrice)}
                   </td>
                   <td className="tabular px-3 py-3 text-right text-xs text-rose-400/90">
                     {formatPrice(position.currentStopLoss)}
-                    <p className="text-[10px] text-slate-600">open {formatPrice(position.initialStopLoss)}</p>
+                    <p className="text-2xs text-fg-faint">open {formatPrice(position.initialStopLoss)}</p>
                   </td>
                   <td className="tabular px-3 py-3 text-right text-xs text-mint-400">
                     {formatPrice(position.targetPrice)}
@@ -573,8 +573,8 @@ function BookTab({
                       <span
                         tabIndex={0}
                         className={cn(
-                          'inline-flex rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider',
-                          actionTone[position.action] ?? 'border-line/70 text-slate-400',
+                          'inline-flex rounded border px-1.5 py-0.5 type-badge',
+                          actionTone[position.action] ?? 'border-line/70 text-fg-muted',
                         )}
                       >
                         {simple
@@ -583,7 +583,7 @@ function BookTab({
                       </span>
                     </Tooltip>
                     {position.action !== 'HOLD' && position.actionNote ? (
-                      <p className="mt-1 max-w-60 text-[10px] leading-relaxed text-slate-500">
+                      <p className="mt-1 type-caption measure text-fg-subtle">
                         {position.actionNote}
                       </p>
                     ) : null}
@@ -593,7 +593,7 @@ function BookTab({
                       {position.currentStopLoss < position.breakEvenStopPrice ? (
                         <Button
                           variant="ghost"
-                          className="h-7 px-2 text-[9px]"
+                          className="h-7 px-2 text-2xs"
                           busy={pending === `breakeven-${position.id}`}
                           disabled={pending !== null}
                           onClick={() => onAct(position, 'breakeven')}
@@ -604,7 +604,7 @@ function BookTab({
                       {position.ema20 != null && position.ema20 > position.currentStopLoss ? (
                         <Button
                           variant="ghost"
-                          className="h-7 px-2 text-[9px]"
+                          className="h-7 px-2 text-2xs"
                           busy={pending === `trail-${position.id}`}
                           disabled={pending !== null}
                           onClick={() => onAct(position, 'trail')}
@@ -614,7 +614,7 @@ function BookTab({
                       ) : null}
                       <Button
                         variant="secondary"
-                        className="h-7 px-2 text-[9px]"
+                        className="h-7 px-2 text-2xs"
                         busy={pending === `close-${position.id}`}
                         disabled={pending !== null}
                         onClick={() => onAct(position, 'close')}
@@ -629,7 +629,7 @@ function BookTab({
                         >
                           <Button
                             variant="ghost"
-                            className="h-7 px-2 text-[9px]"
+                            className="h-7 px-2 text-2xs"
                             busy={pending === `trim-${position.id}`}
                             disabled={pending !== null}
                             onClick={() => onAct(position, 'trim')}
@@ -648,7 +648,7 @@ function BookTab({
         </>
       )}
 
-      <p className="mt-2 text-[10px] text-slate-600">
+      <p className="mt-2 text-2xs text-fg-faint">
         {simple
           ? `Closing uses the latest stored price after broker fees. The desk blocks any order that breaks your cash or risk limits. Settings last saved ${formatTimestamp(account.updatedAtUtc)}.`
           : `Closing fills the latest stored close after the sell leg; the server refuses a stop above the last price and rejects any order that breaches the cash, heat or per-trade risk rules. Settings last saved ${formatTimestamp(account.updatedAtUtc)}.`}
@@ -664,11 +664,11 @@ function ClosedTradeCard({ trade, simple }: { trade: ClosedTrade; simple: boolea
     <li className="rounded-xl border border-line/70 bg-ink-850/70 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold leading-tight text-white">
+          <p className="truncate text-sm font-semibold leading-tight text-fg">
             {companyLabel(trade.ticker, trade.companyName)}
           </p>
-          <p className="font-mono text-[10px] tracking-wider text-slate-500">{trade.ticker}</p>
-          <p className="mt-0.5 text-[10px] text-slate-500">
+          <p className="font-mono text-2xs tracking-wider text-fg-subtle">{trade.ticker}</p>
+          <p className="mt-0.5 text-2xs text-fg-subtle">
             {formatDate(trade.openedDate)} → {trade.closedDate ? formatDate(trade.closedDate) : '—'} ·{' '}
             {formatInteger(trade.shares)} shares
           </p>
@@ -677,16 +677,16 @@ function ClosedTradeCard({ trade, simple }: { trade: ClosedTrade; simple: boolea
           <p className={cn('tabular text-sm font-semibold', pnlTone(trade.realizedNetPnlPhp))}>
             {formatPrice(trade.realizedNetPnlPhp)}
           </p>
-          <p className="text-[10px] text-slate-500">
+          <p className="text-2xs text-fg-subtle">
             {simple ? 'after fees' : `${formatR(trade.realizedNetR)} net`}
           </p>
         </div>
       </div>
-      <p className="tabular mt-2 text-[10px] text-slate-400">
+      <p className="tabular mt-2 text-2xs text-fg-muted">
         Bought {formatPrice(trade.entryPrice)} · sold {formatPrice(trade.exitPrice)}
       </p>
       {trade.notes ? (
-        <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{trade.notes}</p>
+        <p className="mt-1 type-caption text-fg-subtle">{trade.notes}</p>
       ) : null}
     </li>
   );
@@ -699,7 +699,7 @@ function ClosedTab({ summary, simple }: { summary: PortfolioSummary; simple: boo
     <div className="mt-4">
       <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
         <div className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+          <h3 className="type-eyebrow text-fg-subtle">
             {simple ? 'Your money over time' : 'Realized equity'}
           </h3>
           <div className="mt-2">
@@ -748,13 +748,13 @@ function ClosedTab({ summary, simple }: { summary: PortfolioSummary; simple: boo
       </div>
 
       {simple ? (
-        <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+        <p className="mt-2 type-caption measure text-fg-subtle">
           {describePayoffRatio(summary.payoffRatio)}
         </p>
       ) : null}
 
       {closed.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-8 text-center text-xs text-slate-500">
+        <p className="mt-4 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-8 text-center text-xs text-fg-subtle">
           {simple
             ? 'No closed trades yet. When you sell a trade it lands here with what you made after broker fees.'
             : 'Nothing settled yet. Close a position from the blotter and it lands here with its fee-paid result in R.'}
@@ -769,7 +769,7 @@ function ClosedTab({ summary, simple }: { summary: PortfolioSummary; simple: boo
           <div className="mt-3 hidden scroll-x rounded-xl border border-line/60 md:block">
             <table className="w-full min-w-176 border-collapse text-left">
               <thead>
-                <tr className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                <tr className="type-eyebrow text-fg-subtle">
                   <th className="sticky-col px-3 py-2.5 font-medium">{simple ? 'Stock' : 'Name'}</th>
                 <th className="px-3 py-2.5 font-medium">{simple ? 'Held' : 'Window'}</th>
                 <th className="px-3 py-2.5 text-right font-medium">Shares</th>
@@ -784,23 +784,23 @@ function ClosedTab({ summary, simple }: { summary: PortfolioSummary; simple: boo
               {closed.map((trade) => (
                 <tr key={trade.id} className="border-t border-line/60">
                   <td className="sticky-col px-3 py-2.5">
-                    <p className="text-xs font-semibold leading-tight text-white">
+                    <p className="text-xs font-semibold leading-tight text-fg">
                       {companyLabel(trade.ticker, trade.companyName)}
                     </p>
-                    <p className="max-w-48 truncate font-mono text-[10px] text-slate-500">
+                    <p className="max-w-48 truncate font-mono text-2xs text-fg-subtle">
                       {trade.ticker} · {trade.companyName}
                     </p>
                   </td>
-                  <td className="px-3 py-2.5 text-[10px] text-slate-400">
+                  <td className="px-3 py-2.5 text-2xs text-fg-muted">
                     {formatDate(trade.openedDate)} → {trade.closedDate ? formatDate(trade.closedDate) : '—'}
                   </td>
-                  <td className="tabular px-3 py-2.5 text-right text-xs text-slate-300">
+                  <td className="tabular px-3 py-2.5 text-right text-xs text-fg-muted">
                     {formatInteger(trade.shares)}
                   </td>
-                  <td className="tabular px-3 py-2.5 text-right text-xs text-slate-300">
+                  <td className="tabular px-3 py-2.5 text-right text-xs text-fg-muted">
                     {formatPrice(trade.entryPrice)}
                   </td>
-                  <td className="tabular px-3 py-2.5 text-right text-xs text-slate-100">
+                  <td className="tabular px-3 py-2.5 text-right text-xs text-fg">
                     {formatPrice(trade.exitPrice)}
                   </td>
                   <td
@@ -816,7 +816,7 @@ function ClosedTab({ summary, simple }: { summary: PortfolioSummary; simple: boo
                       {formatR(trade.realizedNetR)}
                     </td>
                   )}
-                  <td className="max-w-[16rem] px-3 py-2.5 text-[10px] leading-relaxed text-slate-500">
+                  <td className="max-w-[16rem] px-3 py-3 type-caption text-fg-subtle">
                     {trade.notes || '—'}
                   </td>
                 </tr>
@@ -890,19 +890,19 @@ function SettingsTab({
 
   return (
     <div className="mt-4">
-      <p className="max-w-3xl text-[11px] leading-relaxed text-slate-400">
+      <p className="type-body measure text-fg-muted">
         {simple
           ? 'These are the limits the desk uses when it decides how many shares to suggest. You can adjust how much you are willing to risk on each trade, how much of your money can sit in one stock or one sector, and when the desk should slow down after a losing streak. The server applies them to every new order.'
           : "These are the only knobs the desk honours. The server sizes every ticket against the stored equity with the per-trade risk fraction (halved for SMALL_SIZE), scales that fraction by the edge tier, the name's beta and the book's drawdown, caps any single position at the position limit, holds each sector under its exposure cap and refuses an order that would push total open heat past the heat cap. Cash is decremented on entry and credited with the net sell proceeds on exit."}
       </p>
 
-      <p className="mt-3 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+      <p className="mt-3 type-eyebrow text-fg-subtle">
         {simple ? 'How much you risk' : 'Sizing'}
       </p>
       {simple ? (
         <div className="mt-1 space-y-3 rounded-xl border border-line/70 bg-ink-850/60 p-3">
           <div>
-            <p className="text-[11px] font-semibold text-slate-200">Play money</p>
+            <p className="text-xs font-semibold text-fg">Play money</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {BUDGET_PRESETS_PHP.map((amount) => {
                 const active = Math.abs((form.startingCapitalPhp ?? 0) - amount) < 1;
@@ -919,10 +919,10 @@ function SettingsTab({
                       }))
                     }
                     className={cn(
-                      'rounded-full border px-3 py-1 text-[11px] font-medium transition',
+                      'rounded-full border px-3 py-1 text-xs font-medium transition',
                       active
                         ? 'border-mint-400/60 bg-mint-400/10 text-mint-400'
-                        : 'border-line/80 bg-ink-900 text-slate-300 hover:border-mint-400/40 hover:text-mint-400',
+                        : 'border-line/80 bg-ink-900 text-fg-muted hover:border-mint-400/40 hover:text-mint-400',
                     )}
                   >
                     {formatPrice(amount)}
@@ -930,13 +930,13 @@ function SettingsTab({
                 );
               })}
             </div>
-            <p className="mt-1 text-[10px] text-slate-600">
+            <p className="mt-1 text-2xs text-fg-faint">
               Practice cash resets to the amount you pick. Nothing here touches real money.
             </p>
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-slate-200">How safe do you want to play it?</p>
+            <p className="text-xs font-semibold text-fg">How safe do you want to play it?</p>
             <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
               {SAFETY_PRESETS.map((preset) => {
                 const active = safetyPresetForSettings(form)?.id === preset.id;
@@ -953,15 +953,15 @@ function SettingsTab({
                         : 'border-line/80 bg-ink-900 hover:border-mint-400/40',
                     )}
                   >
-                    <p className={cn('text-[11px] font-semibold', active ? 'text-mint-400' : 'text-slate-200')}>
+                    <p className={cn('text-xs font-semibold', active ? 'text-mint-400' : 'text-fg')}>
                       {preset.label}
                     </p>
-                    <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{preset.tagline}</p>
+                    <p className="mt-1 type-caption text-fg-subtle">{preset.tagline}</p>
                   </button>
                 );
               })}
             </div>
-            <p className="mt-1 text-[10px] leading-relaxed text-slate-600">
+            <p className="mt-1 type-caption measure text-fg-faint">
               {safetyPresetForSettings(form)?.detail ??
                 'Custom rules. The server still checks every value before it saves.'}
             </p>
@@ -981,7 +981,7 @@ function SettingsTab({
         {numberField('maxPortfolioHeatPct', 'Max portfolio heat', 'total open risk allowed, percent of equity')}
       </div>
 
-      <p className="mt-3 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+      <p className="mt-3 type-eyebrow text-fg-subtle">
         {simple ? 'Safety limits' : 'Pod-shop guardrails'}
       </p>
       <div className="mt-1 grid gap-3 rounded-xl border border-line/70 bg-ink-850/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -997,7 +997,7 @@ function SettingsTab({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] text-slate-600">
+        <p className="text-2xs text-fg-faint">
           {simple
             ? `Saved ${formatTimestamp(account.updatedAtUtc)} · the server checks every value, so a bad combination is rejected instead of quietly breaking your book.`
             : `Saved ${formatTimestamp(account.updatedAtUtc)} · validated server-side, so a bad combination comes back as a 400 instead of silently changing the book.`}
@@ -1043,7 +1043,7 @@ function TakeTradeTab({
 
   return (
     <div className="mt-4">
-      <p className="max-w-3xl text-[11px] leading-relaxed text-slate-400">
+      <p className="type-body measure text-fg-muted">
         {simple
           ? 'This records a trade you have decided to take. The desk double-checks the shares, your available cash and your risk limits before saving anything.'
           : 'Log a position the desk already sized. Shares, entry, stop and target come from the server ticket — the desk re-checks the lot size, the tick grid, available cash, the per-name cap and total heat before it writes anything, and the entry is priced at the planned level with the buy leg charged to cash.'}
@@ -1144,7 +1144,7 @@ function TakeTradeTab({
       </dl>
 
       {!valid ? (
-        <p className="mt-2 text-[10px] text-amber-400/90">
+        <p className="mt-2 text-2xs text-amber-400/90">
           The ticket needs a ticker, whole shares, and entry &gt; stop &gt; 0 with a target above entry.
         </p>
       ) : null}
@@ -1348,10 +1348,10 @@ export function PortfolioDialog({
       <DialogContent size="xl">
         <DialogStickyHeader>
           <div className="min-w-0">
-            <DialogTitle className="text-lg font-semibold text-white">
+            <DialogTitle className="text-lg font-semibold text-fg">
               {simple ? 'My Trades (Paper Tracker)' : 'Portfolio blotter'}
             </DialogTitle>
-            <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
+            <DialogDescription className="mt-1 type-body measure text-fg-muted">
               {simple
                 ? 'A practice account that tracks the plans you record from the advice cards. It shows what the paper book holds, what it is worth today and the exit posture the server derived for each position.'
                 : "Server-sized paper book: cash, open heat, fee-paid P&L and the exit instruction the session's OHLC implies. Sizing, cash and the risk caps are enforced by the API, never by this screen."}
@@ -1383,7 +1383,7 @@ export function PortfolioDialog({
           </Tabs>
           <Button
             variant="secondary"
-            className="h-8 w-full px-2.5 text-[10px] sm:w-auto"
+            className="h-8 w-full px-2.5 text-2xs sm:w-auto"
             busy={status === 'loading'}
             disabled={pending !== null}
             onClick={() => void load(true)}
@@ -1393,19 +1393,19 @@ export function PortfolioDialog({
         </div>
 
         {notice ? (
-          <p className="mt-3 rounded-lg border border-mint-400/30 bg-mint-400/5 px-3 py-2 text-[11px] text-mint-400">
+          <p className="mt-3 rounded-lg border border-mint-400/30 bg-mint-400/5 px-3 py-2 text-xs text-mint-400">
             {notice}
           </p>
         ) : null}
 
         {error ? (
-          <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-[11px] text-rose-400">
+          <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-xs text-rose-400">
             {error}
           </p>
         ) : null}
 
         {status === 'loading' && !summary ? (
-          <p className="mt-6 text-xs text-slate-500">Loading the book…</p>
+          <p className="mt-6 text-xs text-fg-subtle">Loading the book…</p>
         ) : null}
 
         {summary && account ? (

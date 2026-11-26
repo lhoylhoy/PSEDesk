@@ -12,10 +12,10 @@ interface RiskSizerBarProps {
 
 function SizerTile({ label, value, detail, tone }: { label: string; value: string; detail?: string; tone?: string }) {
   return (
-    <div className="rounded-lg border border-line/60 bg-ink-900/60 px-2.5 py-1.5">
-      <p className="text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className={cn('tabular mt-0.5 text-xs font-semibold text-slate-100', tone)}>{value}</p>
-      {detail ? <p className="tabular mt-0.5 text-[10px] text-slate-500">{detail}</p> : null}
+    <div className="rounded-lg border border-line/60 bg-ink-900/60 px-3 py-2.5">
+      <p className="type-eyebrow text-fg-subtle">{label}</p>
+      <p className={cn('tabular type-caption mt-1 font-semibold text-fg', tone)}>{value}</p>
+      {detail ? <p className="tabular type-caption mt-1 text-fg-subtle">{detail}</p> : null}
     </div>
   );
 }
@@ -32,11 +32,11 @@ export function RiskSizerBar({ item, className }: RiskSizerBarProps) {
   // rate against a 0% break-even would read as a real (and terrible) forecast.
   if (!(item.winProbability > 0) || !(item.breakEvenWinRate > 0)) {
     return (
-      <section className={cn('rounded-xl border border-line/70 bg-ink-850/60 p-3', className)}>
-        <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+      <section className={cn('rounded-xl border border-line/70 bg-ink-850/60 p-3.5.5', className)}>
+        <h3 className="type-eyebrow text-fg-subtle">
           Risk sizer · fee-adjusted · Quarter-Kelly
         </h3>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
+        <p className="mt-1.5 type-body measure text-fg-muted">
           This run predates the probability ledger, so no odds, break-even rate or Kelly size were stored.
           Re-run the pipeline to have the desk price the setup and grade it forward.
         </p>
@@ -50,13 +50,13 @@ export function RiskSizerBar({ item, className }: RiskSizerBarProps) {
   const expectedValueTone = item.expectedValueR > 0 ? 'text-mint-400' : 'text-rose-400';
 
   return (
-    <section className={cn('rounded-xl border border-line/70 bg-ink-850/60 p-3', className)}>
+    <section className={cn('rounded-xl border border-line/70 bg-ink-850/60 p-3.5.5', className)}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+          <h3 className="type-eyebrow text-fg-subtle">
             Risk sizer · fee-adjusted · Quarter-Kelly
           </h3>
-          <p className="mt-0.5 text-[10px] text-slate-600">
+          <p className="type-caption measure-wide mt-1 text-fg-faint">
             Probability and verdict are computed server-side; only the peso conversion happens here.
           </p>
         </div>
@@ -79,7 +79,7 @@ export function RiskSizerBar({ item, className }: RiskSizerBarProps) {
             style={{ left: `${breakEvenPct}%` }}
           />
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 type-caption text-fg-subtle">
           <span className={cn('tabular font-semibold', aboveBreakEven ? 'text-mint-400' : 'text-rose-400')}>
             P(win) {formatProbability(item.winProbability)} · {sizing.edgeRatio.toFixed(2)}× the break-even rate
           </span>
@@ -112,12 +112,12 @@ export function RiskSizerBar({ item, className }: RiskSizerBarProps) {
               ? `${formatInteger(sizing.lots)} lot${sizing.lots === 1 ? '' : 's'} · ${formatPrice(sizing.grossRiskPhp)} at risk`
               : `budget ${formatPrice(MODEL_POSITION_BUDGET_PHP)} unused`
           }
-          tone={sizing.shares > 0 ? 'text-slate-100' : 'text-slate-500'}
+          tone={sizing.shares > 0 ? 'text-fg' : 'text-fg-subtle'}
         />
       </dl>
 
       {sizing.shares === 0 && sizing.actionable ? (
-        <p className="mt-2 text-[10px] text-amber-400/90">
+        <p className="type-caption measure mt-2 text-amber-400/90">
           The Kelly budget cannot fund one {formatInteger(sizing.boardLot)}-share board lot at{' '}
           {formatPrice(item.entryPrice)}; treat this as a pass until the price or the budget changes.
         </p>
@@ -165,7 +165,7 @@ export function RiskSizerBar({ item, className }: RiskSizerBarProps) {
       {sizing.warnings.length > 0 ? (
         <ul className="mt-2 space-y-0.5">
           {sizing.warnings.map((warning) => (
-            <li key={warning} className="text-[10px] leading-relaxed text-slate-500">
+            <li key={warning} className="type-caption measure text-fg-subtle">
               · {warning}
             </li>
           ))}

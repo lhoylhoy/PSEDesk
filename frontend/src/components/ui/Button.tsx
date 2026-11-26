@@ -13,8 +13,8 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary:
     'border-mint-400/40 bg-mint-400/10 text-mint-400 hover:bg-mint-400/20 hover:border-mint-400/60',
   secondary:
-    'border-line/80 bg-ink-800/80 text-slate-300 hover:border-slate-500/60 hover:text-white',
-  ghost: 'border-transparent bg-transparent text-slate-400 hover:bg-ink-800 hover:text-white',
+    'border-line/80 bg-ink-800/80 text-fg-muted hover:border-slate-500/60 hover:text-fg',
+  ghost: 'border-transparent bg-transparent text-fg-muted hover:bg-ink-800 hover:text-fg',
   /*
    * The one action a row is asking the reader to take. Filled rather than tinted so it outranks
    * the outline controls beside it; `mint-500` under `ink-950` keeps AA contrast in both palettes
@@ -32,7 +32,7 @@ export function Button({ variant = 'secondary', busy, children, className, disab
       // responding; a long `run-now` is announced as busy instead of dead.
       aria-busy={busy || undefined}
       className={cn(
-        'inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition ui-button',
+        'inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3.5 text-xs font-semibold transition ui-button',
         // `tap` only raises the floor on coarse pointers, so the 40px desktop rhythm is
         // untouched while every button is thumb-sized on a phone or tablet.
         'tap select-none touch-manipulation active:scale-[0.98]',

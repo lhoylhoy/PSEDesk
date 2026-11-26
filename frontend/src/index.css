@@ -34,6 +34,31 @@
     sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /*
+   * ── Type scale ────────────────────────────────────────────────────────────────
+   * One ramp, five steps, and an 11px floor. Nothing on screen is smaller than
+   * `2xs`: a 9px label explaining a peso figure is a legibility bug, not density.
+   *
+   *   2xs   11px / 1.30   600   uppercase eyebrows, table metadata (never prose)
+   *   xs    12px / 1.50   400   captions, secondary figures, table rows
+   *   body  13px / 1.65   400   the default reading size (`.type-body`)
+   *   lead  15px / 1.55   400   a row headline or a standfirst
+   *   title clamp         600   section and page titles
+   *
+   * The role utilities below apply the size, line height, weight and tracking as
+   * one token, so a heading cannot drift into six near-identical sizes.
+   */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1.3;
+  --text-2xs--letter-spacing: 0.01em;
+  --tracking-label: 0.08em;
+
+  /*
+   * ── Colour: surface ramp ──────────────────────────────────────────────────────
+   * Five near-black neutrals plus one hairline. Every card sits one step above the
+   * page, and the ramp is inverted (not recoloured) for the light theme so a single
+   * class flip re-skins the whole terminal.
+   */
   --color-ink-950: #05080d;
   --color-ink-900: #080d14;
   --color-ink-850: #0b1119;
@@ -42,6 +67,31 @@
   --color-ink-600: #1b2a39;
   --color-line: #1e2d3d;
 
+  /*
+   * ── Colour: text ramp ─────────────────────────────────────────────────────────
+   * Four measured steps instead of six ad-hoc slate greys. Contrast is against the
+   * page (`ink-950`) and every step clears WCAG AA for body-size text, because the
+   * muted steps carry 9–11px labels rather than decoration:
+   *
+   *   fg         #eaf0f8   ≈17.0 : 1   headings, primary figures
+   *   fg-muted   #bac7d8   ≈10.5 : 1   body copy, row headlines
+   *   fg-subtle  #8698ad   ≈ 6.8 : 1   labels, captions, metadata
+   *   fg-faint   #74869c   ≈ 5.4 : 1   the quietest footnote text
+   *
+   * `--color-slate-*` is still available (badges tint with it) but the reading path
+   * uses these four, so a palette change is one block, not a grep.
+   */
+  --color-fg: #eaf0f8;
+  --color-fg-muted: #bac7d8;
+  --color-fg-subtle: #8698ad;
+  --color-fg-faint: #74869c;
+
+  /*
+   * ── Colour: semantic accents ──────────────────────────────────────────────────
+   * Four accents, one meaning each, and never the only channel (a glyph or a word is
+   * always present beside the colour): mint = risk-on / gain / pass, rose = risk-off /
+   * loss / stop, amber = caution / wait, sky = informational / new.
+   */
   --color-mint-400: #3ce6a8;
   --color-mint-500: #1fc98d;
   --color-rose-400: #ff6f8b;
@@ -87,7 +137,22 @@
     --color-ink-600: #d6dee8;
     --color-line: #d5dee9;
 
-    --color-mint-400: #0b8a5f;
+    /*
+     * The text ramp is re-measured for the light page, not inverted: `#f3f6fb` has a
+     * much higher luminance, so the same four roles need their own values to keep the
+     * same 17 / 8.4 / 5.9 / 4.8 : 1 ladder.
+     */
+    --color-fg: #0a1424;
+    --color-fg-muted: #3b4a5d;
+    --color-fg-subtle: #4f6076;
+    --color-fg-faint: #5f6e84;
+
+    /*
+     * Accents are darkened for contrast on a pale page. `mint-400` was `#0b8a5f`
+     * (4.02:1 — below AA for body text); `#087a53` measures 4.95:1 while keeping the
+     * same hue, so a gain still reads as a gain.
+     */
+    --color-mint-400: #087a53;
     --color-mint-500: #0a6f4d;
     --color-rose-400: #c81e45;
     --color-amber-400: #9a5b00;
@@ -109,7 +174,7 @@
   }
 
   body {
-    @apply bg-ink-950 font-sans text-slate-300 antialiased;
+    @apply bg-ink-950 font-sans text-fg-muted antialiased;
     background-image:
       radial-gradient(90rem 40rem at 15% -12%, rgba(31, 201, 141, 0.09), transparent 60%),
       radial-gradient(70rem 34rem at 100% 0%, rgba(92, 192, 255, 0.08), transparent 55%);
@@ -147,6 +212,27 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /*
+   * A control that acts on a click shows the hand cursor.
+   *
+   * Tailwind v4's preflight dropped the `button, [role="button"] { cursor: pointer }` rule
+   * that v3 shipped, so every real control on the desk — the filled Run button, a horizon
+   * tab, a Simple signal row, a drawer toggle, a `?` pill, the trading-day picker — read as
+   * plain text under a mouse until it was hovered. One base rule restores the hand for the
+   * surfaces that click and leaves the arrow on the ones that cannot (disabled or
+   * aria-disabled). This layer loses to utilities, so a call site can still opt out with
+   * `cursor-default`; the clickable Pro row and card keep their own `cursor-pointer`.
+   */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab']:not([aria-disabled='true']),
+  [role='option']:not([aria-disabled='true']),
+  [role='menuitem']:not([aria-disabled='true']),
+  a[href],
+  summary {
+    cursor: pointer;
+  }
+
   /* iOS Safari zooms the whole page when a focused control is under 16px. */
   @media (max-width: 639px) {
     input:not([type='checkbox']):not([type='radio']):not([type='file']),
@@ -169,9 +255,111 @@
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-mint-400/70;
   }
+
+  /*
+   * Headings break lines evenly instead of leaving one orphaned word on the last line.
+   * Prose paragraphs use `pretty` (in `.type-body` / `.measure`) so the last line is
+   * never a single dangling word; hyphenation stays off, because peso figures, tickers
+   * and board-lot counts must never be split.
+   */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
 }
 
 @layer utilities {
+  /*
+   * ── Type roles ────────────────────────────────────────────────────────────────
+   * One class per typographic *role*, so a new panel picks a role instead of guessing
+   * at `text-[10px] tracking-[0.18em]`. Size, leading, weight and tracking travel
+   * together; colour stays composable (the call site adds `text-fg-subtle`), which is
+   * what keeps `.type-eyebrow` usable inside an amber caution card.
+   *
+   *   type-eyebrow  11px 600 uppercase — the only place wide tracking is legal
+   *   type-badge    11px 600           — a chip that carries a word ("Qualifies (Full)")
+   *   type-caption  12px 400           — metadata under a figure
+   *   type-body     13px 400 / 1.65    — the reading size
+   *   type-lead     15px 400 / 1.55    — a row headline or standfirst
+   *   type-title    15px 600           — a card or section title
+   *   type-figure          600 tabular — the number itself
+   */
+  .type-eyebrow {
+    font-size: var(--text-2xs);
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  /*
+   * A pill label that carries a word, not a rubric. Same 11px floor and weight as an eyebrow,
+   * but no uppercase transform and only enough tracking to keep two-word labels from colliding:
+   * Simple mode's friendly chips ("Qualifies (Full)", "Sold — target reached") must not be
+   * shouted, and an em dash in all caps at 11px is the hardest thing on the page to read.
+   */
+  .type-badge {
+    font-size: var(--text-2xs);
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+
+  .type-caption {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .type-body {
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    letter-spacing: 0;
+    text-wrap: pretty;
+  }
+
+  .type-lead {
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+    text-wrap: pretty;
+  }
+
+  .type-title {
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .type-figure {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+
+  /*
+   * Measure. A line of text wants 45–75 characters; an 11px paragraph stretched across
+   * a 48rem card runs to ~130, which is where a reader loses the line they were on.
+   * These caps are in `ch`, so they scale with the font size of the element they sit on
+   * instead of with the viewport.
+   */
+  .measure {
+    max-width: 62ch;
+  }
+
+  .measure-tight {
+    max-width: 46ch;
+  }
+
+  .measure-wide {
+    max-width: 78ch;
+  }
+
   .tabular {
     font-variant-numeric: tabular-nums;
   }
@@ -324,7 +512,7 @@
 
   /*
    * Simple mode: the same controls, read like a consumer app rather than a Bloomberg
-   * terminal. Labels drop the 10px uppercase tracking and grow to a comfortable size.
+   * terminal. Labels grow from the 12px control size to a comfortable 13px reading size.
    * Nothing about the layout or the data changes — only the type scale.
    */
   [data-view-mode='simple'] .ui-button {
@@ -344,6 +532,15 @@
     font-size: 0.75rem;
     letter-spacing: 0.01em;
     text-transform: none;
+  }
+
+  /*
+   * Chips carry a word, so Simple mode reads them at caption size rather than the 11px
+   * rubric scale. The tracking goes to zero because mixed-case text never needs it.
+   */
+  [data-view-mode='simple'] .type-badge {
+    font-size: 0.75rem;
+    letter-spacing: 0;
   }
 
   [data-view-mode='simple'] .ui-tooltip {

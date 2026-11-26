@@ -73,12 +73,31 @@ public sealed class MarketDataOptions
     public string PseEdgeCompanyPageUrl { get; set; } = "https://edge.pse.com.ph/companyPage/stockData.do";
 
     /// <summary>
-    /// PSE Edge company-disclosure search page. It is polled alongside the announcement page and
-    /// is best-effort: a failure there never blocks a run, because the announcement page is the
-    /// contract.
+    /// PSE Edge company-disclosure search page. It is polled market-wide (no query) alongside the
+    /// announcement page and is best-effort: a failure there never blocks a run, because the
+    /// announcement page is the contract.
+    /// <para>
+    /// The same endpoint serves one company's own filing table when its <c>keyword</c> is the
+    /// exchange's numeric <c>cmpy_id</c> — the value the page's own search form posts —
+    /// which is what <see cref="DisclosureCompanyFanoutLimit"/> exercises.
+    /// </para>
     /// </summary>
     public string PseEdgeCompanyDisclosuresUrl { get; set; } =
         "https://edge.pse.com.ph/companyDisclosures/search.ax";
+
+    /// <summary>
+    /// How many of the highest-scoring names that clear the liquidity floor are re-read through
+    /// their own PSE Edge company page, so a filing is attributed by the exchange's <c>cmpy_id</c>
+    /// instead of by matching its headline to a company name.
+    /// <para>
+    /// The market-wide page carries no company column, so a template like "Mergers and
+    /// Consolidations" cannot be attributed at all and the structural trap screen goes unenforced
+    /// without any error. The per-company page answers exactly that gap: one GET per name, capped
+    /// here at 25 (the desk's own candidate cap) so a run costs at most 25 extra requests. Set to
+    /// <c>0</c> to switch the fan-out off and fall back to the market-wide scrape alone.
+    /// </para>
+    /// </summary>
+    public int DisclosureCompanyFanoutLimit { get; set; } = 25;
 
     /// <summary>
     /// Number of Edge result pages scanned per listing. One page covers roughly a session; two

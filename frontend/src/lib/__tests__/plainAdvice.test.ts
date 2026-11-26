@@ -25,6 +25,7 @@ import {
   describePyramidCount,
   describeRiskPerTrade,
   describeRunLabel,
+  describeSignalRow,
   describeTrimGuidance,
   describeTrustPulse,
   describeWinRate,
@@ -407,5 +408,73 @@ test('the history strip says the page is history and names the day in Pro mode',
   assert.match(describeHistoryBanner('2026-11-20', false), /^2026-11-20 is a stored session/);
   assert.match(describeHistoryBanner('2026-11-20', false), /does not fetch a new one/);
   assert.match(describeHistoryBanner(null, false), /^This session is a stored session/);
+});
+
+// The Simple home is a list of signals: one collapsed line per pick, the "why" one tap down.
+// These pin the four facts that line is allowed to state, so the list can never drift from the
+// server figures the expanded panel prints.
+const ROW_BASE = {
+  edgeVerdict: 'TRADE' as const,
+  entryPrice: 245,
+  targetPrice: 268,
+  stopLoss: 231,
+  winProbability: 0.61,
+  breakEvenWinRate: 0.45,
+};
+
+const ROW_WAVE = {
+  idealBuyPrice: 244,
+  cutLossPrice: 231,
+  breakEvenStopPrice: 246,
+  targetPrice: 268,
+  maxChasePrice: 246,
+  lockBreakEvenTriggerPrice: 258,
+  trailWaveTriggerPrice: 265,
+  trailStopPrice: 252,
+  entryStatus: 'READY_NOW',
+  maxHoldTradingDays: 10,
+};
+
+test('a signal row states the verdict and the three prices in the order they are used', () => {
+  const row = describeSignalRow({ ...ROW_BASE, wavePlan: ROW_WAVE });
+
+  assert.equal(row.verdictLabel, 'Qualifies (Full)');
+  assert.equal(row.headline, 'Buy ₱245.00 · Target ₱268.00 · Cut-loss ₱231.00');
+  // Buy first, then the target, then the cut-loss — the order a reader acts on them.
+  assert.ok(row.headline.indexOf('Buy') < row.headline.indexOf('Target'));
+  assert.ok(row.headline.indexOf('Target') < row.headline.indexOf('Cut-loss'));
+});
+
+test('only a price already inside the server band earns the entry chip', () => {
+  const ready = describeSignalRow({ ...ROW_BASE, wavePlan: ROW_WAVE });
+  assert.equal(ready.entryChip, 'Inside the band');
+  assert.match(ready.subline, /inside the model’s entry band/);
+
+  // NEAR_ENTRY and EXTENDED_WAIT_PULLBACK both mean "wait" — no chip, and the line says why.
+  const waiting = describeSignalRow({ ...ROW_BASE, wavePlan: { ...ROW_WAVE, entryStatus: 'NEAR_ENTRY' } });
+  assert.equal(waiting.entryChip, null);
+  assert.match(waiting.subline, /below the ideal buy/i);
+});
+
+test('a watch-only name says why it cannot be funded and never asks to be bought', () => {
+  const row = describeSignalRow({ ...ROW_BASE, edgeVerdict: 'WATCH_ONLY', wavePlan: ROW_WAVE });
+
+  assert.equal(row.verdictLabel, 'Watch Only');
+  assert.equal(row.entryChip, null);
+  assert.match(row.subline, /does not clear broker fees/);
+});
+
+test('a run without a wave plan falls back to the odds instead of inventing an entry status', () => {
+  const row = describeSignalRow(ROW_BASE);
+
+  assert.equal(row.entryChip, null);
+  assert.match(row.subline, /Good odds/);
+});
+
+test('an unreported price renders a dash on the row, never a zero', () => {
+  const row = describeSignalRow({ ...ROW_BASE, entryPrice: null as unknown as number });
+
+  assert.match(row.headline, /^Buy —/);
+  assert.doesNotMatch(row.headline, /₱0/);
 });
 

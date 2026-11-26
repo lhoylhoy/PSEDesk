@@ -828,6 +828,47 @@ public sealed class QuantitativeFilterServiceTests
             Disclosures: disclosures ?? Array.Empty<StockDisclosure>(),
             Dividends: dividends);
 
+    [Fact]
+    public void SelectDisclosureFanout_is_exactly_the_candidate_list_before_the_trap_screen()
+    {
+        var service = new QuantitativeFilterService();
+        var metrics = new[]
+        {
+            BuildMetric("AAA", 90),
+            BuildMetric("BBB", 70),
+            BuildMetric("CCC", 80)
+        };
+
+        var candidates = service.SelectCandidates(metrics, SignalHorizon.WEEK, 2)
+            .Select(metric => metric.Ticker)
+            .ToList();
+
+        // With nothing disqualified, the names the fan-out re-reads are the names that could
+        // reach the book — reordering here would leave a candidate without its own filings.
+        Assert.Equal(candidates, service.SelectDisclosureFanout(metrics, SignalHorizon.WEEK, 2));
+        Assert.Equal(2, candidates.Count);
+    }
+
+    [Fact]
+    public void SelectDisclosureFanout_skips_illiquid_names_and_honours_a_zero_limit()
+    {
+        var service = new QuantitativeFilterService();
+        var illiquid = BuildRankedMetric(
+            "ILLQ",
+            99,
+            avgTurnover: 1_000_000m,
+            medianTurnover: 900_000m,
+            activeDays: 20);
+        var liquid = BuildMetric("LIQD", 10);
+
+        Assert.Equal(
+            new[] { "LIQD" },
+            service.SelectDisclosureFanout(new[] { illiquid, liquid }, SignalHorizon.DAY, 25));
+
+        // Zero is the rollback: no request is worth making, so nothing is selected.
+        Assert.Empty(service.SelectDisclosureFanout(new[] { liquid }, SignalHorizon.DAY, 0));
+    }
+
     private static StockDailyMetric BuildMetric(string ticker, int score) =>
         new()
         {

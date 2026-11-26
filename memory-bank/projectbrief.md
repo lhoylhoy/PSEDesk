@@ -89,7 +89,8 @@ frontend/
   src/
     api/        # typed fetch client (ApiError + ProblemDetails handling, FormData uploads)
     components/ # TerminalHeader (+ phone "Desk controls" sheet), DeskLogo (desk mark badge), RegimeStrip,
-                # MarketDirectionHero, RidingNowStrip, AdviceCardList, SignalTable (+ ProSignalCard), DropPanel,
+                # MarketDirectionHero (the Simple call bar), AdviceCardList (Simple's signal list),
+                # SignalTable (+ ProSignalCard), DropPanel,
                 # TickerDetailDialog, RiskSizerBar, ScorecardDialog, BacktestPanel, ModelTrainerPanel, ResearchDialog,
                 # PortfolioDialog, KnowledgeBaseDialog, QuotationReportImportButton, VerdictBadge, DriftBadge,
                 # WelcomeSetupBanner, BeginnerGuideDialog, LegalDisclaimerGate

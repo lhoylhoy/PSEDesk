@@ -31,6 +31,24 @@
       "processId": "${command:pickProcess}"
     },
     {
+      "name": "Frontend: Vite dev server (frees :5173 first)",
+      "type": "pwa-node",
+      "request": "launch",
+      // vite.config.ts pins strictPort: true, so a leftover server fails the launch instead of moving
+      // to 5174. The preLaunchTask frees the port; serverReadyAction then opens a debuggable Chrome.
+      "preLaunchTask": "frontend: free port 5173",
+      "cwd": "${workspaceFolder}/frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "serverReadyAction": {
+        "pattern": "Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "debugWithChrome"
+      }
+    },
+    {
       "name": "Terminal: Chrome (run `npm run dev` first)",
       "type": "chrome",
       "request": "launch",

@@ -63,8 +63,8 @@ export function TabsTrigger({
       className={cn(
         // `sm:h-full` keeps every tab exactly as tall as the 40px rail (and the controls that
         // share its row); the phone rail stays 36px so the target is thumb-sized.
-        'inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition outline-none ui-tab sm:h-full sm:min-h-0',
-        'hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40',
+        'inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-3 py-1 text-xs font-semibold text-fg-subtle transition outline-none ui-tab sm:h-full sm:min-h-0',
+        'hover:text-fg disabled:cursor-not-allowed disabled:opacity-40',
         'data-[state=active]:bg-mint-400/10 data-[state=active]:text-mint-400 data-[state=active]:ring-1 data-[state=active]:ring-mint-400/30',
         className,
       )}

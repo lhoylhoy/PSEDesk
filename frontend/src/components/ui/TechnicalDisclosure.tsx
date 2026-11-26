@@ -40,19 +40,19 @@ export function TechnicalDisclosure({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((current) => !current)}
-        className="tap flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-ink-800/60"
+        className="tap flex w-full flex-wrap items-center justify-between gap-2 px-3.5 py-3 text-left transition hover:bg-ink-800/60"
       >
         <span className="flex flex-wrap items-center gap-2">
-          <span aria-hidden className="text-[10px] text-slate-500">
+          <span aria-hidden className="text-2xs text-fg-subtle">
             {open ? '▾' : '▸'}
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 ui-drawer-title">{title}</span>
+          <span className="type-caption font-semibold text-fg-muted ui-drawer-title">{title}</span>
         </span>
         {summary && !open ? <span className="flex flex-wrap items-center gap-1.5">{summary}</span> : null}
       </button>
 
       {open ? (
-        <div id={panelId} className="border-t border-line/60 px-3 py-3">
+        <div id={panelId} className="border-t border-line/60 px-3.5 py-3.5">
           {children}
         </div>
       ) : null}
@@ -63,7 +63,7 @@ export function TechnicalDisclosure({
 /** Small monospace pill for technical drawer summaries. */
 export function DisclosurePill({ children }: { children: ReactNode }) {
   return (
-    <span className="tabular rounded border border-line/70 bg-ink-900/80 px-1.5 py-0.5 text-[9px] text-slate-400">
+    <span className="tabular type-caption rounded border border-line/70 bg-ink-900/80 px-1.5 py-0.5 text-fg-muted">
       {children}
     </span>
   );

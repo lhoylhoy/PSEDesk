@@ -2,7 +2,276 @@
 
 **Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **464 backend tests green + 1 skipped manual benchmark (465 total) / 66 frontend tests green** (2026-11-26, typeface pass on top of the compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each of those keeps its own section below). This pass changed only the frontend's typeface: Google Sans Flex is **vendored** (`public/fonts/google-sans-flex-latin.woff2`, OFL 1.1) instead of CDN-linked, so the privacy notice stays literal and the terminal still renders with nothing but the API on loopback; only the `latin` subset ships, because the API's `latin-ext`/`symbols` subsets were measured and do not carry the desk's `₱`/`▲ ▼` glyphs. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+**Latest verification:** **496 backend tests green + 1 skipped (497 total) / 71 frontend tests green** (2026-11-26; the newest pass is **per-company PSE Edge disclosures** — data-truth slice 2 — on top of the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below). It gives every screened candidate its own Edge company page (`companyDisclosures/search.ax?keyword={cmpy_id}`, ≤25 per run, 8-way) so disclosure attribution is correct by construction instead of guessed from a market-wide headline table: live, that fan-out returned 22–47 filings per name where the market-wide page attributed 3 filings across 60 names. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+
+## Verification (2026-11-26 — Vite dev server port recovery)
+
+Tooling only. `vite.config.ts` pins `strictPort: true`, so a leftover dev server makes `npm run dev` die with
+`Error: Port 5173 is already in use` instead of moving to 5174. An orphaned `npm run dev` — PPID 1, 45 minutes
+old, still answering `200` — held `[::1]:5173`. Freed, and made repeatable:
+
+| Command | Result |
+| --- | --- |
+| `lsof -nP -iTCP:5173 -sTCP:LISTEN` + `ps -o pid,ppid,lstart,command -p <pid>` | `node 85742` on `[::1]:5173`, its parent `npm run dev` 85727 sitting at **PPID 1** (orphaned) |
+| `kill -TERM 85742 85727` | both gone; a real `bind()` on `127.0.0.1:5173` **and** `[::1]:5173` → OK; `curl` → `000` |
+| `frontend: free port 5173` — occupied / already free / SIGTERM-ignoring | `freeing :5173 — SIGTERM to 95119` → `:5173 is free now` · `:5173 is already free` · `after 6s — SIGKILL` → `:5173 is free now`; exit 0 in all three |
+| `cd frontend && npm run dev` afterwards | `VITE v8.3.8  ready in 274 ms`, `Local: http://localhost:5173/`, `GET /` → **200** (server then stopped) |
+
+New: the `frontend: free port 5173` task and a `Frontend: Vite dev server (frees :5173 first)` `pwa-node` launch
+config (`preLaunchTask` + `serverReadyAction` → debuggable Chrome). No backend or frontend source touched, so the
+test counts are unchanged (496 + 1 skipped / 71).
+
+## Latest verification (2026-11-26 — per-company disclosures, data-truth slice 2)
+
+Backend only. **1 new source file** (`Infrastructure/MarketData/PseEdgeDisclosureSource.cs`), **7 edited**
+(`IMarketDataProvider` — one *defaulted* interface method, so no existing fake broke; `QuantitativeFilterService`
+(`SelectDisclosureFanout`); `SignalPipelineService` (`EnrichCompanyDisclosuresAsync`, before
+`MergeRollingDisclosuresAsync`); `MarketDataOptions` (`DisclosureCompanyFanoutLimit = 25`); `PseEdgeHistorySource`
+(its `ReadCompanyId` now delegates to the shared `EdgeSymbolSearch`); `PseMarketDataProvider` (the fan-out plus
+both Edge date formats and the identifier cells); `appsettings.json`), **1 new test file + 3 extended**. No
+dependency, no DTO, no fee and no golden snapshot touched.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo -v q` | `Passed! - Failed: 0, Passed: 496, Skipped: 1, Total: 497` (9 s) — 485 → 497, **+12** |
+| `dotnet test --list-tests` | `PseEdgeCompanyDisclosuresTests` 8 (new), `QuantitativeFilterServiceTests` 38 → 40, `SignalPipelineServiceTests` 12 → 13, `PseMarketDataProviderTests` 33 → 34 |
+| live harness (`/tmp/livecheck`, real exchange, outside the repo) | JFC/SM/BDO/TEL resolved to an id; `ZZZZ` has no page → **skip, not failure**; **JFC 47 / BDO 41 / TEL 40 / SM 22 filings** with real dates (`2026-11-25 10:16 Change in Shareholdings of Directors and Principal Officers`). Ledger line: `Ok — 4 of 5 screened name(s) filed through their own Edge page` |
+| same harness, full market-wide tape (`FetchAsync`) | `session 2026-11-25, 60 names, **3** with attributable filings` (BDO, SM, BPI) — the fallback's true ceiling |
+| live instance on `:5299` (real `pse_signals.db`, stopped after) | `GET /api/research/SM` → **200** (2 588 B) with `disclosures: []` — correct point-in-time: the only SM row on that page is dated `2026-11-26`, *after* the stored session (`2026-11-25`). `GET /api/health/feeds` → **200**, six feeds, `storedSessionCount: 1` |
+| `lsof -ti :5299` | empty — instance stopped, the operator's `:5236` process untouched |
+
+**The route was a guess and the guess was wrong.** The plan specified
+`companyPage/companyDisclosures.do?cmpy_id=<id>` with an *empty* template as the safe default, so the fan-out
+would have shipped inert. Probing first showed that route answers **HTTP 404**. The working call is
+`GET companyDisclosures/search.ax?keyword={cmpy_id}` — `keyword` is the hidden field the page's own search form
+posts — and it returns the company's newest-first 50-row table (`Total 424` for JFC), subject in the first cell,
+`Nov 26, 2026 11:53 AM` in the second. Because the route is confirmed, the fan-out ships **on**
+(`DisclosureCompanyFanoutLimit = 25`); setting `0` is the documented rollback (zero per-company requests).
+
+**Why this was the whole pillar.** Attribution used to be a headline-to-company-name match over a market-wide
+table that names the issuer only sometimes: the live run above attributed **3 of 60** names, so a rights offering
+titled just "Rights Offering" reached no ticker and `SRO_DILUTION` could never fire. Keying the fetch on the
+exchange's own `cmpy_id` makes attribution correct by construction — no name matching anywhere — and the
+fan-out returns 22–47 filings per screened name. One page per company per run is enough because the pipeline
+keeps a rolling 120-day merge of `RecentDisclosuresJson`.
+
+**A deliberate, visible behaviour change.** A screened name that only its own company page reveals as
+rights-offering / tender-offer / halted is now **dropped before the model sees it**
+(`RunAsync_disqualifies_a_name_whose_rights_offering_only_the_company_page_names`). Failures stay soft: a
+company the search does not know is a skip, a transport/JSON failure keeps the market-wide attribution, and the
+ledger receives **one aggregated observation** per fan-out instead of 25.
+
+**Two parser bugs surfaced by the same probe**, fixed in the market-wide fallback: the disclosure table prints
+`Nov 26, 2026 05:20 PM`, which the numeric-only date regex missed — so the *timestamp* was kept as a subject and
+every row was back-dated to the session — and the following PSE form/report numbers (`13-1`, `C08413-2026`)
+became subjects too, turning one filing into three. `AnnounceDateRegex` + `BuildDate` read both formats;
+`FilingIdentifierRegex` drops the identifier cells. Pinned by
+`FetchAsync_reads_the_live_disclosure_table_date_and_ignores_its_identifier_columns`, which replays the captured
+markup and asserts one filing dated `2026-11-21` whose headline carries no `10:05`, `LD-3` or `LN00207`.
+
+**Not verified:** a full `run-now` (needs `OLLAMA_API_KEY`, and it would overwrite the stored WEEK run), so the
+ledger has not been seen carrying a real fan-out line inside a production run — only from the harness.
+
+## Latest verification (2026-11-26 — feed health ledger, data-truth slice 1)
+
+Backend only. **4 new source files** (`Application/Models/FeedHealthModels.cs`,
+`Application/Interfaces/IFeedHealthRegistry.cs`, `Infrastructure/Diagnostics/FeedHealthRegistry.cs`,
+`WebApi/Controllers/FeedHealthController.cs`), **4 edited** (`PseMarketDataProvider`, `PseEdgeHistorySource`,
+`OllamaEmbeddingClient` — each only gaining an optional registry parameter and the recordings — and
+`Program.cs` for the singleton), **2 new test files + 1 extended**. No dependency, no DTO or status code
+removed, no indicator/plan/fee/prompt/golden touched.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx -c Debug --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo -v q` | `Passed! - Failed: 0, Passed: 484, Skipped: 1, Total: 485` (8 s) — 464 → 484, +20, **no existing test edited** |
+| live instance on `:5299` (`--no-launch-profile`, real `pse_signals.db`, stopped after) | `GET /api/health/feeds` → **200**: `overallStatus: Unknown`, `storedFactsAvailable: true`, `latestStoredSessionDate: 2026-11-25`, `storedSessionCount: 1`, `quotationReportTemplates: 0`, `embeddingsConfigured: false`, six feeds in enum order |
+| `lsof -ti :5299` | empty — instance stopped, the operator's `:5236` process untouched |
+
+Not run: a live `run-now` (needs `OLLAMA_API_KEY` and would overwrite the stored WEEK run), so the ledger has
+not yet been observed carrying real PSE Edge counts. The disclosure degradation is pinned by a stubbed test
+that replays the exact `200`/"no records found" page the live site serves.
+
+**Why it exists.** `announcements/search.ax` answers `200` with a ~2.4 KB "no records found" page, so
+`FetchDisclosuresAsync` returned an empty map, logged nothing, and the run looked healthy while the trap
+pillar (`SRO_DILUTION`, `TENDER_OFFER_PIN`, `TRADING_HALT_RISK`) was inert. A transport failure raised; a
+silent emptiness did not. This slice makes that state a reported fact instead of a missing log line.
+
+**What it built** — a thread-safe, in-memory, singleton ledger with four recording verbs (`Success`,
+`Degraded`, `Failure`, `Skipped`), run-scoped counters (`BeginRun()` at the top of `FetchAsync`) and
+process-lifetime timestamps; status **derived from counters** rather than from the last write, because 58
+names finish concurrently (`failures && !successes` → `Failed`, any failure/degraded → `Degraded`,
+`successes` → `Ok`, only skips → `Degraded`, nothing → `Unknown`); recordings placed at the parse seam so a
+cache hit still counts; hooks in Edge history, disclosures (one terminal verdict per scrape), Yahoo charts,
+macro dials, the DQR and the embeddings client; and `GET /api/health/feeds` reporting the six feeds,
+`overallStatus` over the **load-bearing three only**, the stored-session facts and the configuration that
+explains an `Unknown` — `NoStore`, no credential reflected, and an unreadable store answering
+`storedFactsAvailable: false` instead of `500` (with a test that serialises the report and asserts the key
+string never appears).
+
+**Next** — slice 2 shipped (per-company PSE Edge disclosures, section above). Remaining: slice 3 (surface "trap
+flags are unenforced this session" through `SignalDtos.Warnings`) and slice 4 (measure the model:
+`QuantPreScore`/`QuantRank` migration, model-vs-quant scorecard, opt-in prompt replay). Details in
+`activeContext.md`.
+
+
+## Latest verification (2026-11-26 — hand cursor on every control)
+
+Frontend only: `src/index.css` plus this memory bank. **No backend file, no API contract, no new dependency, no
+new architectural layer**, and no server-owned number, label or verdict moved.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 240ms`, exit 0 — `dist/assets/index-*.css` `59,339` bytes |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (503 ms, exit 0) |
+| built CSS audit | `button:not(:disabled),[role=button]:not([aria-disabled=true]),[role=tab]:not(…),[role=option]:not(…),[role=menuitem]:not(…),a[href],summary{cursor:pointer}` emitted once inside `@layer base` (layer starts at offset 3,708; `@layer utilities` at 10,009, so utilities win) |
+| layer probe — headless Chrome `--dump-dom` over the built stylesheet | `button=pointer`, `button[disabled]=default`, utilities `cursor: default` opt-out → `default`, utilities `cursor: not-allowed` → `not-allowed`, `summary=pointer`, `[role=tab]=pointer`, `[role=tab][aria-disabled=true]=auto` |
+| real built app — `dist/` copy served on `127.0.0.1:5311` with the legal gate + welcome seeded, 1280×940 | **19** rendered controls: `Open desk controls`, `Run Latest Screen`, `My Trades`, `More▾`, `How it works`, `Check a Stock`, `Past Results`, the four horizon tabs, `☀Light`, `☾Dark`, `Simple`, `Pro`, `Technical details`, `Review the notice` → all `cursor=pointer`; the **disabled** trading-day picker → `cursor=not-allowed` |
+
+Not run: `dotnet test` (no backend file changed) and a VoiceOver/NVDA pass. The probe page and the served
+`dist/` copy were throwaway files under `/tmp`; the server on `:5311` was stopped afterwards.
+
+**What changed**
+
+- **One base rule, not 100+ classes.** Tailwind v4's preflight no longer sets `cursor: pointer` on buttons (v3
+  did), so every control showed an arrow. `index.css` now sets the hand for `button:not(:disabled)`,
+  `[role="button"|"tab"|"option"|"menuitem"]:not([aria-disabled="true"])`, `a[href]` and `summary`, beside the
+  existing `touch-action` block.
+- **Dead controls keep the arrow.** `:not(:disabled)` / `:not([aria-disabled="true"])` exclude them, and their
+  own `disabled:cursor-not-allowed` still applies inside the utilities layer.
+- **Rows and cards were already right.** `SignalTable`'s clickable `<tr>` and `ProSignalCard`'s `<li>` carry
+  `cursor-pointer` themselves; a tooltip-only `<span tabIndex={0}>` is deliberately left at `auto` because it
+  explains a figure instead of acting on it.
+
+## Latest verification (2026-11-26 — clicking a row opens the modal)
+
+Frontend only: `AdviceCardList.tsx`, `TickerDetailDialog.tsx`, `SignalTable.tsx`, `App.tsx`, plus `README.md`
+and the memory bank. **No backend file, no API contract, no new dependency, no new architectural layer**,
+and no server-owned number, label or verdict moved.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && ./node_modules/.bin/tsc --noEmit` | clean, exit 0 |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (219 ms, exit 0) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 249ms`, exit 0; `TickerDetailDialog` still ships as its own 19.92 kB chunk |
+| `grep -rn 'aria-haspopup' src` | one site — the Simple row button (`AdviceCardList.tsx:385`); `grep -c aria-haspopup dist/assets/index-*.js` → 1 |
+| `grep -rn 'onTakeTrade' src` | `AdviceCardList` no longer takes it; `SignalTable`, `TickerDetailDialog`, `ResearchDialog` still do |
+| headless Chrome over CDP against the running dev server (`localhost:5173`) + the running API (`:5236`, stored run 17 — WEEK, 10 items) | before the click **0** `[role="dialog"]`; **3** rows carry `aria-haspopup="dialog"`; clicking row 1 (Philippine National Bank) opened a dialog titled **“Philippine National Bank”** whose text carries the four-step plan, `Ticket: 50 shares (5 board lots of 10)`, `Chance it reaches the target 42%`, `Show the math behind this pick` and `Sizing & odds` (2,162 characters); screenshot `/tmp/psedesk-row-modal.png` |
+| same session — close + reopen | the sheet's `Close` → **0** dialogs and the list intact; the next row opened immediately (“Aboitiz Equity”); a synthetic `keydown: Escape` (Radix `DismissableLayer`) → **0** dialogs |
+| Pro at 500×757 (`psedesk.viewMode=pro`) | **10** phone cards; clicking a card opened the same ticker sheet; the card's `Take` opened **only** the portfolio blotter, so the stop-propagation keeps the two actions apart |
+| same session — the drawer contents (re-run after the `MathRows` change) | *Show the math behind this pick* opened (`aria-expanded="true"`) showing the **“The pick”** and **“The ticket”** columns including `Quarter-Kelly` and `Risk governor`, with **no** `RSI14` / `Raw indicators` / `Volume vs 20D` / `Filings on file` / `Why it moved`; the deep drawer still holds `RSI 14`, `Weinstein stage`, `Rank trajectory` and `Recent disclosures`, so the indicators, history and filings are shown once each; screenshot `/tmp/psedesk-math-drawer.png` (130,713 bytes) |
+
+Not run: `dotnet test` (no backend file changed) and a VoiceOver/NVDA pass. The Escape check is a synthetic
+`KeyboardEvent` on the dialog because Chrome's CDP `Input.dispatchKeyEvent` does not reach Radix's document
+listener in this headless setup — the same keydown a reader presses is what was exercised.
+
+**What changed**
+
+- **A Simple row is a button that opens the modal.** `SignalRow` is one `<button aria-haspopup="dialog">`
+  calling `onSelect(ticker)`; the inline accordion, its `openTicker` state, `aria-expanded`/`aria-controls`,
+  `useId`, the row-level `onTakeTrade` prop and the panel's own `Practise This Trade` / `Full Details`
+  buttons are gone. The list header now reads “tap a row to open its details”.
+- **The modal absorbed the panel, nothing was dropped.** `TickerDetailDialog`'s Simple branch renders
+  `WavePlanSteps` (four-step roadmap; a payload without `wavePlan` still falls back to `PlanSteps`), the
+  hold line, the `OrderBox`, the full-width win-chance `Meter` (now exported), the “Desk confidence
+  N / 100 · …” sentence and a *Show the math behind this pick* drawer around `MathRows` (the pick's
+  scores and the ticket's sizing maths), ahead of its existing *Sizing & odds* drawer, thesis, pre-mortem,
+  the full indicator table (rank trajectory, disclosures) and the citations. `MathRows` replaces the old
+  `TechnicalRows`, which also re-printed the raw indicators, the deviation reason and the filings the
+  sheet already showed — one dialog, one copy of each figure.
+- **Pro phone cards are clickable.** `ProSignalCard` opens the same modal from anywhere on the card; `Take`
+  and the trap-flag badge call `stopPropagation` so they keep their own behaviour. The desktop `<tr>` was
+  already clickable and is unchanged.
+- **One detail sheet, not two.** The row and the Pro table now converge on `TickerDetailDialog` — one lazy
+  chunk, one payload, no second endpoint.
+- **Copy follows the behaviour.** The list header reads “tap a row to open its details”, the header's
+  Simple/Pro hint now says the same (“tap a row to open its detail sheet”, was “for the why”), and the row
+  keeps its `▸ Why?` affordance because the sheet is the why.
+
+## Earlier verification (2026-11-26 — typography, colour and whitespace)
+
+Frontend only: `src/index.css` plus every `.tsx` under `src/` (class lists; no logic, no props, no copy
+meaning changed). **No backend file, no API contract, no new dependency, no new architectural layer**, and no
+server-owned number, label or verdict moved.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 131 modules transformed`, `✓ built in 264ms`, exit 0, `dist/assets/index-*.css` 59.30 kB (11.0 kB gzip) |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (411 ms, exit 0) |
+| built-CSS audit | `.type-eyebrow` / `.type-badge` / `.type-caption` / `.type-body` / `.type-lead` / `.type-title` / `.type-figure` / `.measure` / `.measure-tight` / `.measure-wide` all emitted with their `62ch` / `46ch` / `78ch` caps; `--text-2xs:.6875rem`, `--tracking-label:.08em` present; `[data-view-mode=simple] .type-badge{letter-spacing:0;font-size:.75rem}` present; `text-slate-*` utility count **0** |
+| `grep -rn -E 'text-\[(8|9|10|11|12)px\]\|text-slate-\|text-white' src` | 3 hits, all comments/`@apply` inside `index.css` — **0** in `.tsx` |
+| `grep -rn 'uppercase' src` | only `.type-eyebrow` call sites plus the `text-transform` in its own rule; the surviving `uppercase` in `.tsx` is a code comment |
+| `grep -rln 'type-badge' src` | 15 files: `index.css`, `VerdictBadge`, `DriftBadge`, `RegimeStrip`, `SignalTable`, `DropPanel`, `TerminalHeader`, `AdviceCardList`, `MarketDirectionHero`, `PortfolioDialog`, `TickerDetailDialog`, `ResearchDialog`, `ModelTrainerPanel`, `KnowledgeBaseDialog`, `WelcomeSetupBanner` |
+
+Not run: a real-browser capture (headless Chrome hangs on the seeded app in this environment) and `dotnet test`
+(no backend file changed).
+
+**What changed**
+
+- **A five-step ramp with an 11px floor** (`--text-2xs: 0.6875rem`) and role classes: `.type-eyebrow`,
+  `.type-badge` (new), `.type-caption`, `.type-body` (13px/1.65, `text-wrap: pretty`), `.type-lead`,
+  `.type-title`, `.type-figure`. Colour stays composable at the call site.
+- **Measure in `ch`, not `rem`**: `.measure` 62ch / `.measure-tight` 46ch / `.measure-wide` 78ch, applied to
+  every prose paragraph (thesis, pre-mortem, order guidance, warnings, empty states, dialog copy). The
+  `max-w-3xl` cap it replaced let an 11px paragraph run ~130 characters.
+- **A measured colour ramp.** `text-slate-*` → `text-fg-muted/subtle/faint`, `text-white` → `text-fg`; the light
+  theme's `fg` ramp is re-measured rather than inverted, and light-theme `mint-400` moved from 4.02:1 to
+  4.95:1 (`#0b8a5f` → `#087a53`) — the only accent that failed AA.
+- **One whitespace rhythm**: inner cards `px-3.5 py-3`, panels `p-4 sm:p-5`, list rows `px-4 py-3.5`, warning
+  stacks `space-y-1`, step grids `gap-2.5`, sections `gap-4`/`gap-5`.
+- **Sentence-case controls.** `Button`, `TabsTrigger`, the segmented switches, `More`'s summary and menu rows
+  dropped `uppercase tracking-label`; `.ui-button`/`.ui-tab` still lift them to 13px in Simple mode. Checked
+  the flip side of that change too: no call site relied on CSS to capitalise its label — every `Button` /
+  `TabsTrigger` / menu string in `src/` is already typed in sentence case (`Run`, `Check a Stock`,
+  `Show the math …`), and no label starts lowercase.
+
+Still open (deliberately): the two dense data tables (Pro `SignalTable`, the portfolio ledger) keep 12px cells
+and tighter vertical padding — they are scanned column-wise, not read — and the light/dark visual check plus a
+screen-reader pass remain under *Remaining*. The rhythm sweep was re-audited after the fact: the only surviving
+`px-2.5 py-2` insets are the three entry/stop/target tiles inside `SignalTable`, the 13 `p-4`/`gap-4` hits are
+section gaps and drawer bodies (not card insets), and the three `space-y-2`/`space-y-4` stacks are lists inside
+`.type-body` prose — all three cases match the documented rhythm rather than escaping it.
+
+
+## Earlier verification (2026-11-26 — Simple becomes a signal list)
+
+Prompted by "as a common person I just expect a list of trade signals; expanding it tells me the why —
+and Pro is for people who understand trades". Frontend only: `AdviceCardList.tsx`,
+`MarketDirectionHero.tsx`, `App.tsx`, `TerminalHeader.tsx`, `lib/plainAdvice.ts`, its `node:test` suite,
+`RidingNowStrip.tsx` (**deleted**), plus the docs and memory bank. **No backend file, no API contract, no
+new dependency, no new architectural layer**; Pro, the ticker/research dialogs and every server-owned
+number are untouched.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (≈0.38 s, exit 0) — 66 → 71 with five `describeSignalRow` cases |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 131 modules transformed`, `✓ built in 211ms`, exit 0 |
+
+Not run: a real-browser capture (headless Chrome still hangs on the seeded app in this environment) and
+`dotnet test` (no backend file changed).
+
+**What it built** *(the accordion below was later replaced by the row-opens-modal pass at the top of this file; the row content and `describeSignalRow` did not change)*
+
+- **One row per signal.** `AdviceCardList` no longer slices `buyable.slice(0, 3)` and no longer prints
+  three fully expanded plan cards; it renders **every** buyable pick in rank order as one
+  `<button aria-expanded>` row (rank, company name, ticker, verdict, entry chip, drift, the three
+  tick-valid prices and the entry-timing line) and a single-open accordion panel with the thesis, the
+  four-step plan, the hold line, the `OrderBox`, the win-chance meter, the desk-confidence line, the
+  pre-mortem, `Practise This Trade` / `Full Details` and the *Show the math* drawer. The empty state, the
+  collapsed `WATCH_ONLY` list and the legacy no-`wavePlan` fallback are unchanged.
+- **`describeSignalRow` in `lib/plainAdvice.ts`.** A pure composer (`verdictLabel`, `headline`, `subline`,
+  `entryChip`) over copy that already existed; it derives no probability, size or verdict. Five
+  `node:test` cases pin it: price order, the `READY_NOW`-only chip, a wait status, `WATCH_ONLY`, the
+  legacy fallback to the odds line, and `—` for an unreported price.
+- **The hero became a call bar.** `MarketDirectionHero` keeps the traffic light, the instruction and one
+  sentence; the 10–90 gauge, the reasons, the sector money flows, the trust line, the three summary cards
+  and the institutional tiles moved into one *Why this call* drawer whose collapsed pills preview the
+  PSEi, the recommended cash and the horizon.
+- **`RidingNowStrip` deleted.** "Inside the band" is now an entry chip on the row it belongs to, sourced
+  from the server's `EntryStatus` through `describeEntryTiming`.
+- **The switch explains itself.** `Simple | Pro` keeps its labels and persisted value and gained a hint
+  (`title` + `aria-description`): Simple lists the calls — tap a row for the why; Pro is the full quant
+  table for readers who already think in odds, R:R and Kelly sizing.
 
 ## Latest verification (2026-11-26 — typeface: Google Sans Flex)
 
@@ -357,9 +626,12 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] Upload overlays foreign flow plus suspension disclosures only; breadth, macro dials, FX, realized vol and rotation survive, and unmatched tickers keep `null`.
 - [x] Cross-asset dials (`^TNX` bps, `BZ=F`, `EPHE`) fetched concurrently, best-effort, `null` when stale — printed into the prompt's `CROSS-ASSET:` line.
 - [x] SQLite RAG library: 8 built-in documents / 46 sections (front matter, `slug#section-n` references, content-hash re-indexing), mandatory-guardrail injection, BM25 + cosine RRF with horizon/sector/trap boosts, optional embeddings, Markdown/TXT/PDF upload behind the rights attestation, built-in delete protection (`409`).
+- [x] **Feed health ledger.** `IFeedHealthRegistry` / `FeedHealthRegistry` (singleton, in memory) records one observation per answered request across six upstreams — Edge history, Edge disclosures, Yahoo charts, macro dials, the DQR and embeddings — with status **derived from counters** (so 58 concurrent downloads cannot be summarised by whichever finished last), run-scoped counters reset by `BeginRun()`, process-lifetime timestamps, and a 240-char last message. `GET /api/health/feeds` reports them plus the stored-session facts and the configuration that explains an `Unknown`, with `overallStatus` covering only the load-bearing three. It exists because `announcements/search.ax` answers `200` with "no records found": the trap pillar was inert and nothing said so.
+
+- [x] **Per-company disclosure attribution.** Every screened candidate gets its own PSE Edge page (`companyDisclosures/search.ax?keyword={cmpy_id}`, `DisclosureCompanyFanoutLimit = 25`, 8-way, 10-min cached) merged into its rolling disclosure set **before** the trap check, so the hard traps fire on filings the market-wide table never attributed. `0` disables the pass. Live: 22–47 filings per named company vs 3 of 60 names from the market-wide fallback, whose month-name dates and form/report identifier cells are now parsed correctly too.
 
 ### API, compliance and operations
-- [x] Full REST surface: signals (`latest`, `by-date`, `dates`, `ticker/{symbol}/history`, `scorecard`, `backtest`, `model`, `train`, `train-all`, `desk-memory`, `run-now`, `quotation-report`), research (`catalog`, `{symbol}` with horizon/`averageCost`/`shares`), portfolio (summary, settings, order-ticket, trades, stop, close, trim), knowledge (list, reindex, upload, delete) and `/health`.
+- [x] Full REST surface: signals (`latest`, `by-date`, `dates`, `ticker/{symbol}/history`, `scorecard`, `backtest`, `model`, `train`, `train-all`, `desk-memory`, `run-now`, `quotation-report`), research (`catalog`, `{symbol}` with horizon/`averageCost`/`shares`), portfolio (summary, settings, order-ticket, trades, stop, close, trim), knowledge (list, reindex, upload, delete), `/health` and `GET /api/health/feeds` (per-upstream feed ledger).
 - [x] RFC 7807 errors: `400` config/input/attestation/rule violation, `404` unknown session/document, `409` protected document, `409` a run or training job already in progress, `429` too many expensive requests (`Retry-After`), `499` client abort, `502` generation, `503` feed.
 - [x] `ComplianceGuardMiddleware` (loopback-only in `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`, `/health` bypass) and `AllowedHosts` narrowed to loopback names.
 - [x] **Bounded expensive work** — `DeskWorkGate` makes `run-now`/`train`/`train-all` mutually exclusive (`409`), and `DeskRateLimitPolicies.Expensive` (`Compliance:ExpensiveRequestsPerHour`, default 30, clamped 1–1000) applies one fixed one-hour window to those three plus `backtest` (`429` + `Retry-After`). `UseRateLimiter()` runs after the compliance guard so a refused caller never burns budget; stored reads are uncapped. Verified live on `:5411` (`503, 503, 429`) and `:5412` (concurrent `409`).
@@ -371,7 +643,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 ### Frontend
 - [x] React 19 + TypeScript 7 + Vite 8 + Tailwind 4 shell with a typed API client (`ApiError`, ProblemDetails, abort signals, FormData uploads) and centralized formatters.
 - [x] **Google Sans Flex is the UI typeface, vendored rather than CDN-linked** (`public/fonts/…-latin.woff2`, variable 100–900, OFL 1.1 + `OFL.txt`, preloaded in `index.html`, `--font-sans` in `index.css`, refreshed by `npm run fonts`). A page load still talks to nothing but the API; `₱` and `▲ ▼` come from the system font because no Google-served subset carries them (measured, same as the official CDN link). `--font-mono` stays for tickers.
-- [x] `Simple | Pro` view mode and light/dark theme, both persisted; Simple leads with `MarketDirectionHero` (traffic light, 10–90 gauge, reasons, sector chips, trust line) and `RidingNowStrip`, then at most three `AdviceCardList` cards with the four-step plan grid and a technical drawer.
+- [x] `Simple | Pro` view mode and light/dark theme, both persisted; Simple is a **list of trade signals** — one compact `MarketDirectionHero` call bar (traffic light, instruction, one sentence; gauge/reasons/sectors/trust line/tiles behind *Why this call*), then one `AdviceCardList` row per buyable pick (rank, verdict, buy/target/cut prices, entry chip) that **opens `TickerDetailDialog`** with the four-step plan, the server ticket, the odds, the desk-confidence line, the pre-mortem and the *Show the math* drawer. Pro's phone card opens the same dialog. The old top-three cards, the “show more” toggle, `RidingNowStrip` and the inline accordion are gone.
 - [x] Pro keeps the dense `SignalTable`/`ProSignalCard` views, regime tiles, rotation strip, governor/slippage tiles, `RiskSizerBar`, verdict/drift badges and the Knowledge Base action.
 - [x] `TickerDetailDialog` (thesis, plan, odds, factors, technicals, dividends, disclosures with trap badges, server-verified citations, rank history), `ResearchDialog` (buy plan vs "already holding it" with `HoldingVerdictCard`), `ScorecardDialog` (forward scorecard, dual-line benchmarked replay, `ModelTrainerPanel` with learned edge / desk memory and refit buttons).
 - [x] `PortfolioDialog` (Book / Record a trade / Ledger / Settings; trim, pyramid badges, expectancy tiles, exposure gauges, guardrails drawer), `KnowledgeBaseDialog`, `QuotationReportImportButton`, `WelcomeSetupBanner`, `BeginnerGuideDialog`, `LegalDisclaimerGate`, `DropPanel`.
@@ -379,6 +651,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] Zero-dependency SWR cache (`lib/queryCache.ts`, ref-counted abort, in-flight dedupe, prefix invalidation) plus idempotent preloaders; every reader paints cached data, then revalidates, and keeps the last payload behind an amber line when a refresh fails.
 - [x] Lazy dialog chunks and pinned vendor chunks through a `manualChunks` **function** (Vite 8 / rolldown rejects the object form).
 - [x] **Legibility and announcement layer.** Simple mode has a scoped type floor (`.simple-label` 12px, `.simple-note` 13px/1.55) applied across the advice card, order box, watch list and the plan-step grid; one `aria-live="polite"` region mounted from first render announces runs, results and failures; `Button` sets `aria-busy`; `run-now` renders an elapsed clock (`formatElapsedSeconds`) and a reduced-motion-aware indeterminate bar while it works.
+- [x] **One type system, one colour ramp, one rhythm.** `index.css` defines a five-step scale with an **11px floor** (`--text-2xs`), role classes (`.type-eyebrow`, `.type-badge`, `.type-caption`, `.type-body`, `.type-lead`, `.type-title`, `.type-figure`), `ch`-based measure caps (`.measure` 62ch / `.measure-tight` 46ch / `.measure-wide` 78ch), a re-measured four-step `fg` ramp (17 / 8.4 / 5.9 / 4.8:1, AA in both themes) and one card/stack rhythm (`px-3.5 py-3` inner, `p-4 sm:p-5` panel, `gap-4`–`gap-5` sections). Wide tracking survives only on rubric labels; buttons, tabs and menu rows are sentence case.
 - [x] **Header organization.** Two desktop rows at one 40px control height (identity + trading day + `My Trades` + the filled `Run` + `More ▾`; then the four horizon tabs + `Simple | Pro` + light/dark), grouped overflow under *Learn*/*Tools*, a single-line tagline, and Simple-mode type on the segmented switches. The phone keeps its two thumb rows and the "Desk controls" sheet.
 - [x] **A real brand mark.** `DeskLogo` draws three ascending PSE candlesticks in `currentColor` on the same tinted badge (36px phone / 44px desktop) in place of the placeholder `PS` monogram, and the identical geometry — `lib/deskMarkGeometry.ts`, five pinned invariants — is rasterised by `npm run icons` into `favicon.svg`, `favicon.ico` (16/32/48) and a full-bleed 180px `apple-touch-icon.png`, all three declared in `index.html`.
 - [x] **Dependency-free icon generation.** `frontend/scripts/generate-icons.mjs` imports that geometry straight from the `.ts` module, supersamples the rounded rects, deflates the PNG scanlines with `node:zlib` and writes the ICO container by hand — three committed binaries that are reproducible byte-for-byte from one command, with no image library added.
@@ -386,21 +659,21 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 ### Tooling and documentation
 - [x] `npm test` harness: `node --test "src/lib/__tests__/*.test.ts"` over the React-free `lib/` layer (no DOM, no dependencies).
 - [x] **Golden snapshot harness (backend).** `SyntheticMarketFixture` (seeded synthetic tape, no network, no clock), `GoldenSnapshot` (approval-style compare against `tests/…/Application/Golden/*.json`, `PSEDESK_UPDATE_GOLDEN=1` records) and a `Skip`ped Release-only benchmark that prints elapsed time and allocations. It is the guard that let the performance pass touch every indicator without moving a desk number.
-- [x] `.vscode/launch.json` + `tasks.json` (API launch/attach, Chrome, full-stack compound, build/test tasks, `backend: free port 5236` — SIGTERM, poll 6 s, SIGKILL escalation, `curl /health` proof) and `frontend/.env.example`.
+- [x] `.vscode/launch.json` + `tasks.json` (API launch/attach, Chrome, `Frontend: Vite dev server` with port recovery, full-stack compound, build/test tasks, `backend: free port 5236` and `frontend: free port 5173` — each SIGTERM, poll 6 s, SIGKILL escalation, then a real probe) and `frontend/.env.example`.
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 465 backend (464 executed + 1 skipped benchmark) + 66 frontend
+## Test inventory — 497 backend (496 executed + 1 skipped benchmark) + 71 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
-### Backend — `backend/tests/PseSignalDesk.Tests` (35 files)
+### Backend — `backend/tests/PseSignalDesk.Tests` (38 files)
 
 | Layer | Suite | Cases |
 | --- | --- | --- |
 | Domain | `PseBoardLotServiceTests` — 15 tier/tick rows, bracket crossing, static band, plan repair, dated per-leg fees + commission floor, net R:R in pesos, break-even, EV, Quarter-Kelly, risk budget, gap fills, ADV, slippage | 78 |
 | Domain | `LiveDriftPolicyTests` — standard errors, required gaps, multipliers, classification thresholds, hysteresis, `Describe` copy | 8 |
-| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, mean+median liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring, point-in-time scoping, O(n) `ComputeEmaSeries` parity on every prefix, `IsAscendingByDate` | 38 |
+| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, mean+median liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring, the disclosure fan-out (equals the pre-trap candidate list; illiquid names and a zero limit yield none), point-in-time scoping, O(n) `ComputeEmaSeries` parity on every prefix, `IsAscendingByDate` | 40 |
 | Application | `BacktestGoldenTests` — the four-horizon replay serialised against checked-in snapshots (plus a `Skip`ped benchmark that only prints time/allocations) | 5 |
 | Application | `QuantitativeFilterGoldenTests` — `EvaluateStock`'s metrics against a checked-in snapshot | 1 |
 | Application | `OrderTicketCalculatorTests` — sizing, verdicts, governor band, drift multiplier (incl. `HALTED` → 0), lot step-down and the risk-budget refusal, heat/sector/cash caps, slippage, execution guidance, all seven pyramid rules | 31 |
@@ -411,16 +684,18 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | Application | `SignalOutcomeServiceTests` — entry gate, `UNFILLED`, stop tie, net R, scorecard, calibration, live-drift verdict + persistence, desk memory | 19 |
 | Application | `BacktestServiceTests` — prefix causality, book limits, governor, slippage, exits, benchmark metrics, walk-forward | 13 |
 | Application | `WaveTradePlanCalculatorTests` — plan levels, chase ceiling, entry status, ladder, trim size | 12 |
-| Application | `SignalPipelineServiceTests` — discards, gates, drift, drops, persistence, `502` | 12 |
+| Application | `SignalPipelineServiceTests` — discards, gates, drift, drops, persistence, `502`, a rights offering that only the candidate's own company page names dropping it before the model | 13 |
 | Application | `SignalJsonParserTests` — fences, prose, brace-in-string, numeric strings, contract failure | 9 |
 | Application | `LearnedEdgeModelTests` — activation gate, ±6pp tilt, Kelly rescale, probability clamp | 7 |
 | Application | `SectorRotationServiceTests` — mapping, leaders/laggards, strength | 7 |
 | Application | `MarketDirectionServiceTests` — pillar blend, clamp, bearish override, unreported dials | 6 |
 | Application | `DailyQuotationImportServiceTests` — live/upload paths, overlays, unmatched tickers, size guard | 4 |
 | Application | `MoneyManagerTrainingServiceTests` — promotion gate, purged split, inactive fallback | 3 |
-| Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials, chart-cache reuse, `InvalidateCache`, distinct-constituent counting, ordered failure reasons, and the seven Edge-fallback cases (delisted Yahoo symbol, peso-`VALUE` volume, duplicate sessions, both-feed diagnostic, a full session from Edge, short-series diagnostic, `EnablePseEdgeHistory = false`) | 29 |
+| Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials, chart-cache reuse, `InvalidateCache`, distinct-constituent counting, ordered failure reasons, the seven Edge-fallback cases (delisted Yahoo symbol, peso-`VALUE` volume, duplicate sessions, both-feed diagnostic, a full session from Edge, short-series diagnostic, `EnablePseEdgeHistory = false`), and the four feed-ledger cases (empty disclosure page → degraded, Edge ok + Yahoo ok-with-skips, a 500 Edge chart → failed, one observation per name per run on a cached body), and the captured live disclosure row (a month-name announce date read as a date, the form/report numbers never read as subjects) | 34 |
+| Infrastructure | `PseEdgeCompanyDisclosuresTests` — `cmpy_id` resolved through `autoComplete` and the `?keyword=` route (never a bare `search.ax` query), rolling-window filter, an undatable row dropped rather than back-dated, no company page → skip not failure, `500` → failed, limit 0 → zero requests, the cap honoured with distinct ids, ten-minute cache reuse | 8 |
 | Infrastructure | `MarketDataOptionsTests` — the binder's collection doubling reproduced and undone, order-preserving de-duplication, case-insensitive `DistinctNonBlank` | 4 |
 | Infrastructure | `MarketDataCacheTests` — shared task under concurrency, no refetch inside the TTL, a failure is never served, TTL refetch, an abandoned caller cannot cancel, pre-cancelled does nothing, `Clear`, oldest-entry eviction, eviction safe against a concurrent `Clear()` | 9 |
+| Infrastructure | `FeedHealthRegistryTests` — every source unknown on a fresh registry, success→ok, lone failure→failed, failure+success→degraded, explicit degraded observation, only-skips→degraded, skips don't degrade a producing feed, `BeginRun` clears run-scoped counters but keeps embeddings, timestamps survive a run, 500 concurrent records counted exactly, 240-char detail truncation | 10 |
 | Infrastructure | `OllamaPromptBuilderTests` — horizon block, knowledge, feedback, cross-asset, desk memory, guardrails | 16 |
 | Infrastructure | `OllamaSignalEngineTests` — stub `HttpMessageHandler` routed by the request body's `model`: a fast-model `404` keeps the ranking, one `404` per engine across two horizons (latch), a ranking `404` still surfaces as `SignalGenerationException`, a blank fast model makes zero fast calls | 4 |
 | Infrastructure | `SqliteKnowledgeServiceTests` — reindex idempotency, guardrail retrieval, delete protection, search boosts | 8 |
@@ -432,12 +707,13 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | WebApi | `SignalsControllerRateLimitTests` — the four expensive actions carry `DeskRateLimitPolicies.Expensive` (reflection), five stored reads carry none | 9 |
 | WebApi | `RequestCancellationMiddlewareTests` — 499 on abort, no write after cancellation | 4 |
 | WebApi | `KnowledgeControllerTests` — upload attestation, protected-delete mapping | 2 |
+| WebApi | `FeedHealthControllerTests` — overall status ignores the best-effort feeds, `Failed` on dead Edge history, `Unknown` before the first fetch, an empty store, an unreadable store (200 + no path leaked), configuration reported without the API key | 6 |
 
 ### Frontend — `frontend/src/lib/__tests__` (6 files, React-free)
 
 | File | Covers | Cases |
 | --- | --- | --- |
-| `plainAdvice.test.ts` | `plainAdvice` / `plainStatus` / formatter copy for every plan, verdict, scorecard and backtest field, plus the "not advice" wording | 35 |
+| `plainAdvice.test.ts` | `plainAdvice` / `plainStatus` / `describeSignalRow` / formatter copy for every plan, verdict, scorecard and backtest field, plus the "not advice" wording | 40 |
 | `queryCache.test.ts` | cache read/write, ref-counted abort, in-flight dedupe, prefix invalidation, failed-refresh retention | 8 |
 | `legalConsent.test.ts` | first-run gate, versioned acceptance, stale notice, review clears flag, throwing storage, notice content (incl. the single-reader card) | 6 |
 | `formatters.test.ts` | unit is never dropped (₱ / % / `: 1`), unreported renders `—` and never `0`, direction glyph for toned deltas, elapsed-clock formatting | 6 |
@@ -453,17 +729,27 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] **Pillar 2 remainder** — `TrainedHorizonModel.FeatureKeysJson` (+ loader refusal on schema mismatch) so a book cannot price a feature vector it was not trained on.
 - [ ] **Pillar 5 remainder** — `InvalidationFirstPlanBuilder`, pipeline inversion (invalidation before target), `TradeExitLadderPolicy` as the single ladder, `OllamaTopPick` audit-only fields.
 - [ ] **Pillar 4 remainder** — real walk-forward folds (disjoint rolling windows + fold report); today the replay refits one rolling model.
-- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 451 executed + 1 skipped / 55). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 484 executed + 1 skipped / 71). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+
+### Data truth — the 2026-11-26 assessment, slices 3–4 (next up)
+
+The audit behind slice 1 found seven data sources and one LLM, and the failure mode that mattered was **silence, not loudness**. Slices 1 (the feed ledger) and 2 (per-company disclosure attribution) are done — see their sections at the top; these are the rest, in the order they should ship.
+
+- [x] **Slice 2 — restore the disclosure/trap pillar.** `PseEdgeDisclosureSource` resolves `ticker → cmpy_id` through the existing `PseEdgeSymbolSearchUrl` and fetches **one page per screened candidate** (`companyDisclosures/search.ax?keyword={cmpy_id}`, ≤25/run, 8-way, 10-min cached), so attribution is correct by construction instead of guessed from a market-wide headline table. `DisclosureCompanyFanoutLimit = 25` is the setting; `0` is the rollback. The market-wide scrape stays as the fallback, and the same probe fixed it too (month-name announce dates, form/report identifier cells). Live: 22–47 filings per named company vs **3 of 60** names from the fallback. The planned `companyPage/companyDisclosures.do?cmpy_id=` route was probed and is **404** — it was never shipped.
+- [ ] **Slice 3 — surface the degradation in the run itself.** When disclosures answer but attribute nothing, emit the existing `SignalDtos.Warnings` line "trap flags are unenforced this session"; flag an index-proxy fallback the same way. The ledger reports it after the fact; this puts it on the screen the picks are read from.
+- [ ] **Slice 4 — measure the model.** The ranking call is a plain chat completion (temp 0.1, `deepseek-v4.1-flash`) — no fine-tuning anywhere, and its interpretive skill has never been measured: `BacktestService` has no `IOllamaSignalEngine` dependency and `SignalItem` does not persist the quant pre-score, so model Top 10 and quant Top 10 cannot be compared. Migration `AddQuantRankToSignalItems` (`QuantPreScore`, `QuantRank`); a model-vs-quant scorecard block (hit rate, Brier, mean realized R, model Top 10 vs quant Top 10 on the same sessions and barriers); opt-in prompt archive (`Signals:ArchivePrompts`, default false) + `POST /api/signals/eval-prompt-replay` behind the existing `Expensive` policy.
+- [ ] **Deliberately deferred:** `CorporateActionAdjuster` (unadjusted prices mean a split distorts ATR, RS63 and every barrier), the dividends feed (`null` today), embedding access (`/api/embed` answers `401` for this key, so retrieval is lexical), the DQR staying manual-only, and the F-03 prompt-fencing patch (`security_audit_report.md:1561`, drafted but unapplied — keep it separate so a prompt change is never conflated with a data fix).
 
 ### UI/UX follow-ups (2026-11-26 legibility pass)
 
 - [ ] Real browser **and screen-reader** pass (VoiceOver / NVDA) over Simple and Pro from 320px to 2560px; the repo has no DOM test harness, so announcement behaviour is reasoned, not observed.
 - [ ] **Validate the up/down colour convention with 3–5 PH retail readers** before any further colour work (several Philippine broker apps use red-up/green-down). Record the outcome in `productContext.md`; the `▲/▼` glyph shipped as the interim redundancy.
-- [ ] Put the remaining Simple surfaces on the same type floor (`MarketDirectionHero` reason lines, `DropPanel` copy, `WelcomeSetupBanner`, `RidingNowStrip` chips); the advice-card path is done.
+- [x] ~~Put the remaining Simple surfaces on the same type floor~~ — the 2026-11-26 typography pass made the floor **global**: `--text-2xs` (11px) is the smallest size in the app and no `text-[8px]`/`[9px]`/`[10px]` survives, so `MarketDirectionHero`'s drawer copy, `DropPanel` and `WelcomeSetupBanner` inherit it without per-surface classes.
+- [ ] A **pixel** check of that ramp in a real browser (dark + light, Simple + Pro, 320 → 2560) — the pass was verified through the emitted CSS and the grep inventory, not screenshots; headless Chrome hangs on the seeded app in this environment.
 - [ ] Optional: a `GET /api/signals/run-status` read so a mid-run reload attaches to the in-flight run instead of starting a second one — needs a `systemPatterns.md` decision first because it adds a run-state resource.
 - [ ] **Install surface is still missing** — no `site.webmanifest`, so there is no 192/512 install icon, no maskable icon and no `og:image` for link previews; the SVG + ICO + 180px touch trio covers browser tabs and iOS "Add to Home Screen" only.
 - [~] **Remaining breakpoint + assistive pass** — the 2026-11-26 responsive pass now *covers* 320px and 2560px in CSS (new `xs`/`3xl`/`4xl` stops, `.shell` clamp gutters, container queries, `.tap`, `.scroll-x`), but only 390 (iframe), 768, 1024, 1280 and 1440-Pro were ever captured in a real browser. Still open: a visual capture at 320 and 2560, and the VoiceOver/NVDA run (never attempted — no DOM harness exists).
-- [ ] **Phase 2 — page-body hierarchy** (decision deferred until the header is seen in a browser): one shared section-header shape for `AdviceCardList` / `SignalTable` / `DropPanel` (they hand-write the same `h2` + `text-[11px]` block), a visual weight ladder so the market-call hero outranks the "Nothing changed" strip, and deleting the duplicated empty-state copy in `DropPanel`.
+- [ ] **Phase 2 — page-body hierarchy** (decision deferred until the header is seen in a browser): a visual weight ladder so the market-call hero outranks the "Nothing changed" strip, and deleting the duplicated empty-state copy in `DropPanel`. The shared section-header shape is done — `AdviceCardList`, `SignalTable`, `DropPanel` and `RegimeStrip` all use `.type-eyebrow` + `.type-title` at `px-4 py-3` / `p-4 sm:p-5`.
 
 ### Performance pass — follow-ups
 

@@ -49,7 +49,7 @@ const verdictCopy: Record<EdgeVerdict, PlainVerdict> = {
   WATCH_ONLY: {
     label: 'Watch Only',
     explanation: 'The reward does not clear broker fees at this price, so the model sizes it at zero.',
-    tone: 'text-slate-400',
+    tone: 'text-fg-muted',
     buyable: false,
   },
 };
@@ -66,7 +66,7 @@ export function plainVerdictBadgeClass(verdict: EdgeVerdict | string): string {
     case 'SMALL_SIZE':
       return 'border-amber-400/40 bg-amber-400/10 text-amber-400';
     default:
-      return 'border-slate-500/40 bg-slate-500/10 text-slate-400';
+      return 'border-slate-500/40 bg-slate-500/10 text-fg-muted';
   }
 }
 
@@ -254,8 +254,8 @@ const moodStyles: Record<MarketRegime, Pick<MarketMood, 'badge' | 'badgeClass' |
   },
   NEUTRAL: {
     badge: 'Mixed',
-    badgeClass: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
-    tone: 'text-slate-300',
+    badgeClass: 'border-slate-500/40 bg-slate-500/10 text-fg-muted',
+    tone: 'text-fg-muted',
   },
   BEARISH: {
     badge: 'Weak',
@@ -427,7 +427,7 @@ const positionActionCopy: Record<string, PlainPositionAction> = {
   HOLD: {
     label: 'Hold — plan on track',
     description: 'The plan is unchanged; no level has been touched.',
-    tone: 'text-slate-300',
+    tone: 'text-fg-muted',
     urgent: false,
   },
   STOP_BREACHED: {
@@ -468,7 +468,7 @@ export function describePositionAction(action: PositionAction | string): PlainPo
     positionActionCopy[action] ?? {
       label: action.replaceAll('_', ' ').toLowerCase(),
       description: 'The desk published this instruction for the open position.',
-      tone: 'text-slate-400',
+      tone: 'text-fg-muted',
       urgent: false,
     }
   );
@@ -992,8 +992,8 @@ export function describeMarketCall(call: MarketCall | string): MarketCallCopy {
     marketCallCopy[call as MarketCall] ?? {
       label: 'Reading the market',
       instruction: 'Wait for the desk to finish today’s read.',
-      tone: 'text-slate-400',
-      badgeClass: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
+      tone: 'text-fg-muted',
+      badgeClass: 'border-slate-500/40 bg-slate-500/10 text-fg-muted',
       dotClass: 'bg-slate-500',
     }
   );
@@ -1063,19 +1063,61 @@ export function describeEntryTiming(
       return {
         label: 'Watch only',
         detail: 'The model sizes no position here today. The name stays on the watch list.',
-        tone: 'text-slate-300',
-        badgeClass: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
+        tone: 'text-fg-muted',
+        badgeClass: 'border-slate-500/40 bg-slate-500/10 text-fg-muted',
         wait: true,
       };
     default:
       return {
         label: 'Check the plan',
         detail: 'Re-run the research to price today’s entry band.',
-        tone: 'text-slate-400',
-        badgeClass: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
+        tone: 'text-fg-muted',
+        badgeClass: 'border-slate-500/40 bg-slate-500/10 text-fg-muted',
         wait: true,
       };
   }
+}
+
+/**
+ * One collapsed line per signal for the Simple list.
+ *
+ * This only composes copy that already exists — the verdict label, the three tick-valid
+ * prices, the server's own entry status and the calibrated odds — so a row can never
+ * disagree with the drawer that opens beneath it.
+ */
+export interface PlainSignalRow {
+  /** Verdict badge text, e.g. "Qualifies (Full)". */
+  verdictLabel: string;
+  /** The three prices in the order a reader uses them. */
+  headline: string;
+  /** Where the mark sits versus the plan's own band, or why it cannot be funded. */
+  subline: string;
+  /** Chip shown only when the server says the price is already inside the band. */
+  entryChip: string | null;
+}
+
+/** The fields a row needs; kept narrow so the list can be tested without a whole run. */
+export type PlainSignalRowSource = Pick<
+  SignalItem,
+  'edgeVerdict' | 'entryPrice' | 'targetPrice' | 'stopLoss' | 'winProbability' | 'breakEvenWinRate'
+> & {
+  wavePlan?: SignalItem['wavePlan'];
+};
+
+export function describeSignalRow(item: PlainSignalRowSource): PlainSignalRow {
+  const verdict = describePlainVerdict(item.edgeVerdict);
+  const timing = item.wavePlan
+    ? describeEntryTiming(item.wavePlan.entryStatus, item.wavePlan.idealBuyPrice, item.wavePlan.maxChasePrice)
+    : null;
+
+  return {
+    verdictLabel: verdict.label,
+    headline: `Buy ${formatPrice(item.entryPrice)} · Target ${formatPrice(item.targetPrice)} · Cut-loss ${formatPrice(item.stopLoss)}`,
+    subline: verdict.buyable
+      ? timing?.detail ?? describeWinChance(item.winProbability, item.breakEvenWinRate)
+      : verdict.explanation,
+    entryChip: verdict.buyable && timing && !timing.wait ? timing.label : null,
+  };
 }
 
 /** The desk's graded record in one honest line. Never hides an empty ledger. */

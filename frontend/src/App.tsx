@@ -5,7 +5,6 @@ import { DropPanel } from './components/DropPanel';
 import { LegalDisclaimerGate } from './components/LegalDisclaimerGate';
 import { QuotationReportImportButton } from './components/QuotationReportImportButton';
 import { RegimeStrip } from './components/RegimeStrip';
-import { RidingNowStrip } from './components/RidingNowStrip';
 import { TerminalHeader } from './components/TerminalHeader';
 import { WelcomeSetupBanner } from './components/WelcomeSetupBanner';
 import { Button } from './components/ui/Button';
@@ -412,7 +411,7 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="shell mx-auto flex min-h-dvh w-full max-w-[112rem] flex-col gap-4 3xl:max-w-[128rem] 3xl:gap-5">
+      <div className="shell mx-auto flex min-h-dvh w-full max-w-[112rem] flex-col gap-4 3xl:max-w-[128rem] lg:gap-5">
         {/* Mounted from the first render so the region is live before anything changes. */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {liveStatus}
@@ -460,16 +459,16 @@ export default function App() {
         />
 
         {busy === 'run' ? (
-          <div className="rounded-xl border border-sky-400/30 bg-sky-400/5 px-4 py-2.5">
+          <div className="rounded-xl border border-sky-400/30 bg-sky-400/5 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <p className="text-[11px] font-semibold text-slate-200 simple-label">
+              <p className="type-body font-semibold text-fg simple-label">
                 {viewMode === 'simple' ? 'Running the screen…' : `Running the ${horizon} screen…`}
               </p>
-              <p className="tabular text-[11px] text-slate-400 simple-note">
+              <p className="tabular type-caption text-fg-muted simple-note">
                 {formatElapsedSeconds(runElapsedSeconds)} elapsed
               </p>
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-slate-400 simple-note">
+            <p className="mt-1 type-caption text-fg-muted simple-note">
               Downloading today’s prices and filings, then ranking the liquid names. This usually takes
               under two minutes — the session on screen stays there until the new one lands.
             </p>
@@ -480,8 +479,8 @@ export default function App() {
         ) : null}
 
         {viewingHistory ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-2.5 text-[11px] text-amber-400">
-            <span className="simple-copy">{describeHistoryBanner(selectedDate, viewMode === 'simple')}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-amber-400">
+            <span className="type-caption simple-copy">{describeHistoryBanner(selectedDate, viewMode === 'simple')}</span>
             <Button variant="secondary" onClick={returnToLatest} className="h-8 px-3">
               {viewMode === 'simple' ? 'Back to latest' : 'Latest session'}
             </Button>
@@ -502,14 +501,14 @@ export default function App() {
         />
 
         {notice ? (
-          <div className="rounded-xl border border-mint-400/30 bg-mint-400/5 px-4 py-2.5 text-[11px] text-mint-400 simple-copy">
-            {notice}
+          <div className="rounded-xl border border-mint-400/30 bg-mint-400/5 px-4 py-3 text-mint-400">
+            <p className="type-caption simple-copy">{notice}</p>
           </div>
         ) : null}
 
         {portfolio && portfolio.alerts.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-2.5 text-[11px] text-amber-400">
-            <span className="simple-copy">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-3 text-amber-400">
+            <span className="type-caption simple-copy">
               {viewMode === 'simple' ? describePortfolioAlert(portfolio.alerts[0]) : portfolio.alerts[0]}
               {portfolio.alerts.length > 1 ? ` (+${portfolio.alerts.length - 1} more)` : ''}
             </span>
@@ -526,16 +525,16 @@ export default function App() {
         ) : null}
 
         {error ? (
-          <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-400/5 px-4 py-2.5 text-[11px] text-rose-400">
-            <div className="max-w-3xl">
-              <p className="font-semibold simple-copy">{error.title}</p>
-              <p className="mt-0.5 leading-relaxed text-slate-300 simple-copy">{error.message}</p>
+          <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-400/5 px-4 py-3 text-rose-400">
+            <div className="measure-wide min-w-0">
+              <p className="type-body font-semibold simple-copy">{error.title}</p>
+              <p className="mt-1 type-caption text-fg-muted simple-copy">{error.message}</p>
               {error.technical ? (
-                <details className="mt-1.5">
-                  <summary className="cursor-pointer text-[10px] text-slate-500 simple-note">
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-2xs text-fg-subtle simple-note">
                     Technical details
                   </summary>
-                  <p className="mt-1 wrap-break-word font-mono text-[10px] leading-relaxed text-slate-500 simple-note">
+                  <p className="mt-1 type-caption wrap-break-word font-mono text-fg-subtle simple-note">
                     {error.technical}
                   </p>
                 </details>
@@ -568,24 +567,18 @@ export default function App() {
             {run ? (
               viewMode === 'simple' ? (
                 <>
-                  <RidingNowStrip items={items} onSelect={setActiveTicker} />
-                  <AdviceCardList
-                    items={items}
-                    horizon={horizon}
-                    onSelect={setActiveTicker}
-                    onTakeTrade={handleTakeSignal}
-                  />
+                  <AdviceCardList items={items} horizon={horizon} onSelect={setActiveTicker} />
                   <DropPanel drops={drops} friendly />
                 </>
               ) : (
                 <>
                   <div className="flex flex-wrap items-end justify-between gap-2 px-1">
                     <div>
-                      <h2 className="text-sm font-semibold text-slate-100">
+                      <h2 className="type-title text-fg">
                         {formatWeekday(run.runDate)} · {horizonMeta[horizon].label} book · {items.length} ranked
                         names
                       </h2>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
+                      <p className="mt-1 type-caption measure-wide text-fg-subtle">
                         Generated {formatTimestamp(run.createdAtUtc)} · drift recomputed server-side ·{' '}
                         {run.tradeCount} trade / {run.smallSizeCount} small / {run.watchOnlyCount} watch ·{' '}
                         {run.recommendedCashPct.toFixed(0)}% cash ·{' '}
@@ -594,7 +587,7 @@ export default function App() {
                     </div>
                     <div className="flex items-center gap-2">
                       {refreshing && data ? (
-                        <span role="status" className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
+                        <span role="status" className="type-eyebrow text-fg-faint">
                           Refreshing…
                         </span>
                       ) : null}
@@ -629,8 +622,8 @@ export default function App() {
                 </>
               )
             ) : (
-              <section className="panel flex flex-col items-start gap-3 p-6">
-                <h2 className="text-sm font-semibold text-slate-100">
+              <section className="panel flex flex-col items-start gap-4 p-5 sm:p-6">
+                <h2 className="type-title text-fg">
                   {viewMode === 'simple'
                     ? data.dates.length === 0
                       ? 'No prices yet — run the first screen'
@@ -640,14 +633,14 @@ export default function App() {
                       : 'Market data loaded, no signal run yet'}
                 </h2>
                 {viewMode === 'simple' ? (
-                  <p className="max-w-2xl text-xs leading-relaxed text-slate-400">
-                    Press <span className="font-semibold text-slate-200">Run Latest Screen</span> and the desk
+                  <p className="measure type-body text-fg-muted">
+                    Press <span className="font-semibold text-fg">Run Latest Screen</span> and the desk
                     downloads today’s PSE prices and company filings, then reports which stocks clear its
                     fee-adjusted test, the Peso levels the model used, and where its cut-loss sits. The first run
                     needs an internet connection.
                   </p>
                 ) : (
-                  <p className="max-w-2xl text-xs leading-relaxed text-slate-400">
+                  <p className="measure type-body text-fg-muted">
                     {data.dates.length === 0
                       ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
                       : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
@@ -672,8 +665,8 @@ export default function App() {
                   )}
                 </div>
                 {viewMode === 'simple' ? (
-                  <TechnicalDisclosure title="Setup & technical information" className="w-full max-w-3xl">
-                    <p className="text-[11px] leading-relaxed text-slate-400">
+                  <TechnicalDisclosure title="Setup & technical information" className="w-full measure-wide">
+                    <p className="type-body text-fg-muted">
                       {data.dates.length === 0
                         ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
                         : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
@@ -686,7 +679,7 @@ export default function App() {
         ) : null}
 
 
-        <footer className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-line/60 px-1 pt-3 text-[10px] text-slate-600">
+        <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line/60 px-1 pt-4 type-caption text-fg-faint">
           <span>
             {viewMode === 'simple'
               ? 'PSE Signal Desk · four holding periods · prices already include broker fees · Manila time (UTC+8)'
@@ -700,7 +693,7 @@ export default function App() {
             <button
               type="button"
               onClick={reviewLegalNotice}
-              className="underline decoration-dotted underline-offset-2 hover:text-slate-400"
+              className="underline decoration-dotted underline-offset-2 hover:text-fg-muted"
             >
               Review the notice
             </button>

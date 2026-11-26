@@ -171,6 +171,41 @@ public sealed class SignalPipelineServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_disqualifies_a_name_whose_rights_offering_only_the_company_page_names()
+    {
+        // The market-wide Edge table has no company column, so a filing whose subject does not
+        // name its issuer reaches the trap screen attributable to nobody. The per-company re-read
+        // is what attaches it — and the name must be gone before the model ever sees the list.
+        var repository = new FakeSignalRepository();
+        var provider = new FakeMarketDataProvider(
+            BuildBatch(DayTwo, "ICT", "BDO", "SM"),
+            new Dictionary<string, IReadOnlyList<StockDisclosure>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ICT"] = new[] { new StockDisclosure(DayTwo, "Stock Rights Offering", "Disclosure") }
+            });
+        var engine = new FakeSignalEngine(new OllamaSignalOutput
+        {
+            Top10 =
+            {
+                BuildPick(1, "BDO", entry: 100m, stop: 95m, target: 110m),
+                BuildPick(2, "SM", entry: 100m, stop: 95m, target: 110m)
+            }
+        });
+        var pipeline = CreatePipeline(repository, engine, provider);
+
+        var dto = await pipeline.RunAsync(DayTwo, SignalHorizon.WEEK);
+
+        // The trap was found before the screen ran: the fan-out covered a name it was about to drop.
+        Assert.NotNull(provider.RequestedTickers);
+        Assert.Contains("ICT", provider.RequestedTickers!);
+
+        Assert.NotNull(engine.LastRequest);
+        Assert.DoesNotContain(engine.LastRequest!.Candidates, candidate => candidate.Ticker == "ICT");
+        Assert.Contains(engine.LastRequest.Candidates, candidate => candidate.Ticker == "BDO");
+        Assert.Equal(2, dto.Items.Count);
+    }
+
+    [Fact]
     public async Task RunAsync_clamps_a_day_plan_inside_the_static_band_and_keeps_only_retrieved_citations()
     {
         var repository = new FakeSignalRepository();
@@ -733,18 +768,36 @@ public sealed class SignalPipelineServiceTests
     private sealed class FakeMarketDataProvider : IMarketDataProvider
     {
         private readonly MarketDataBatch _batch;
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>> _companyDisclosures;
 
-        public FakeMarketDataProvider(MarketDataBatch batch)
+        public FakeMarketDataProvider(
+            MarketDataBatch batch,
+            IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>>? companyDisclosures = null)
         {
             _batch = batch;
+            _companyDisclosures = companyDisclosures
+                ?? new Dictionary<string, IReadOnlyList<StockDisclosure>>(StringComparer.OrdinalIgnoreCase);
         }
 
         public bool WasCalled { get; private set; }
+
+        /// <summary>The tickers the pipeline asked the exchange to re-read, in order.</summary>
+        public IReadOnlyList<string>? RequestedTickers { get; private set; }
 
         public Task<MarketDataBatch> FetchAsync(DateOnly tradeDate, CancellationToken cancellationToken = default)
         {
             WasCalled = true;
             return Task.FromResult(_batch);
+        }
+
+        public Task<IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>>> FetchCompanyDisclosuresAsync(
+            IReadOnlyList<string> tickers,
+            DateOnly sessionDate,
+            CancellationToken cancellationToken = default)
+        {
+            RequestedTickers = tickers;
+
+            return Task.FromResult(_companyDisclosures);
         }
     }
 

@@ -8,7 +8,7 @@ import { MarketDirectionHero } from './MarketDirectionHero';
 
 const regimeStyles = {
   BULLISH: 'border-mint-400/40 bg-mint-400/10 text-mint-400',
-  NEUTRAL: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
+  NEUTRAL: 'border-slate-500/40 bg-slate-500/10 text-fg-muted',
   BEARISH: 'border-rose-400/40 bg-rose-400/10 text-rose-400',
 } as const;
 
@@ -34,10 +34,10 @@ interface RegimeStripProps {
 
 function MetricTile({ label, value, detail, tone }: { label: string; value: string; detail?: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2">
-      <dt className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</dt>
-      <dd className={cn('tabular mt-1 text-sm font-semibold text-slate-100', tone)}>{value}</dd>
-      {detail ? <p className="mt-0.5 text-[10px] text-slate-500">{detail}</p> : null}
+    <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3.5 py-3">
+      <dt className="type-eyebrow text-fg-subtle">{label}</dt>
+      <dd className={cn('tabular type-figure mt-1.5 text-base text-fg', tone)}>{value}</dd>
+      {detail ? <p className="type-caption mt-1 text-fg-subtle">{detail}</p> : null}
     </div>
   );
 }
@@ -54,10 +54,10 @@ function SummaryCard({
   tone?: string;
 }) {
   return (
-    <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2.5">
-      <dt className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</dt>
-      <dd className={cn('tabular text-fluid-metric mt-1 font-semibold text-slate-100', tone)}>{value}</dd>
-      <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{detail}</p>
+    <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3.5 py-3">
+      <dt className="type-eyebrow text-fg-subtle">{label}</dt>
+      <dd className={cn('tabular text-fluid-metric type-figure mt-1.5 text-fg', tone)}>{value}</dd>
+      <p className="type-caption measure mt-1 text-fg-subtle">{detail}</p>
     </div>
   );
 }
@@ -68,24 +68,24 @@ function RotationCard({ card }: { card: SectorRotation }) {
   const quadrant = (card.quadrant as SectorQuadrant) ?? 'LAGGING';
 
   return (
-    <li className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2">
+    <li className="rounded-xl border border-line/70 bg-ink-850/80 px-3.5 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="truncate text-xs font-semibold text-slate-100" title={card.sector}>
+        <p className="type-body truncate font-semibold text-fg" title={card.sector}>
           {card.sector}
         </p>
         <span
           className={cn(
-            'shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-[0.14em]',
+            'type-badge shrink-0 rounded-full border px-2 py-0.5',
             quadrantStyles[quadrant] ?? quadrantStyles.LAGGING,
           )}
         >
           {card.quadrant}
         </span>
       </div>
-      <p className="tabular mt-1 text-[11px] text-slate-400">
+      <p className="tabular type-caption mt-1.5 text-fg-muted">
         {card.compositeScore.toFixed(0)} score · {card.stockCount} name{card.stockCount === 1 ? '' : 's'}
       </p>
-      <p className="tabular mt-0.5 text-[10px] text-slate-500">
+      <p className="tabular type-caption mt-1 text-fg-subtle">
         RS {formatDeltaPercent(card.avgRelativeStrength63d, 1)} · {formatPercent(card.aboveSma50Pct, 0, false)} &gt; 50D
       </p>
     </li>
@@ -98,11 +98,11 @@ export function RotationStrip({ rotation }: { rotation: SectorRotation[] }) {
   }
 
   return (
-    <div className="mt-4 border-t border-line/60 pt-3">
-      <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+    <div className="mt-4 border-t border-line/60 pt-3.5">
+      <p className="type-eyebrow text-fg-subtle">
         Sector rotation · best composite first
       </p>
-      <ul className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6">
+      <ul className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6">
         {rotation.map((card) => (
           <RotationCard key={card.sector} card={card} />
         ))}
@@ -128,7 +128,7 @@ function describeForeignSource(source: string | null): string {
 /** Green for a risk-on move, red for risk-off, muted when the feed never reported. */
 function changeTone(value: number | null, positiveIsBullish = true): string {
   if (value === null || !Number.isFinite(value) || value === 0) {
-    return 'text-slate-500';
+    return 'text-fg-subtle';
   }
 
   const bullish = value > 0;
@@ -167,7 +167,7 @@ export function IndicatorTiles({
         label="Net foreign"
         value={formatCompactPeso(regime.netForeignFlowPhp)}
         detail={foreignReported ? describeForeignSource(regime.foreignFlowSource) : 'unreported by feed'}
-        tone={foreignReported ? (foreignPositive ? 'text-mint-400' : 'text-rose-400') : 'text-slate-500'}
+        tone={foreignReported ? (foreignPositive ? 'text-mint-400' : 'text-rose-400') : 'text-fg-subtle'}
       />
       <MetricTile
         label="USD/PHP"
@@ -233,7 +233,7 @@ export function IndicatorTiles({
             ? `${breadthAbove200.toFixed(0)}% above 200D · ${stage2Count ?? 0} Stage 2 of ${evaluatedCount ?? 0}`
             : 'breadth unreported'
         }
-        tone={breadthReported ? (breadthHealthy ? 'text-mint-400' : 'text-amber-400') : 'text-slate-500'}
+        tone={breadthReported ? (breadthHealthy ? 'text-mint-400' : 'text-amber-400') : 'text-fg-subtle'}
       />
       <MetricTile
         label="Cash posture"
@@ -303,9 +303,9 @@ export function RegimeStrip({ regime, horizon, run, viewMode = 'simple', trustPu
 
   if (!regime) {
     return (
-      <section className="panel p-5">
-        <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Tape · {horizon}</p>
-        <p className="mt-2 text-sm text-slate-400">
+      <section className="panel p-4 sm:p-5">
+        <p className="type-eyebrow text-fg-subtle">Tape · {horizon}</p>
+        <p className="type-body measure mt-2 text-fg-muted">
           No live PSE session stored yet. Run the pipeline to pull Yahoo Finance candles and PSE Edge disclosures.
         </p>
       </section>
@@ -316,24 +316,24 @@ export function RegimeStrip({ regime, horizon, run, viewMode = 'simple', trustPu
     <section className="panel p-4 sm:p-5">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-2xl">
-          <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+          <p className="type-eyebrow text-fg-subtle">
             Tape · {horizon} horizon · {formatWeekday(regime.tradeDate)}
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <span
               className={cn(
-                'rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.18em]',
+                'type-badge rounded-full border px-2.5 py-1',
                 regimeStyles[regime.regime],
               )}
             >
               {regime.regime}
             </span>
-            <span className="text-xs text-slate-400">
+            <span className="type-caption text-fg-muted">
               PSEi {regime.sma50Status === 'ABOVE' ? 'above' : 'below'} 50D and{' '}
               {regime.sma200Status === 'ABOVE' ? 'above' : 'below'} 200D
             </span>
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-slate-400">{regime.regimeNote}</p>
+          <p className="type-body measure mt-3 text-fg-muted">{regime.regimeNote}</p>
         </div>
 
         <IndicatorTiles regime={regime} run={run} horizon={horizon} />

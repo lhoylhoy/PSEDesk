@@ -4,7 +4,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PseSignalDesk.Application.Interfaces;
+using PseSignalDesk.Application.Models;
 using PseSignalDesk.Infrastructure.Configuration;
+using PseSignalDesk.Infrastructure.Diagnostics;
 
 namespace PseSignalDesk.Infrastructure.Knowledge;
 
@@ -20,15 +23,18 @@ public sealed class OllamaEmbeddingClient
     private readonly HttpClient _httpClient;
     private readonly OllamaCloudOptions _options;
     private readonly ILogger<OllamaEmbeddingClient> _logger;
+    private readonly IFeedHealthRegistry _feedHealth;
 
     public OllamaEmbeddingClient(
         HttpClient httpClient,
         IOptions<OllamaCloudOptions> options,
-        ILogger<OllamaEmbeddingClient> logger)
+        ILogger<OllamaEmbeddingClient> logger,
+        IFeedHealthRegistry? feedHealth = null)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _logger = logger;
+        _feedHealth = feedHealth ?? new FeedHealthRegistry();
     }
 
     public bool IsConfigured => _options.HasApiKey && _options.HasEmbeddingModel;
@@ -63,6 +69,10 @@ public sealed class OllamaEmbeddingClient
 
             if (!response.IsSuccessStatusCode)
             {
+                _feedHealth.RecordFailure(
+                    FeedSource.Embeddings,
+                    $"HTTP {(int)response.StatusCode} from /api/embed for model '{_options.EmbeddingModel}'.");
+
                 _logger.LogWarning(
                     "Ollama embeddings returned HTTP {Status}; falling back to lexical retrieval.",
                     (int)response.StatusCode);
@@ -74,9 +84,18 @@ public sealed class OllamaEmbeddingClient
 
             if (vectors is null || vectors.Count == 0)
             {
+                _feedHealth.RecordDegraded(
+                    FeedSource.Embeddings,
+                    "the endpoint answered with an empty embedding payload; retrieval stays lexical.");
+
                 _logger.LogWarning("Ollama embeddings returned an empty payload; falling back to lexical retrieval.");
                 return null;
             }
+
+            _feedHealth.RecordSuccess(
+                FeedSource.Embeddings,
+                $"{vectors.Count} vector(s) from '{_options.EmbeddingModel}' ({vectors[0].Length} dimensions).",
+                vectors.Count);
 
             var result = new List<float[]?>(texts.Count);
 
@@ -93,6 +112,10 @@ public sealed class OllamaEmbeddingClient
         }
         catch (Exception ex)
         {
+            _feedHealth.RecordFailure(
+                FeedSource.Embeddings,
+                $"{ex.GetType().Name} while calling /api/embed; retrieval stays lexical.");
+
             _logger.LogWarning(ex, "Ollama embeddings call failed; falling back to lexical retrieval.");
             return null;
         }

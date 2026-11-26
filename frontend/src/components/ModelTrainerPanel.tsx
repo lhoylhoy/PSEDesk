@@ -36,9 +36,9 @@ function Tile({
 }) {
   const tile = (
     <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2" tabIndex={hint ? 0 : undefined}>
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={cn('tabular mt-1 text-sm font-semibold text-slate-100', tone)}>{value}</p>
-      {detail ? <p className="tabular mt-0.5 text-[10px] text-slate-500">{detail}</p> : null}
+      <p className="type-eyebrow text-fg-subtle">{label}</p>
+      <p className={cn('tabular mt-1 text-sm font-semibold text-fg', tone)}>{value}</p>
+      {detail ? <p className="tabular mt-0.5 text-2xs text-fg-subtle">{detail}</p> : null}
     </div>
   );
 
@@ -54,7 +54,7 @@ function statusTone(status: string): string {
     return 'border-amber-400/40 bg-amber-400/10 text-amber-400';
   }
 
-  return 'border-line/80 bg-ink-800/80 text-slate-400';
+  return 'border-line/80 bg-ink-800/80 text-fg-muted';
 }
 
 function statusLabel(status: string): string {
@@ -183,12 +183,12 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
   }
 
   if (status === 'loading') {
-    return <p className="mt-4 text-xs text-slate-500">Reading the trainer report…</p>;
+    return <p className="mt-4 text-xs text-fg-subtle">Reading the trainer report…</p>;
   }
 
   if (status === 'error') {
     return (
-      <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-[11px] text-rose-400">
+      <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-xs text-rose-400">
         {error ?? 'Could not load the trainer report.'}
       </p>
     );
@@ -199,7 +199,7 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
   return (
     <div className="mt-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-2xl text-[11px] leading-relaxed text-slate-400">
+        <p className="max-w-2xl type-body measure text-fg-muted">
           {simple
             ? `The desk trains its own scoring robot on the ${meta.friendlyTab.toLowerCase()} record it has already graded, then tests it on picks it never saw. It only gets to change your odds if it beats a plain baseline out of sample — otherwise the standard rules keep pricing everything.`
             : `One L2-regularised logistic model per horizon, fitted on the desk's own ATR-barrier history, standardised on training-slice means and embargoed by ${meta.holding} of forward bars. Weights go live only when the purged held-out slice clears the sample gate and beats the neutral prior's Brier score. Learned odds are bounded to ±6 points, so a model can inform the prior but never dominate it.`}
@@ -215,13 +215,13 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
       </div>
 
       {notice ? (
-        <p className="mt-3 rounded-lg border border-mint-400/30 bg-mint-400/5 px-3 py-2 text-[11px] leading-relaxed text-mint-400">
+        <p className="mt-3 rounded-lg border border-mint-400/30 bg-mint-400/5 px-3 py-2 type-body measure text-mint-400">
           {notice}
         </p>
       ) : null}
 
       {error ? (
-        <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-[11px] leading-relaxed text-rose-400">
+        <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 type-body measure text-rose-400">
           {error}
         </p>
       ) : null}
@@ -229,12 +229,12 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
       {current ? (
         <>
           <div className={cn('mt-3 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2', statusTone(current.status))}>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">
+            <span className="type-eyebrow">
               {statusLabel(current.status)}
             </span>
-            <span className="text-[11px] text-slate-300">{current.summary}</span>
+            <span className="text-xs text-fg-muted">{current.summary}</span>
             {current.trainedAtUtc ? (
-              <span className="tabular text-[10px] text-slate-500">
+              <span className="tabular text-2xs text-fg-subtle">
                 fitted {formatTimestamp(current.trainedAtUtc)}
               </span>
             ) : null}
@@ -255,7 +255,7 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
               label={simple ? 'Forecast accuracy' : 'Held-out Brier'}
               value={current.trainSampleCount + current.validationSampleCount > 0 ? current.trainedBrierScore.toFixed(3) : '—'}
               detail={`vs ${current.baselineBrierScore.toFixed(3)} plain baseline`}
-              tone={active ? 'text-mint-400' : 'text-slate-200'}
+              tone={active ? 'text-mint-400' : 'text-fg'}
               hint="Lower is better. 0.25 is what a permanent 50/50 guess scores. The model is promoted only when its held-out Brier is lower than the neutral prior's on the same trades."
             />
             <Tile
@@ -286,25 +286,25 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
 
       {current && current.weights.length > 0 ? (
         <section className="mt-3 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+          <h3 className="type-eyebrow text-fg-subtle">
             {simple ? 'What the robot pays attention to' : 'Learned factor weights · ranked by impact'}
           </h3>
           <ul className="mt-2 space-y-1">
             {current.weights.slice(0, simple ? 4 : 8).map((weight) => (
               <li key={weight.feature} className="rounded-lg border border-line/60 bg-ink-900/60 px-2.5 py-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                  <span className="text-slate-300">{weight.label}</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-fg-muted">{weight.label}</span>
                   <span className="flex items-center gap-3">
                     <span
                       className={cn(
-                        'tabular text-[10px] uppercase tracking-wider',
+                        'tabular type-eyebrow',
                         weight.weight >= 0 ? 'text-mint-400' : 'text-rose-400',
                       )}
                     >
                       {weight.direction}
                     </span>
-                    <span className="tabular text-slate-500">{weight.weight.toFixed(3)}</span>
-                    <span className="tabular w-14 text-right text-slate-400">
+                    <span className="tabular text-fg-subtle">{weight.weight.toFixed(3)}</span>
+                    <span className="tabular w-14 text-right text-fg-muted">
                       {weight.normalizedImpactPct.toFixed(1)}%
                     </span>
                   </span>
@@ -318,7 +318,7 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
+          <p className="mt-2 type-caption text-fg-faint">
             Impact is the share of total log-odds movement one standard deviation of that factor
             contributes. A negative weight means the factor lowers the odds of a target hit — the desk
             reads it, it does not relabel it.
@@ -326,17 +326,17 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
         </section>
       ) : null}
       <section className="mt-3 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-        <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+        <h3 className="type-eyebrow text-fg-subtle">
           {simple ? 'What has actually happened' : 'Desk memory · the graded ledger'}
         </h3>
         {!memory || memory.resolvedCount === 0 ? (
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-fg-subtle">
             Nothing has finished yet for this book, so there is no track record to learn from. The desk
             needs graded picks — and their outcomes — before a model can be fitted at all.
           </p>
         ) : (
           <>
-            <p className="tabular mt-1 text-[11px] text-slate-300">
+            <p className="tabular mt-1 text-xs text-fg-muted">
               {formatInteger(memory.resolvedCount)} graded · {formatProbability(memory.winRate)} hit rate ·{' '}
               {formatR(memory.expectancyR)} average · Brier {memory.brierScore.toFixed(3)} ·{' '}
               {memory.calibrationBiasPct >= 0 ? '+' : ''}
@@ -345,14 +345,14 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
 
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Paid</p>
+                <p className="type-eyebrow text-fg-subtle">Paid</p>
                 {memory.bestSectors.length === 0 ? (
-                  <p className="mt-1 text-[11px] text-slate-600">No sector sample yet.</p>
+                  <p className="mt-1 text-xs text-fg-faint">No sector sample yet.</p>
                 ) : (
                   <ul className="mt-1 space-y-1">
                     {memory.bestSectors.map((sector) => (
-                      <li key={`best-${sector.sector}`} className="flex justify-between text-[11px]">
-                        <span className="text-slate-300">{sector.sector}</span>
+                      <li key={`best-${sector.sector}`} className="flex justify-between text-xs">
+                        <span className="text-fg-muted">{sector.sector}</span>
                         <span className="tabular text-mint-400">
                           {formatR(sector.averageRealizedNetR)} · {formatInteger(sector.samples)}
                         </span>
@@ -362,14 +362,14 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
                 )}
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Bled</p>
+                <p className="type-eyebrow text-fg-subtle">Bled</p>
                 {memory.worstSectors.length === 0 ? (
-                  <p className="mt-1 text-[11px] text-slate-600">No sector sample yet.</p>
+                  <p className="mt-1 text-xs text-fg-faint">No sector sample yet.</p>
                 ) : (
                   <ul className="mt-1 space-y-1">
                     {memory.worstSectors.map((sector) => (
-                      <li key={`worst-${sector.sector}`} className="flex justify-between text-[11px]">
-                        <span className="text-slate-300">{sector.sector}</span>
+                      <li key={`worst-${sector.sector}`} className="flex justify-between text-xs">
+                        <span className="text-fg-muted">{sector.sector}</span>
                         <span className="tabular text-rose-400">
                           {formatR(sector.averageRealizedNetR)} · {formatInteger(sector.samples)}
                         </span>
@@ -382,17 +382,17 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
 
             {memory.recentStopOuts.length > 0 ? (
               <div className="mt-2">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Latest stop-outs</p>
+                <p className="type-eyebrow text-fg-subtle">Latest stop-outs</p>
                 <ul className="mt-1 space-y-1">
                   {memory.recentStopOuts.map((stopOut) => (
                     <li
                       key={`${stopOut.ticker}-${stopOut.runDate}`}
-                      className="flex flex-wrap justify-between gap-2 text-[11px]"
+                      className="flex flex-wrap justify-between gap-2 text-xs"
                     >
-                      <span className="font-mono font-semibold tracking-wide text-slate-200">
+                      <span className="font-mono font-semibold tracking-wide text-fg">
                         {stopOut.ticker}
                       </span>
-                      <span className="tabular text-slate-500">
+                      <span className="tabular text-fg-subtle">
                         {formatDate(stopOut.runDate)} · stop {stopOut.stopLoss.toFixed(2)} ·{' '}
                         {formatInteger(stopOut.barsHeld)} bars
                       </span>
@@ -408,7 +408,7 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
 
       {models.length > 1 ? (
         <section className="mt-3 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">All four books</h3>
+          <h3 className="type-eyebrow text-fg-subtle">All four books</h3>
           <ul className="mt-2 space-y-1 md:hidden">
             {models.map((model) => (
               <li
@@ -419,17 +419,17 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-slate-200">{model.horizon}</span>
+                  <span className="text-xs font-semibold text-fg">{model.horizon}</span>
                   <span
                     className={cn(
-                      'rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider',
+                      'rounded-full border px-2 py-0.5 type-badge',
                       statusTone(model.status),
                     )}
                   >
                     {model.status.replace('_', ' ').toLowerCase()}
                   </span>
                 </div>
-                <p className="tabular mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                <p className="tabular mt-1 flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-subtle">
                   <span>
                     Brier{' '}
                     {model.trainSampleCount + model.validationSampleCount > 0
@@ -454,7 +454,7 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
           </ul>
           <table className="mt-2 hidden w-full border-collapse text-left md:table">
             <thead>
-              <tr className="text-[9px] uppercase tracking-[0.16em] text-slate-500">
+              <tr className="type-eyebrow text-fg-subtle">
                 <th className="py-1.5 font-medium">Book</th>
                 <th className="py-1.5 font-medium">Status</th>
                 <th className="py-1.5 text-right font-medium">Held-out Brier</th>
@@ -468,28 +468,28 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
                   key={String(model.horizon)}
                   className={cn('border-t border-line/50', model.horizon === horizon && 'bg-ink-900/60')}
                 >
-                  <td className="py-1.5 text-[11px] font-semibold text-slate-200">{model.horizon}</td>
+                  <td className="py-1.5 text-xs font-semibold text-fg">{model.horizon}</td>
                   <td className="py-1.5">
                     <span
                       className={cn(
-                        'rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider',
+                        'rounded-full border px-2 py-0.5 type-badge',
                         statusTone(model.status),
                       )}
                     >
                       {model.status.replace('_', ' ').toLowerCase()}
                     </span>
                   </td>
-                  <td className="tabular py-1.5 text-right text-[11px] text-slate-300">
+                  <td className="tabular py-1.5 text-right text-xs text-fg-muted">
                     {model.trainSampleCount + model.validationSampleCount > 0
                       ? model.trainedBrierScore.toFixed(3)
                       : '—'}
                   </td>
-                  <td className="tabular py-1.5 text-right text-[11px] text-slate-500">
+                  <td className="tabular py-1.5 text-right text-xs text-fg-subtle">
                     {model.trainSampleCount + model.validationSampleCount > 0
                       ? model.baselineBrierScore.toFixed(3)
                       : '—'}
                   </td>
-                  <td className="tabular py-1.5 text-right text-[11px] text-slate-400">
+                  <td className="tabular py-1.5 text-right text-xs text-fg-muted">
                     {model.optimalKellyFractionMultiplier > 0
                       ? `${model.optimalKellyFractionMultiplier.toFixed(2)}x`
                       : '—'}
@@ -498,7 +498,7 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
+          <p className="mt-2 type-caption text-fg-faint">
             A weekly refit runs after the first trading session of each week, so the next session prices
             with weights trained only on outcomes that had already resolved.
           </p>

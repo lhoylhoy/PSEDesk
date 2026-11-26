@@ -49,6 +49,14 @@
           "endsPattern": "Local:\\s+http://localhost:5173"
         }
       }
+    },
+    {
+      "label": "frontend: free port 5173",
+      "detail": "Free :5173 before the dev server (or the browser debugger) starts. vite.config.ts sets strictPort: true, so a leftover server is a hard failure — `Error: Port 5173 is already in use` — rather than a bump to 5174. The leftover is usually an `npm run dev` orphaned to PPID 1 when its terminal or debug session closed; it exits when its node child dies, so killing the listener is enough. SIGTERM, poll 6s, then SIGKILL, ending with a real HTTP probe.",
+      "type": "shell",
+      "command": "pids=$(lsof -nP -iTCP:5173 -sTCP:LISTEN -t); if [ -z \"$pids\" ]; then echo ':5173 is already free'; else echo \"freeing :5173 — SIGTERM to $pids\"; kill -TERM $pids; for i in 1 2 3 4 5 6; do sleep 1; pids=$(lsof -nP -iTCP:5173 -sTCP:LISTEN -t); [ -z \"$pids\" ] && break; done; if [ -n \"$pids\" ]; then echo \":5173 still held by $pids after 6s — SIGKILL\"; kill -9 $pids; sleep 2; pids=$(lsof -nP -iTCP:5173 -sTCP:LISTEN -t); fi; if [ -n \"$pids\" ]; then echo \":5173 is STILL held by $pids — stop the other dev server first\"; exit 1; else echo ':5173 is free now'; fi; fi; curl -s -o /dev/null --max-time 2 http://localhost:5173/ && echo ':5173 answers HTTP — something re-bound it' || echo ':5173 refuses connections — ready for the dev server'",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
     }
   ]
 }

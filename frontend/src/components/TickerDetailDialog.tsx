@@ -12,6 +12,7 @@ import {
 } from '../lib/formatters';
 import { horizonMeta } from '../lib/horizons';
 import {
+  describeConviction,
   describeOrderGuide,
   describePlainVerdict,
   describeWinChance,
@@ -20,7 +21,7 @@ import { companyLabel } from '../lib/pseNicknames';
 import { fetchQuery, getSnapshot, queryKeys, queryStaleTime } from '../lib/queryCache';
 import { formatProbability, formatR } from '../lib/riskSizing';
 import type { ViewMode } from '../lib/viewMode';
-import { OrderBox, PlanSteps } from './AdviceCardList';
+import { MathRows, Meter, OrderBox, WavePlanSteps } from './AdviceCardList';
 import { DriftBadge } from './DriftBadge';
 import { RiskSizerBar } from './RiskSizerBar';
 import { VerdictBadge, verdictDescription } from './VerdictBadge';
@@ -52,8 +53,8 @@ interface TickerDetailDialogProps {
 function PlanTile({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={cn('tabular mt-1 text-sm font-semibold text-slate-100', tone)}>{value}</p>
+      <p className="type-eyebrow text-fg-subtle">{label}</p>
+      <p className={cn('tabular mt-1 text-sm font-semibold text-fg', tone)}>{value}</p>
     </div>
   );
 }
@@ -61,8 +62,8 @@ function PlanTile({ label, value, tone }: { label: string; value: string; tone?:
 function MetricCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 border-b border-line/50 py-1.5 last:border-0">
-      <span className="text-[11px] text-slate-500">{label}</span>
-      <span className="tabular text-[11px] font-medium text-slate-200">{value}</span>
+      <span className="text-xs text-fg-subtle">{label}</span>
+      <span className="tabular text-xs font-medium text-fg">{value}</span>
     </div>
   );
 }
@@ -77,7 +78,7 @@ function HistoryPanel({
   history: TickerHistory | null;
 }) {
   if (status === 'loading') {
-    return <p className="text-xs text-slate-500">Loading rank history…</p>;
+    return <p className="text-xs text-fg-subtle">Loading rank history…</p>;
   }
 
   if (status === 'error') {
@@ -85,7 +86,7 @@ function HistoryPanel({
   }
 
   if (!history || history.points.length === 0) {
-    return <p className="text-xs text-slate-500">First appearance in the ranked list — no prior runs.</p>;
+    return <p className="text-xs text-fg-subtle">First appearance in the ranked list — no prior runs.</p>;
   }
 
   return (
@@ -106,7 +107,7 @@ function HistoryPanel({
               }
             >
               <div className="flex h-full flex-1 flex-col items-center justify-end gap-1" tabIndex={0}>
-                <span className="tabular text-[9px] text-slate-500">{point.rank}</span>
+                <span className="tabular text-2xs text-fg-subtle">{point.rank}</span>
                 <div
                   className={cn(
                     'w-full rounded-t',
@@ -131,23 +132,23 @@ function HistoryPanel({
             key={`row-${point.runDate}`}
             className="flex items-center justify-between gap-3 rounded-lg border border-line/60 bg-ink-850/60 px-2.5 py-1.5"
           >
-            <span className="text-[11px] text-slate-400">{formatDate(point.runDate)}</span>
-            <span className="tabular text-[11px] text-slate-300">#{point.rank}</span>
+            <span className="text-xs text-fg-muted">{formatDate(point.runDate)}</span>
+            <span className="tabular text-xs text-fg-muted">#{point.rank}</span>
             <DriftBadge status={point.driftStatus} previousRank={point.previousRank} />
-            <span className="tabular text-[11px] text-slate-500">
+            <span className="tabular text-xs text-fg-subtle">
               {formatPrice(point.entryPrice)} → {formatPrice(point.targetPrice)}
             </span>
-            <span className="tabular text-[11px] text-slate-500">
+            <span className="tabular text-xs text-fg-subtle">
               {formatProbability(point.winProbability)} · {formatR(point.expectedValueR)}
             </span>
             <span
               className={cn(
-                'tabular text-[11px]',
+                'tabular text-xs',
                 (point.realizedNetR ?? 0) > 0
                   ? 'text-mint-400'
                   : point.realizedNetR != null
                     ? 'text-rose-400'
-                    : 'text-slate-600',
+                    : 'text-fg-faint',
               )}
             >
               {point.realizedNetR != null
@@ -234,10 +235,10 @@ export function TickerDetailDialog({
             <DialogStickyHeader>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <DialogTitle className="text-lg font-semibold leading-tight text-white sm:text-xl">
+                  <DialogTitle className="text-lg font-semibold leading-tight text-fg sm:text-xl">
                     {companyLabel(item.ticker, item.companyName)}
                   </DialogTitle>
-                  <span className="rounded border border-line/70 bg-ink-850 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-slate-400">
+                  <span className="rounded border border-line/70 bg-ink-850 px-1.5 py-0.5 font-mono text-2xs tracking-wider text-fg-muted">
                     {item.ticker}
                   </span>
                   <DriftBadge status={item.driftStatus} previousRank={item.previousRank} friendly={simple} />
@@ -247,7 +248,7 @@ export function TickerDetailDialog({
                     </span>
                   </Tooltip>
                 </div>
-                <DialogDescription className="mt-1 text-xs text-slate-400">
+                <DialogDescription className="mt-1 text-xs text-fg-muted">
                   {simple
                     ? `${item.companyName} · ${item.sector} · #${item.rank} today · plan to hold about ${horizonMeta[horizon].holding}`
                     : `${item.companyName} · ${item.sector} · rank #${item.rank} · ${horizonMeta[horizon].label} book · ${horizonMeta[horizon].holding}`}
@@ -258,7 +259,7 @@ export function TickerDetailDialog({
                   the close button off a 320px sheet. */}
               <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end sm:gap-4">
                 <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                  <p className="type-eyebrow text-fg-subtle">
                     {simple ? 'Confidence' : 'Conviction'}
                   </p>
                   <p className="tabular text-lg font-semibold text-mint-400">{item.convictionScore}</p>
@@ -280,18 +281,36 @@ export function TickerDetailDialog({
 
             {simple && guide ? (
               <>
-                <p className="mt-4 text-xs leading-relaxed text-slate-300">
-                  {describePlainVerdict(item.edgeVerdict).explanation}{' '}
-                  {describeWinChance(item.winProbability, item.breakEvenWinRate)}
+                <p className="mt-4 type-body measure text-fg-muted">
+                  {item.sector} · {describePlainVerdict(item.edgeVerdict).explanation}
                 </p>
                 <div className="mt-3 space-y-3">
-                  <PlanSteps
-                    entryPrice={item.entryPrice}
-                    targetPrice={item.targetPrice}
-                    stopLoss={item.stopLoss}
-                  />
+                  <WavePlanSteps item={item} />
+                  <p className="type-eyebrow text-fg-subtle">
+                    Plan to hold for about{' '}
+                    {item.wavePlan
+                      ? `up to ${item.wavePlan.maxHoldTradingDays} session${item.wavePlan.maxHoldTradingDays === 1 ? '' : 's'}`
+                      : horizonMeta[horizon].holding}
+                  </p>
                   <OrderBox guide={guide} item={item} />
+                  <Meter
+                    label="Chance it reaches the target"
+                    pct={item.winProbability * 100}
+                    value={formatProbability(item.winProbability)}
+                    detail={describeWinChance(item.winProbability, item.breakEvenWinRate)}
+                    barClass={item.winProbability >= item.breakEvenWinRate ? 'bg-sky-400' : 'bg-rose-400'}
+                  />
+                  <p className="type-caption measure text-fg-subtle">
+                    <span className="font-semibold text-fg-muted">
+                      Desk confidence {Math.round(item.convictionScore)} / 100
+                    </span>
+                    {' · '}
+                    {describeConviction(item.convictionScore)}
+                  </p>
                 </div>
+                <OptionalDisclosure enabled={simple} title="Show the math behind this pick">
+                  <MathRows item={item} guide={guide} />
+                </OptionalDisclosure>
               </>
             ) : null}
 
@@ -309,10 +328,10 @@ export function TickerDetailDialog({
               <PlanTile
                 label="Board lot"
                 value={`${formatInteger(item.boardLotSize)} sh`}
-                tone="text-slate-300"
+                tone="text-fg-muted"
               />
             </dl>
-            <p className="mt-1.5 text-[10px] text-slate-600">
+            <p className="mt-1.5 text-2xs text-fg-faint">
               {item.orderTicket
                 ? `Server ticket: ${formatInteger(item.orderTicket.shares)} shares (${formatInteger(
                     item.orderTicket.lots,
@@ -331,8 +350,8 @@ export function TickerDetailDialog({
             <RiskSizerBar item={item} className="mt-4" />
 
             {item.outcomeStatus !== 'OPEN' ? (
-              <p className="mt-1.5 text-[10px] text-slate-500">
-                Forward ledger: <span className="uppercase tracking-wider">{item.outcomeStatus.replaceAll('_', ' ')}</span>
+              <p className="type-caption mt-1.5 text-fg-subtle">
+                Forward ledger: <span className="font-semibold text-fg-muted">{item.outcomeStatus.replaceAll('_', ' ')}</span>
                 {item.outcomeDate ? ` on ${formatDate(item.outcomeDate)}` : ''}
                 {item.outcomeExitPrice != null ? ` at ${formatPrice(item.outcomeExitPrice)}` : ''}
                 {item.realizedNetR != null
@@ -344,25 +363,25 @@ export function TickerDetailDialog({
             </OptionalDisclosure>
 
             <div className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              <p className="type-eyebrow text-fg-subtle">
                 {simple ? 'Why the desk likes it' : 'Desk thesis'}
               </p>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{item.thesis}</p>
+              <p className="mt-1.5 type-body measure text-fg-muted">{item.thesis}</p>
               {item.deviationReason ? (
-                <p className="mt-2 border-t border-line/60 pt-2 text-[11px] leading-relaxed text-amber-400/90">
+                <p className="mt-2 border-t border-line/60 pt-2 type-body measure text-amber-400/90">
                   {item.deviationReason}
                 </p>
               ) : null}
             </div>
 
             <div className="mt-4 rounded-xl border border-rose-400/30 bg-rose-400/5 p-3">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-rose-400/80">
+              <p className="type-eyebrow text-rose-400/80">
                 {simple ? 'What would prove this wrong' : 'Bear case · pre-mortem'}
               </p>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+              <p className="mt-1.5 type-body measure text-fg-muted">
                 {item.bearCase || 'No pre-mortem stored for this pick.'}
               </p>
-              <p className="mt-1.5 text-[10px] text-slate-600">
+              <p className="mt-1.5 text-2xs text-fg-faint">
                 {simple
                   ? 'Written before the trade, not after. If this happens first, sell at the cut-loss price.'
                   : 'Written before the trade, not after: if this happens first, the plan is wrong and the stop is the exit.'}
@@ -372,7 +391,7 @@ export function TickerDetailDialog({
             <OptionalDisclosure enabled={simple} title="Technical indicators, rank history & filings">
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <section className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-                <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <h3 className="type-eyebrow text-fg-subtle">
                   Technicals · close day
                 </h3>
                 {metrics ? (
@@ -498,14 +517,14 @@ export function TickerDetailDialog({
                     />
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-fg-subtle">
                     No technical snapshot stored for this run.
                   </p>
                 )}
               </section>
 
               <section className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-                <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <h3 className="type-eyebrow text-fg-subtle">
                   Rank trajectory
                 </h3>
                 <div className="mt-2">
@@ -515,11 +534,11 @@ export function TickerDetailDialog({
             </div>
 
             <section className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-              <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              <h3 className="type-eyebrow text-fg-subtle">
                 Recent disclosures
               </h3>
               {item.disclosures.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-fg-subtle">
                   PSE Edge published no headline matching this ticker for the session.
                 </p>
               ) : (
@@ -527,19 +546,19 @@ export function TickerDetailDialog({
                   {item.disclosures.map((disclosure) => (
                     <li
                       key={`${disclosure.date}-${disclosure.headline}`}
-                      className="flex flex-wrap items-baseline gap-2 text-[11px] text-slate-400"
+                      className="flex flex-wrap items-baseline gap-2 text-xs text-fg-muted"
                     >
-                      <span className="tabular text-slate-500">{formatDate(disclosure.date)}</span>
-                      <span className="rounded border border-line/70 px-1 py-0.5 text-[9px] uppercase tracking-wider text-slate-500">
+                      <span className="tabular text-fg-subtle">{formatDate(disclosure.date)}</span>
+                      <span className="rounded border border-line/70 px-1 py-0.5 type-badge text-fg-subtle">
                         {disclosure.category}
                       </span>
                       {disclosure.trapFlag && disclosure.trapFlag !== 'NONE' ? (
-                        <span className="rounded border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 text-[9px] uppercase tracking-wider text-amber-400">
+                        <span className="rounded border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 type-badge text-amber-400">
                           {disclosure.trapFlag.replaceAll('_', ' ')}
                         </span>
                       ) : null}
-                      <span className="text-slate-300">{disclosure.headline}</span>
-                      <span className="text-[10px] text-slate-600">{disclosure.source}</span>
+                      <span className="text-fg-muted">{disclosure.headline}</span>
+                      <span className="text-2xs text-fg-faint">{disclosure.source}</span>
                     </li>
                   ))}
                 </ul>
@@ -547,7 +566,7 @@ export function TickerDetailDialog({
             </section>
 
             <section className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-              <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              <h3 className="type-eyebrow text-fg-subtle">
                 Playbook citations
               </h3>
               {item.citations && item.citations.length > 0 ? (
@@ -555,30 +574,30 @@ export function TickerDetailDialog({
                   {item.citations.map((citation) => (
                     <li
                       key={citation}
-                      className="rounded border border-mint-400/30 bg-mint-400/5 px-1.5 py-0.5 font-mono text-[10px] text-mint-400"
+                      className="rounded border border-mint-400/30 bg-mint-400/5 px-1.5 py-0.5 font-mono text-2xs text-mint-400"
                     >
                       {citation}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-fg-subtle">
                   The model did not cite a retrieved playbook section for this name.
                 </p>
               )}
-              <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
+              <p className="mt-2 type-caption text-fg-faint">
                 Every reference above was matched against the knowledge base at retrieval time; fabricated
                 citations are dropped server-side.
               </p>
             </section>
             </OptionalDisclosure>
 
-            <p className="mt-4 text-[10px] leading-relaxed text-slate-600">
+            <p className="mt-4 type-caption text-fg-faint">
               Research output only. Levels are rounded to the PSE board lot and tick table; how much to risk is the reader's own decision.
             </p>
           </>
         ) : (
-          <DialogTitle className="text-sm text-slate-200">Ticker details</DialogTitle>
+          <DialogTitle className="text-sm text-fg">Ticker details</DialogTitle>
         )}
       </DialogContent>
     </Dialog>

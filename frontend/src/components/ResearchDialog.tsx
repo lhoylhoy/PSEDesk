@@ -60,7 +60,7 @@ interface ResearchDialogProps {
 }
 
 const inputClass =
-  'rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-[11px] normal-case tracking-normal text-slate-200 outline-none placeholder:text-slate-600 focus:border-mint-400/50';
+  'rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-xs normal-case tracking-normal text-fg outline-none placeholder:text-fg-faint focus:border-mint-400/50';
 
 function Tile({
   label,
@@ -75,9 +75,9 @@ function Tile({
 }) {
   return (
     <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={cn('tabular mt-1 text-sm font-semibold text-slate-100', tone)}>{value}</p>
-      {detail ? <p className="tabular mt-0.5 text-[10px] text-slate-500">{detail}</p> : null}
+      <p className="type-eyebrow text-fg-subtle">{label}</p>
+      <p className={cn('tabular mt-1 text-sm font-semibold text-fg', tone)}>{value}</p>
+      {detail ? <p className="tabular mt-0.5 text-2xs text-fg-subtle">{detail}</p> : null}
     </div>
   );
 }
@@ -85,8 +85,8 @@ function Tile({
 function MetricRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 border-b border-line/50 py-1.5 last:border-0">
-      <span className="text-[11px] text-slate-500">{label}</span>
-      <span className="tabular text-[11px] font-medium text-slate-200">{value}</span>
+      <span className="text-xs text-fg-subtle">{label}</span>
+      <span className="tabular text-xs font-medium text-fg">{value}</span>
     </div>
   );
 }
@@ -101,7 +101,7 @@ function HoldingVerdictCard({ research }: { research: TickerResearch }) {
 
   if (!advice) {
     return (
-      <p className="mt-3 rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
+      <p className="mt-3 rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2 type-body measure text-fg-muted">
         The desk could not grade this position yet — it needs a priced plan for {research.ticker} first.
       </p>
     );
@@ -111,17 +111,17 @@ function HoldingVerdictCard({ research }: { research: TickerResearch }) {
 
   return (
     <div className="mt-3 rounded-xl border border-line/70 bg-ink-850/70 px-3 py-2.5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Your position · {advice.ticker}</p>
+      <p className="type-eyebrow text-fg-subtle">Your position · {advice.ticker}</p>
       <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <p className={cn('text-sm font-semibold', verdict.tone)}>{verdict.label}</p>
-        <span className="text-[11px] text-slate-400">{verdict.description}</span>
+        <span className="text-xs text-fg-muted">{verdict.description}</span>
         {verdict.urgent ? (
-          <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-400">
+          <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 type-badge text-amber-400">
             Act today
           </span>
         ) : null}
       </div>
-      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{verdict.detail}</p>
+      <p className="mt-1 type-body measure text-fg-muted">{verdict.detail}</p>
 
       <dl className="mt-2 grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-6">
         <Tile label="Your average" value={formatPrice(advice.averageCost)} />
@@ -146,14 +146,14 @@ function HoldingVerdictCard({ research }: { research: TickerResearch }) {
       </dl>
 
       {advice.unrealizedNetPnlPhp != null ? (
-        <p className="mt-1.5 text-[10px] text-slate-500">
+        <p className="mt-1.5 text-2xs text-fg-subtle">
           Fee-paid open result:{' '}
           <span className={cn('tabular font-semibold', advice.unrealizedNetPnlPhp >= 0 ? 'text-mint-400' : 'text-rose-400')}>
             {formatCompactPeso(advice.unrealizedNetPnlPhp)}
           </span>
         </p>
       ) : (
-        <p className="mt-1.5 text-[10px] text-slate-500">
+        <p className="mt-1.5 text-2xs text-fg-subtle">
           Add how many shares you hold to see the open result in pesos.
         </p>
       )}
@@ -178,12 +178,12 @@ function ResearchBody({
   return (
     <div className="mt-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-lg font-semibold text-white">{companyLabel(research.ticker, research.companyName)}</h3>
-        <span className="font-mono text-[11px] tracking-wider text-slate-400">{research.ticker}</span>
+        <h3 className="text-lg font-semibold text-fg">{companyLabel(research.ticker, research.companyName)}</h3>
+        <span className="font-mono text-xs tracking-wider text-fg-muted">{research.ticker}</span>
         {companyLabel(research.ticker, research.companyName) === research.companyName ? null : (
-          <span className="text-[11px] text-slate-400">{research.companyName}</span>
+          <span className="text-xs text-fg-muted">{research.companyName}</span>
         )}
-        <span className="rounded border border-line/70 px-1 py-0.5 text-[9px] uppercase tracking-wider text-slate-500">
+        <span className="rounded border border-line/70 px-1 py-0.5 type-badge text-fg-subtle">
           {research.sector}
         </span>
         <Tooltip label={verdictDescription(research.edgeVerdict)}>
@@ -191,7 +191,7 @@ function ResearchBody({
             <VerdictBadge verdict={research.edgeVerdict} friendly={simple} />
           </span>
         </Tooltip>
-        <span className="text-[10px] text-slate-600">
+        <span className="text-2xs text-fg-faint">
           {simple
             ? `as of ${formatDate(research.asOfDate)}`
             : `${horizonMeta[horizon].label} book · as of ${formatDate(research.asOfDate)} · ${research.dataSource}`}
@@ -202,7 +202,7 @@ function ResearchBody({
 
       {simple ? (
         <>
-          <p className="mt-3 text-xs leading-relaxed text-slate-300">
+          <p className="mt-3 type-body measure text-fg-muted">
             {describePlainVerdict(research.edgeVerdict).explanation}{' '}
             {describeWinChance(research.winProbability, research.breakEvenWinRate)}
           </p>
@@ -218,30 +218,30 @@ function ResearchBody({
             )}
             {ticket ? (
               <div className="rounded-lg border border-mint-400/25 bg-mint-400/5 px-3 py-2">
-                <p className="text-[11px] font-semibold text-slate-100">
+                <p className="text-xs font-semibold text-fg">
                   Buy {formatInteger(ticket.shares)} share{ticket.shares === 1 ? '' : 's'}
-                  <span className="font-normal text-slate-500">
+                  <span className="font-normal text-fg-subtle">
                     {' '}
                     ({ticket.lots} board lot{ticket.lots === 1 ? '' : 's'} of {formatInteger(ticket.boardLotSize)})
                   </span>
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                <p className="mt-1 type-body measure text-fg-muted">
                   About {formatCompactPeso(ticket.buyOutlayPhp)} all-in. If it reaches the target you keep about{' '}
                   <span className="font-semibold text-mint-400">{formatCompactPeso(ticket.netRewardPhp)}</span> after
                   fees; if it hits the cut-loss you lose about{' '}
                   <span className="font-semibold text-rose-400">{formatCompactPeso(ticket.netRiskPhp)}</span>.
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                <p className="mt-1 type-caption text-fg-subtle">
                   {describeExecutionGuidance(ticket.executionGuidance, research.edgeVerdict !== 'WATCH_ONLY')}
                 </p>
                 {translateTicketWarnings(ticket.warnings).map((warning) => (
-                  <p key={warning} className="mt-1 text-[10px] leading-relaxed text-amber-300/90">
+                  <p key={warning} className="mt-1 type-caption measure text-amber-300/90">
                     {warning}
                   </p>
                 ))}
               </div>
             ) : (
-              <p className="rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2 text-[11px] text-slate-400">
+              <p className="rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2 text-xs text-fg-muted">
                 No board lot fits the paper account at this price, so there is nothing to buy today.
               </p>
             )}
@@ -275,9 +275,9 @@ function ResearchBody({
       {ticket ? (
         <div className="mt-3 rounded-xl border border-line/70 bg-ink-850/60 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Server order ticket</h4>
+            <h4 className="type-eyebrow text-fg-subtle">Server order ticket</h4>
             {ticket.liquidityCapped ? (
-              <span className="rounded border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-amber-400">
+              <span className="rounded border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 type-badge text-amber-400">
                 Liquidity capped
               </span>
             ) : null}
@@ -300,7 +300,7 @@ function ResearchBody({
           {ticket.warnings.length > 0 ? (
             <ul className="mt-2 space-y-1">
               {ticket.warnings.map((warning) => (
-                <li key={warning} className="text-[10px] leading-relaxed text-amber-400/90">
+                <li key={warning} className="type-caption measure text-amber-400/90">
                   {warning}
                 </li>
               ))}
@@ -312,7 +312,7 @@ function ResearchBody({
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <section className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <h4 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Technicals · {research.ticker}</h4>
+          <h4 className="type-eyebrow text-fg-subtle">Technicals · {research.ticker}</h4>
           {metrics ? (
             <div className="mt-2">
               <MetricRow
@@ -345,36 +345,36 @@ function ResearchBody({
               />
             </div>
           ) : (
-            <p className="mt-2 text-[11px] text-slate-500">No OHLCV snapshot for this name yet.</p>
+            <p className="mt-2 text-xs text-fg-subtle">No OHLCV snapshot for this name yet.</p>
           )}
         </section>
 
         <section className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <h4 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Disclosures &amp; flags</h4>
+          <h4 className="type-eyebrow text-fg-subtle">Disclosures &amp; flags</h4>
           {!research.passesLiquidityFloor ? (
-            <p className="mt-2 rounded border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-400">
+            <p className="mt-2 rounded border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-2xs text-amber-400">
               Below the desk&apos;s 20-day turnover floor — the pipeline would not rank this name.
             </p>
           ) : null}
           {!research.inCatalog ? (
-            <p className="mt-2 text-[10px] text-slate-500">
+            <p className="mt-2 text-2xs text-fg-subtle">
               Not in the ranked catalog; researched on demand from the live feed.
             </p>
           ) : null}
           {research.trapFlags.length > 0 ? (
-            <p className="mt-2 text-[10px] uppercase tracking-wider text-amber-400">
+            <p className="mt-2 type-eyebrow text-amber-400">
               Flags: {research.trapFlags.join(' · ')}
             </p>
           ) : null}
           <ul className="mt-2 space-y-1.5">
             {research.disclosures.length === 0 ? (
-              <li className="text-[11px] text-slate-500">No disclosures retrieved for this name.</li>
+              <li className="text-xs text-fg-subtle">No disclosures retrieved for this name.</li>
             ) : (
               research.disclosures.slice(0, 8).map((disclosure) => (
-                <li key={`${disclosure.date}-${disclosure.headline}`} className="text-[11px] leading-snug">
-                  <span className="tabular text-slate-500">{formatDate(disclosure.date)}</span>{' '}
-                  <span className="text-slate-300">{disclosure.headline}</span>{' '}
-                  <span className="text-[9px] uppercase tracking-wider text-slate-600">
+                <li key={`${disclosure.date}-${disclosure.headline}`} className="text-xs leading-snug">
+                  <span className="tabular text-fg-subtle">{formatDate(disclosure.date)}</span>{' '}
+                  <span className="text-fg-muted">{disclosure.headline}</span>{' '}
+                  <span className="type-eyebrow text-fg-faint">
                     {disclosure.category} · {disclosure.source}
                   </span>
                 </li>
@@ -387,19 +387,19 @@ function ResearchBody({
       </OptionalDisclosure>
 
       <div className="mt-3 rounded-xl border border-rose-400/30 bg-rose-400/5 p-3">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-rose-400/80">
+        <p className="type-eyebrow text-rose-400/80">
           {simple ? 'What would prove this wrong' : 'Bear case · pre-mortem'}
         </p>
-        <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+        <p className="mt-1.5 type-body measure text-fg-muted">
           {research.bearCase || 'No pre-mortem returned for this name.'}
         </p>
       </div>
 
       {research.aiThesis ? (
         <div className="mt-3 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Desk note · AI prose</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{research.aiThesis}</p>
-          <p className="mt-1.5 text-[10px] text-slate-600">
+          <p className="type-eyebrow text-fg-subtle">Desk note · AI prose</p>
+          <p className="mt-1.5 type-body measure text-fg-muted">{research.aiThesis}</p>
+          <p className="mt-1.5 text-2xs text-fg-faint">
             Prose only: it never owns a level, a size or a verdict. Everything above is deterministic.
           </p>
         </div>
@@ -572,10 +572,10 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
       <DialogContent size="lg">
         <DialogStickyHeader>
           <div className="min-w-0">
-            <DialogTitle className="text-lg font-semibold text-white">
+            <DialogTitle className="text-lg font-semibold text-fg">
               {simple ? 'Check Any PSE Stock' : 'Research a ticker'}
             </DialogTitle>
-            <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
+            <DialogDescription className="mt-1 max-w-2xl type-body measure text-fg-muted">
               {simple
                 ? 'Type the company name you know — Jollibee, Meralco, PLDT — or its PSE symbol. The model prices the entry, the target and the cut-loss on that name and reports what it would size.'
                 : 'Any PSE symbol, ranked or not. The desk pulls the live OHLCV series plus the latest PSE Edge disclosures and prices the ATR plan, the odds and the board-lot ticket on the server.'}
@@ -641,10 +641,10 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
                     }}
                     className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left transition hover:bg-ink-800"
                   >
-                    <span className="text-[11px] font-medium text-slate-200">
+                    <span className="text-xs font-medium text-fg">
                       {companyLabel(stock.ticker, stock.companyName)}
                     </span>
-                    <span className="font-mono text-[10px] text-slate-500">{stock.ticker}</span>
+                    <span className="font-mono text-2xs text-fg-subtle">{stock.ticker}</span>
                   </button>
                 </li>
               ))}
@@ -653,7 +653,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
 
           {simple ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.14em] text-slate-600">Popular</span>
+              <span className="type-eyebrow text-fg-faint">Popular</span>
               {POPULAR_PSE_STOCKS.map((stock) => (
                 <button
                   key={stock.ticker}
@@ -662,7 +662,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
                     setDraft(stock.ticker);
                     setQuery(stock.ticker);
                   }}
-                  className="rounded-full border border-line/80 bg-ink-850 px-2.5 py-1 text-[10px] font-medium text-slate-300 transition hover:border-mint-400/40 hover:text-mint-400"
+                  className="rounded-full border border-line/80 bg-ink-850 px-2.5 py-1 text-2xs font-medium text-fg-muted transition hover:border-mint-400/40 hover:text-mint-400"
                 >
                   {stock.label}
                 </button>
@@ -693,14 +693,14 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
 
         {tab === 'own' ? (
           <form className="mt-2 rounded-xl border border-line/70 bg-ink-850/60 p-3" onSubmit={applyHolding}>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+            <p className="type-eyebrow text-fg-subtle">
               Your average cost
             </p>
             <div className="mt-2 flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1 text-[10px] text-slate-500">
+              <label className="flex flex-col gap-1 text-2xs text-fg-subtle">
                 Average price paid
                 <span className="flex items-center gap-1 rounded-lg border border-line/80 bg-ink-900 px-2 py-1">
-                  <span aria-hidden className="text-slate-500">
+                  <span aria-hidden className="text-fg-subtle">
                     ₱
                   </span>
                   <input
@@ -711,11 +711,11 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
                     value={averageCost}
                     onChange={(event) => setAverageCost(event.target.value)}
                     aria-label="Average price you paid per share"
-                    className="tabular w-24 bg-transparent text-xs text-slate-200 outline-none"
+                    className="tabular w-24 bg-transparent text-xs text-fg outline-none"
                   />
                 </span>
               </label>
-              <label className="flex flex-col gap-1 text-[10px] text-slate-500">
+              <label className="flex flex-col gap-1 text-2xs text-fg-subtle">
                 Shares held (optional)
                 <input
                   type="number"
@@ -740,13 +740,13 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
                     setAverageCost('');
                     setSharesHeld('');
                   }}
-                  className="pb-1 text-[10px] text-slate-500 underline decoration-line underline-offset-2 transition hover:text-slate-300"
+                  className="pb-1 text-2xs text-fg-subtle underline decoration-line underline-offset-2 transition hover:text-fg-muted"
                 >
                   Clear my numbers
                 </button>
               ) : null}
             </div>
-            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600">
+            <p className="mt-1.5 type-caption text-fg-faint">
               {simple
                 ? 'The desk compares your cost with today’s price after broker fees, then reports where the position sits on the same four-step ladder the entry plan uses.'
                 : 'The server grades the position against its own stop / target / trail ladder. Shares only scale the peso result; they never change the verdict.'}
@@ -755,19 +755,19 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
         ) : null}
 
         {status === 'loading' ? (
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-fg-subtle">
             {simple ? `Looking up ${query ?? 'that stock'}…` : `Pricing ${query ?? 'the ticker'} from the live feed…`}
           </p>
         ) : null}
 
         {status === 'error' && !research ? (
-          <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-[11px] leading-relaxed text-rose-400">
+          <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 type-body measure text-rose-400">
             {error ?? 'Could not research that ticker.'}
           </p>
         ) : null}
 
         {status === 'error' && research ? (
-          <p className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[11px] leading-relaxed text-amber-400">
+          <p className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 type-body measure text-amber-400">
             Showing the last priced plan — the live refresh failed: {error ?? 'unknown error'}
           </p>
         ) : null}
@@ -779,8 +779,8 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
 
 
         {status === 'idle' ? (
-          <div className="mt-4 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-6 text-xs text-slate-500">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">What you get</p>
+          <div className="mt-4 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-6 text-xs text-fg-subtle">
+            <p className="type-eyebrow text-fg-subtle">What you get</p>
             <ul className="mt-2 space-y-1 leading-relaxed">
               {simple ? (
                 <>
@@ -798,7 +798,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
                 </>
               )}
             </ul>
-            <p className="mt-2 text-[10px] text-slate-600">
+            <p className="mt-2 text-2xs text-fg-faint">
               {simple
                 ? 'You can check any listed PSE stock, even one the desk does not rank today.'
                 : 'Names outside the ranked catalog are supported; they are flagged as unranked rather than refused.'}
@@ -806,7 +806,7 @@ export function ResearchDialog({ open, onOpenChange, horizon, onTakeTrade, viewM
           </div>
         ) : null}
 
-        <p className="mt-3 text-[10px] text-slate-600">
+        <p className="mt-3 text-2xs text-fg-faint">
           {simple ? 'Holding period · ' : 'Horizon follows the terminal selection · '}
           {horizonMeta[horizon].holding}
           {simple ? ' · ' : ' holding window · '}

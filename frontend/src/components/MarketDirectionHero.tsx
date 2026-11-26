@@ -28,12 +28,12 @@ function ScoreGauge({ forecast }: { forecast: MarketDirectionForecast }) {
   const score = Math.max(10, Math.min(90, forecast.bullishScore));
 
   return (
-    <div className="w-full rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2.5 sm:max-w-xs">
+    <div className="w-full rounded-xl border border-line/70 bg-ink-850/80 px-3.5 py-3 sm:max-w-xs">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Direction score</p>
-        <p className="tabular text-2xl font-semibold leading-none text-slate-100">
+        <p className="type-eyebrow text-fg-subtle">Direction score</p>
+        <p className="type-figure text-2xl text-fg">
           {score}
-          <span className="text-xs font-normal text-slate-500"> / 100</span>
+          <span className="text-xs font-normal text-fg-subtle"> / 100</span>
         </p>
       </div>
       <div className="relative mt-3 h-2 rounded-full bg-linear-to-r from-rose-500/60 via-slate-500/40 to-mint-500/70">
@@ -43,12 +43,12 @@ function ScoreGauge({ forecast }: { forecast: MarketDirectionForecast }) {
           style={{ left: `${score}%` }}
         />
       </div>
-      <div className="mt-1 flex justify-between text-[9px] uppercase tracking-[0.12em] text-slate-600">
+      <div className="mt-1.5 flex justify-between type-eyebrow text-fg-faint">
         <span>Bearish</span>
         <span>Neutral</span>
         <span>Bullish</span>
       </div>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 type-caption text-fg-subtle">
         {directionLabels[forecast.direction] ?? 'Unclear'} · {forecast.confidence.toLowerCase()} conviction
       </p>
     </div>
@@ -62,9 +62,9 @@ function SectorChips({ label, sectors, tone }: { label: string; sectors: string[
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</span>
+      <span className="type-eyebrow text-fg-subtle">{label}</span>
       {sectors.map((sector) => (
-        <span key={sector} className={cn('rounded-full border px-2 py-0.5 text-[10px] font-semibold', tone)}>
+        <span key={sector} className={cn('rounded-full border px-2 py-0.5 type-caption font-semibold', tone)}>
           {sector}
         </span>
       ))}
@@ -74,9 +74,11 @@ function SectorChips({ label, sectors, tone }: { label: string; sectors: string[
 
 
 /**
- * Simple mode's opening answer: one traffic-light call, the 10–90 score behind it, the plain
- * reasons and the sectors money is moving in and out of. Every field is server-computed; the
- * component only formats it. The institutional tiles stay one tap away in the disclosure.
+ * Simple mode's call bar: one traffic light, one instruction and one sentence.
+ *
+ * The 10–90 score, the plain reasons, the sectors money is moving in and out of, the desk's own
+ * record and the institutional tiles are all behind the `Why this call` drawer. Every field is
+ * server-computed; the component only formats it.
  */
 export function MarketDirectionHero({
   regime,
@@ -89,8 +91,8 @@ export function MarketDirectionHero({
   if (!regime) {
     return (
       <section className="panel p-5">
-        <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">The call</p>
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="type-eyebrow text-fg-subtle">The call</p>
+        <p className="type-body measure mt-2 text-fg-muted">
           No market session saved yet. Run the latest screen to pull today’s PSE prices and company news.
         </p>
       </section>
@@ -104,94 +106,115 @@ export function MarketDirectionHero({
   const mood = describeMarketMood(regime.regime);
   const headline = forecast?.headline ?? mood.headline;
   const summary = forecast?.actionSummary ?? mood.explanation;
+  const score = forecast ? Math.max(10, Math.min(90, forecast.bullishScore)) : null;
 
   return (
-    <section className="panel p-4 sm:p-5">
-      <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
-        The call · {formatWeekday(regime.tradeDate)}
-      </p>
-
-      <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-        <div className="min-w-0 max-w-2xl">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]',
-                call.badgeClass,
-              )}
-            >
-              <span aria-hidden className={cn('h-2 w-2 rounded-full', call.dotClass)} />
-              {call.label}
-            </span>
-            <span className="text-[10px] font-semibold text-slate-400">{call.instruction}</span>
-          </div>
-          {/* Fluid: a 320px phone cannot hold a 24px headline in this column, and a 2560px
-              monitor makes a 20px one look like body copy. */}
-          <h2 className="text-fluid-hero mt-2 font-semibold text-slate-100">{headline}</h2>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">{summary}</p>
-        </div>
-
-        {forecast ? <ScoreGauge forecast={forecast} /> : null}
+    /*
+     * One bar, not a hero. A first-time reader opens this screen to see the signals; the call
+     * is the context for the list below, so it keeps the traffic light, the instruction and one
+     * sentence. The gauge, the reasons, the sector money flows, the desk's record and the nine
+     * institutional dials are all still here — one tap down, unchanged.
+     */
+    <section className="panel px-4 py-3.5 sm:px-5 sm:py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="type-eyebrow text-fg-subtle simple-label">
+          The call · {formatWeekday(regime.tradeDate)}
+        </p>
+        {score !== null ? (
+          <p className="tabular type-caption text-fg-subtle simple-note">Direction score {score} / 100</p>
+        ) : null}
       </div>
 
-      {forecast && forecast.reasons.length > 0 ? (
-        <ul className="mt-4 space-y-1.5 border-t border-line/60 pt-3">
-          {forecast.reasons.map((reason) => (
-            <li key={reason} className="flex gap-2 text-[11px] leading-relaxed text-slate-400">
-              <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-500" />
-              <span>{reason}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 type-badge',
+            call.badgeClass,
+          )}
+        >
+          <span aria-hidden className={cn('h-2 w-2 rounded-full', call.dotClass)} />
+          {call.label}
+        </span>
+        <span className="type-caption font-semibold text-fg-muted simple-label">{call.instruction}</span>
+      </div>
 
-      {forecast && (forecast.leadingSectors.length > 0 || forecast.laggingSectors.length > 0) ? (
-        <div className="mt-3 flex flex-col gap-1.5">
-          <SectorChips
-            label="Money in"
-            sectors={forecast.leadingSectors}
-            tone="border-mint-400/40 bg-mint-400/10 text-mint-400"
-          />
-          <SectorChips
-            label="Money out"
-            sectors={forecast.laggingSectors}
-            tone="border-rose-400/40 bg-rose-400/10 text-rose-400"
-          />
-        </div>
-      ) : null}
-
-      {trustPulse ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line/70 bg-ink-900/70 px-3 py-2">
-          <p className="text-[11px] leading-relaxed text-slate-400">
-            <span className="font-semibold text-slate-200">How this desk has done: </span>
-            {describeTrustPulse(trustPulse)}
-          </p>
-          {onOpenScorecard ? (
-            <button
-              type="button"
-              onClick={onOpenScorecard}
-              className="tap px-1 text-[10px] font-semibold text-slate-300 underline decoration-line underline-offset-2 transition hover:text-mint-400"
-            >
-              See the full record
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {footer ? <div className="mt-4 border-t border-line/60 pt-3">{footer}</div> : null}
+      {/*
+       * The focal sentence of the Simple screen, and the only place a display size is
+       * earned: a first-time reader reads this line before any row. It is fluid (17→24px)
+       * and capped at a readable measure so a long call breaks into three lines, never one
+       * 120-character ribbon.
+       */}
+      <h2 className="text-fluid-hero measure-wide mt-2 font-semibold text-fg">{headline}</h2>
 
       <TechnicalDisclosure
-        className="mt-4"
-        title="Show the numbers behind the call"
+        className="mt-3"
+        title="Why this call"
         summary={
           <>
             <DisclosurePill>PSEi {regime.pseiClose.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</DisclosurePill>
+            {run ? <DisclosurePill>Cash {run.recommendedCashPct.toFixed(0)}%</DisclosurePill> : null}
             <DisclosurePill>{horizon.toUpperCase()}</DisclosurePill>
           </>
         }
       >
-        <IndicatorTiles regime={regime} run={run} horizon={horizon} />
-        <RotationStrip rotation={regime.sectorRotation ?? []} />
+        <p className="type-body measure text-fg-muted simple-copy">{summary}</p>
+
+        {forecast ? (
+          <div className="mt-4">
+            <ScoreGauge forecast={forecast} />
+          </div>
+        ) : null}
+
+        {forecast && forecast.reasons.length > 0 ? (
+          <ul className="mt-4 space-y-2 border-t border-line/60 pt-4">
+            {forecast.reasons.map((reason) => (
+              <li key={reason} className="flex gap-2.5 type-caption text-fg-muted simple-note">
+                <span aria-hidden className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-500" />
+                <span className="measure">{reason}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {forecast && (forecast.leadingSectors.length > 0 || forecast.laggingSectors.length > 0) ? (
+          <div className="mt-4 flex flex-col gap-2">
+            <SectorChips
+              label="Money in"
+              sectors={forecast.leadingSectors}
+              tone="border-mint-400/40 bg-mint-400/10 text-mint-400"
+            />
+            <SectorChips
+              label="Money out"
+              sectors={forecast.laggingSectors}
+              tone="border-rose-400/40 bg-rose-400/10 text-rose-400"
+            />
+          </div>
+        ) : null}
+
+        {trustPulse ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line/70 bg-ink-900/70 px-3.5 py-3">
+            <p className="type-caption measure text-fg-muted simple-note">
+              <span className="font-semibold text-fg">How this desk has done: </span>
+              {describeTrustPulse(trustPulse)}
+            </p>
+            {onOpenScorecard ? (
+              <button
+                type="button"
+                onClick={onOpenScorecard}
+                className="tap type-caption px-1 font-semibold text-fg-muted underline decoration-line underline-offset-2 transition hover:text-mint-400"
+              >
+                See the full record
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {footer ? <div className="mt-4 border-t border-line/60 pt-4">{footer}</div> : null}
+
+        <div className="mt-4 border-t border-line/60 pt-4">
+          <IndicatorTiles regime={regime} run={run} horizon={horizon} />
+          <RotationStrip rotation={regime.sectorRotation ?? []} />
+        </div>
       </TechnicalDisclosure>
     </section>
   );

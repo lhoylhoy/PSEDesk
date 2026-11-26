@@ -420,6 +420,42 @@ public sealed class QuantitativeFilterService
     }
 
     /// <summary>
+    /// The names worth a per-company disclosure lookup: everything that clears the liquidity
+    /// floor, ordered exactly like this horizon's candidate list but <b>before</b> the trap screen
+    /// runs.
+    /// <para>
+    /// Ordering by the same score the candidate list uses is what makes the fan-out fair: the
+    /// names at the top are the ones that could actually reach the book, so a name outside the
+    /// limit could not have displaced one inside it. Nothing here reads disclosures — that is the
+    /// point, since the lookup exists to replace an attribution that may be missing.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> SelectDisclosureFanout(
+        IEnumerable<StockDailyMetric> metrics,
+        SignalHorizon horizon,
+        int limit)
+    {
+        if (limit <= 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var profile = HorizonProfile.For(horizon);
+
+        return metrics
+            .Where(metric => MeetsLiquidityFloor(
+                metric.AvgTurnover20dPhp,
+                metric.MedianTurnover20dPhp,
+                metric.ActiveTradingDays20d))
+            .OrderByDescending(metric => ComputeHorizonScore(metric, profile))
+            .ThenByDescending(metric => metric.AvgTurnover20dPhp)
+            .ThenBy(metric => metric.Ticker, StringComparer.Ordinal)
+            .Take(limit)
+            .Select(metric => metric.Ticker)
+            .ToList();
+    }
+
+    /// <summary>
     /// Deterministic horizon adjustment on top of <see cref="StockDailyMetric.QuantPreScore"/>.
     /// Each book runs its own sleeve of evidence: DAY pays for accumulation and punishes a
     /// range too tight to clear the round trip, WEEK wants a confirmed Stage 2 with volume

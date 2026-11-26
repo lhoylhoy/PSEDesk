@@ -88,7 +88,7 @@ export function Tooltip({ label, children, side = 'top', align = 'center', class
           sideOffset={8}
           collisionPadding={12}
           className={cn(
-            'z-50 max-w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-line bg-ink-800 px-3 py-2 text-xs leading-relaxed text-slate-300 shadow-2xl shadow-black/60 ui-tooltip',
+            'type-body z-50 max-w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-line bg-ink-800 px-3.5 py-2.5 text-fg-muted shadow-2xl shadow-black/60 ui-tooltip',
             className,
           )}
         >

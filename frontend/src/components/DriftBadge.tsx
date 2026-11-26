@@ -11,7 +11,7 @@ const driftStyles: Record<DriftStatus, { label: string; icon: string; className:
   HELD: {
     label: 'HELD',
     icon: '=',
-    className: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
+    className: 'border-slate-500/40 bg-slate-500/10 text-fg-muted',
   },
   UPGRADED: {
     label: 'UP',
@@ -48,17 +48,17 @@ export function DriftBadge({ status, previousRank, friendly = false }: DriftBadg
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
       <span
         className={cn(
-          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em]',
+          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 type-badge',
           style.className,
         )}
       >
-        <span aria-hidden className="text-[8px] leading-none">
+        <span aria-hidden className="text-2xs leading-none opacity-90">
           {style.icon}
         </span>
         {label}
       </span>
       {previousRank != null ? (
-        <span className="tabular text-[10px] text-slate-500">was #{previousRank}</span>
+        <span className="tabular type-caption text-fg-subtle">was #{previousRank}</span>
       ) : null}
     </span>
   );

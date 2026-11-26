@@ -3,9 +3,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using PseSignalDesk.Application.Interfaces;
 using PseSignalDesk.Application.Models;
 using PseSignalDesk.Application.Services;
 using PseSignalDesk.Infrastructure.Configuration;
+using PseSignalDesk.Infrastructure.Diagnostics;
 
 namespace PseSignalDesk.Infrastructure.MarketData;
 
@@ -73,17 +75,20 @@ internal sealed class PseEdgeHistorySource
     private readonly MarketDataOptions _options;
     private readonly MarketDataCache _cache;
     private readonly ILogger _logger;
+    private readonly IFeedHealthRegistry _feedHealth;
 
     public PseEdgeHistorySource(
         HttpClient httpClient,
         MarketDataOptions options,
         MarketDataCache cache,
-        ILogger logger)
+        ILogger logger,
+        IFeedHealthRegistry? feedHealth = null)
     {
         _httpClient = httpClient;
         _options = options;
         _cache = cache;
         _logger = logger;
+        _feedHealth = feedHealth ?? new FeedHealthRegistry();
     }
 
     /// <summary>
@@ -101,7 +106,7 @@ internal sealed class PseEdgeHistorySource
 
         if (symbol.Length == 0)
         {
-            return EdgeBarFetch.Failed("no ticker to resolve");
+            return Skipped("no ticker to resolve");
         }
 
         try
@@ -110,7 +115,7 @@ internal sealed class PseEdgeHistorySource
 
             if (security is null)
             {
-                return EdgeBarFetch.Failed($"PSE Edge lists no security for {symbol}");
+                return Skipped($"PSE Edge lists no security for {symbol}");
             }
 
             var from = tradeDate.AddDays(-Math.Max(1, lookbackDays));
@@ -134,12 +139,32 @@ internal sealed class PseEdgeHistorySource
         {
             _logger.LogWarning("PSE Edge history unavailable for {Ticker}: {Reason}", symbol, ex.Message);
 
-            return EdgeBarFetch.Failed(ex.Message);
+            return Failed(ex.Message);
         }
         catch (JsonException)
         {
-            return EdgeBarFetch.Failed($"PSE Edge returned unreadable JSON for {symbol}");
+            return Failed($"PSE Edge returned unreadable JSON for {symbol}");
         }
+    }
+
+    /// <summary>
+    /// The exchange answered and simply has nothing for this name (no security row, stale series).
+    /// That is not a fault, but it is not a success either, so the health ledger keeps the two
+    /// apart instead of reporting a dead symbol as an outage.
+    /// </summary>
+    private EdgeBarFetch Skipped(string reason)
+    {
+        _feedHealth.RecordSkipped(FeedSource.PseEdgeHistory, reason);
+
+        return EdgeBarFetch.Failed(reason);
+    }
+
+    /// <summary>A transport, HTTP or parse failure — the exchange is in trouble, not merely empty.</summary>
+    private EdgeBarFetch Failed(string reason)
+    {
+        _feedHealth.RecordFailure(FeedSource.PseEdgeHistory, reason);
+
+        return EdgeBarFetch.Failed(reason);
     }
 
     /// <summary>
@@ -180,41 +205,8 @@ internal sealed class PseEdgeHistorySource
     }
 
     /// <summary>The Edge symbol search answer for one ticker, matched on the exchange symbol.</summary>
-    private static string? ReadCompanyId(string json, string ticker)
-    {
-        using var document = JsonDocument.Parse(json);
-
-        if (document.RootElement.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        foreach (var item in document.RootElement.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object ||
-                !item.TryGetProperty("symbol", out var symbolElement) ||
-                !string.Equals(symbolElement.GetString(), ticker, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (!item.TryGetProperty("cmpyId", out var idElement))
-            {
-                continue;
-            }
-
-            var companyId = idElement.ValueKind == JsonValueKind.Number
-                ? idElement.GetRawText()
-                : idElement.GetString();
-
-            if (!string.IsNullOrWhiteSpace(companyId))
-            {
-                return companyId.Trim();
-            }
-        }
-
-        return null;
-    }
+    private static string? ReadCompanyId(string json, string ticker) =>
+        EdgeSymbolSearch.ReadCompanyId(json, ticker);
 
     /// <summary>
     /// The security id for the ticker on its company page. An exact symbol match wins, because a
@@ -315,14 +307,14 @@ internal sealed class PseEdgeHistorySource
     /// collapse to the last print, rows outside the requested window are dropped, and a row
     /// without a usable OHLC print is skipped rather than carried forward.
     /// </summary>
-    private static EdgeBarFetch ParseChart(string ticker, string body, DateOnly tradeDate, DateOnly from)
+    private EdgeBarFetch ParseChart(string ticker, string body, DateOnly tradeDate, DateOnly from)
     {
         using var document = JsonDocument.Parse(body);
 
         if (!document.RootElement.TryGetProperty("chartData", out var rows) ||
             rows.ValueKind != JsonValueKind.Array)
         {
-            return EdgeBarFetch.Failed($"PSE Edge returned no price series for {ticker}");
+            return Skipped($"PSE Edge returned no price series for {ticker}");
         }
 
         var byDate = new SortedDictionary<DateOnly, OhlcvBar>();
@@ -339,9 +331,13 @@ internal sealed class PseEdgeHistorySource
 
         if (byDate.Count == 0)
         {
-            return EdgeBarFetch.Failed(
-                $"PSE Edge published no daily bars for {ticker} through {tradeDate:yyyy-MM-dd}");
+            return Skipped($"PSE Edge published no daily bars for {ticker} through {tradeDate:yyyy-MM-dd}");
         }
+
+        _feedHealth.RecordSuccess(
+            FeedSource.PseEdgeHistory,
+            $"{ticker}: {byDate.Count} bar(s) through {tradeDate:yyyy-MM-dd}.",
+            byDate.Count);
 
         return new EdgeBarFetch(byDate.Values.ToList(), null);
     }

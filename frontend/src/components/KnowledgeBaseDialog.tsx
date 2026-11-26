@@ -210,8 +210,8 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
       <DialogContent size="lg">
         <DialogStickyHeader>
           <div className="min-w-0">
-            <DialogTitle className="text-base font-semibold text-white">Knowledge base</DialogTitle>
-            <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
+            <DialogTitle className="text-base font-semibold text-fg">Knowledge base</DialogTitle>
+            <DialogDescription className="mt-1 max-w-2xl type-body measure text-fg-muted">
               The desk answers from these documents only. Built-in playbooks ship with the repo; uploads are
               scoped to the horizons you tick so an uploaded document cannot outrank the horizon playbook, and
               each upload needs a rights and cloud-processing attestation.
@@ -233,27 +233,27 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
         </DialogStickyHeader>
 
         {notice ? (
-          <p className="mt-3 rounded-xl border border-mint-400/30 bg-mint-400/5 px-3 py-2 text-[11px] text-mint-400">
+          <p className="mt-3 rounded-xl border border-mint-400/30 bg-mint-400/5 px-3 py-2 text-xs text-mint-400">
             {notice}
           </p>
         ) : null}
 
         {error ? (
-          <p className="mt-3 rounded-xl border border-rose-400/40 bg-rose-400/5 px-3 py-2 text-[11px] text-rose-400">
+          <p className="mt-3 rounded-xl border border-rose-400/40 bg-rose-400/5 px-3 py-2 text-xs text-rose-400">
             {error}
           </p>
         ) : null}
 
-        <p className="mt-3 text-[10px] uppercase tracking-[0.18em] text-slate-600">
+        <p className="mt-3 type-eyebrow text-fg-faint">
           {documents.length} document{documents.length === 1 ? '' : 's'} · {formatInteger(totals.chunks)} chunks ·{' '}
           {formatInteger(totals.embedded)} embedded
         </p>
         <section className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+          <h3 className="type-eyebrow text-fg-subtle">
             Upload a research note or licensed document
           </h3>
           <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            <label className="flex flex-col gap-1.5 type-caption font-medium text-fg-subtle">
               File (.md, .txt or .pdf)
               <input
                 ref={fileInputRef}
@@ -263,30 +263,30 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
                   setFile(event.target.files?.[0] ?? null);
                   setNotice(null);
                 }}
-                className="rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-[11px] text-slate-300 outline-none file:mr-2 file:rounded file:border-0 file:bg-ink-700 file:px-2 file:py-1 file:text-[10px] file:uppercase file:tracking-wider file:text-slate-300 focus:border-mint-400/50"
+                className="rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-xs text-fg-muted outline-none file:mr-2 file:rounded file:border-0 file:bg-ink-700 file:px-2 file:py-1 file:text-2xs file:font-semibold file:text-fg-muted focus:border-mint-400/50"
               />
             </label>
-            <label className="flex flex-col gap-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            <label className="flex flex-col gap-1.5 type-caption font-medium text-fg-subtle">
               Title (optional)
               <input
                 type="text"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="Defaults to the file name"
-                className="rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-[11px] normal-case tracking-normal text-slate-200 outline-none placeholder:text-slate-600 focus:border-mint-400/50"
+                className="rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-xs normal-case tracking-normal text-fg outline-none placeholder:text-fg-faint focus:border-mint-400/50"
               />
             </label>
-            <label className="flex flex-col gap-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            <label className="flex flex-col gap-1.5 type-caption font-medium text-fg-subtle">
               Categories (comma separated)
               <input
                 type="text"
                 value={categories}
                 onChange={(event) => setCategories(event.target.value)}
                 placeholder="risk, sizing, ph-macro"
-                className="rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-[11px] normal-case tracking-normal text-slate-200 outline-none placeholder:text-slate-600 focus:border-mint-400/50"
+                className="rounded-lg border border-line/80 bg-ink-900/80 px-2.5 py-1.5 text-xs normal-case tracking-normal text-fg outline-none placeholder:text-fg-faint focus:border-mint-400/50"
               />
             </label>
-            <div className="flex flex-col gap-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            <div className="flex flex-col gap-1.5 type-caption font-medium text-fg-subtle">
               Scoped horizons
               <div className="flex flex-wrap gap-1.5">
                 {HORIZONS.map((option) => {
@@ -305,10 +305,10 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
                         )
                       }
                       className={cn(
-                        'rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition',
+                        'rounded-lg border px-2 py-1 type-badge transition',
                         selected
                           ? 'border-mint-400/40 bg-mint-400/10 text-mint-400'
-                          : 'border-line/80 bg-ink-900/80 text-slate-500 hover:text-slate-300',
+                          : 'border-line/80 bg-ink-900/80 text-fg-subtle hover:text-fg-muted',
                       )}
                     >
                       {horizonMeta[option].label}
@@ -319,7 +319,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
             </div>
           </div>
           <div className="mt-3 flex flex-col gap-2 rounded-lg border border-line/80 bg-ink-900/70 px-3 py-2">
-            <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-400">
+            <label className="flex items-start gap-2 type-body measure text-fg-muted">
               <input
                 type="checkbox"
                 checked={rightsConfirmed}
@@ -337,7 +337,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
             </label>
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="max-w-lg text-[10px] leading-relaxed text-slate-600">
+            <p className="max-w-lg type-caption text-fg-faint">
               Markdown keeps its structure; PDFs are text-extracted and chunked on headings. Leave the horizons
               empty to let the document apply to every book.
             </p>
@@ -353,12 +353,12 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
           </div>
         </section>
         <section className="mt-4">
-          <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Indexed documents</h3>
+          <h3 className="type-eyebrow text-fg-subtle">Indexed documents</h3>
           {status === 'loading' && documents.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500">Loading the knowledge index…</p>
+            <p className="mt-2 text-xs text-fg-subtle">Loading the knowledge index…</p>
           ) : null}
           {status === 'ready' && documents.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-fg-subtle">
               Nothing indexed yet. Re-index to import the shipped playbooks.
             </p>
           ) : null}
@@ -367,12 +367,12 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
               <li key={document.id} className="rounded-xl border border-line/60 bg-ink-850/60 px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-100">{document.title}</span>
-                    <span className="rounded border border-line/70 px-1 py-0.5 text-[9px] uppercase tracking-wider text-slate-500">
+                    <span className="text-xs font-semibold text-fg">{document.title}</span>
+                    <span className="rounded border border-line/70 px-1 py-0.5 type-badge text-fg-subtle">
                       {document.source === 'builtin' ? 'built-in' : 'upload'}
                     </span>
                     {document.isMandatory ? (
-                      <span className="rounded border border-mint-400/30 bg-mint-400/10 px-1 py-0.5 text-[9px] uppercase tracking-wider text-mint-400">
+                      <span className="rounded border border-mint-400/30 bg-mint-400/10 px-1 py-0.5 type-badge text-mint-400">
                         mandatory
                       </span>
                     ) : null}
@@ -380,7 +380,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
                   {document.source === 'builtin' ? null : (
                     <Button
                       variant="ghost"
-                      className="h-7 px-2 text-[10px]"
+                      className="h-7 px-2 text-2xs"
                       onClick={() => void handleDelete(document)}
                       disabled={busy !== null}
                     >
@@ -388,14 +388,14 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
                     </Button>
                   )}
                 </div>
-                <p className="mt-1 font-mono text-[10px] text-slate-500">
+                <p className="mt-1 font-mono text-2xs text-fg-subtle">
                   {document.slug} · {document.sourcePath}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   {document.horizons.map((value) => (
                     <span
                       key={`${document.id}-h-${value}`}
-                      className="rounded border border-line/70 px-1 py-0.5 text-[9px] uppercase tracking-wider text-slate-400"
+                      className="rounded border border-line/70 px-1 py-0.5 type-badge text-fg-muted"
                     >
                       {horizonMeta[value as Horizon]?.label ?? value}
                     </span>
@@ -403,13 +403,13 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
                   {document.categories.map((value) => (
                     <span
                       key={`${document.id}-c-${value}`}
-                      className="rounded border border-line/50 px-1 py-0.5 text-[9px] tracking-wider text-slate-500"
+                      className="rounded border border-line/50 px-1 py-0.5 text-2xs tracking-wider text-fg-subtle"
                     >
                       {value}
                     </span>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] text-slate-600">
+                <p className="mt-1 text-2xs text-fg-faint">
                   {formatInteger(document.chunkCount)} chunks · {formatInteger(document.embeddedChunkCount)}{' '}
                   embedded · updated {formatTimestamp(document.updatedAtUtc)}
                 </p>

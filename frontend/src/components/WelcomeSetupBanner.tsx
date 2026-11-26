@@ -92,8 +92,8 @@ export function WelcomeSetupBanner({
   if (!expanded) {
     return (
       <section className="panel flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5">
-        <p className="text-[11px] leading-relaxed text-slate-400">
-          <span className="font-semibold text-slate-200">Practice account: </span>
+        <p className="type-body measure text-fg-muted">
+          <span className="font-semibold text-fg">Practice account: </span>
           <span className="tabular">{formatCompactPeso(account.startingCapitalPhp)}</span> play money ·{' '}
           {riskPct.toFixed(2)}% risk per trade — every plan below is sized to fit.
         </p>
@@ -102,14 +102,14 @@ export function WelcomeSetupBanner({
             type="button"
             aria-expanded={false}
             onClick={() => setExpanded(true)}
-            className="text-[10px] font-semibold text-slate-300 underline decoration-line underline-offset-2 transition hover:text-mint-400"
+            className="text-2xs font-semibold text-fg-muted underline decoration-line underline-offset-2 transition hover:text-mint-400"
           >
             Change my setup
           </button>
           <button
             type="button"
             onClick={dismiss}
-            className="text-[10px] text-slate-500 underline decoration-line underline-offset-2 transition hover:text-slate-300"
+            className="text-2xs text-fg-subtle underline decoration-line underline-offset-2 transition hover:text-fg-muted"
           >
             Hide
           </button>
@@ -138,14 +138,14 @@ export function WelcomeSetupBanner({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-2xl">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-mint-400/40 bg-mint-400/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-mint-400 uppercase">
+            <span className="rounded-full border border-mint-400/40 bg-mint-400/10 px-2 py-0.5 type-badge text-mint-400">
               New here?
             </span>
-            <h2 className="text-sm font-semibold text-slate-100">
+            <h2 className="text-sm font-semibold text-fg">
               Set up your practice account in three taps
             </h2>
           </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+          <p className="mt-1.5 type-body measure text-fg-muted">
             This is a practice account: no real money moves. Tell the desk how much play money to
             assume and how careful it should be, and every buy plan on this page will be sized to
             fit.
@@ -167,7 +167,7 @@ export function WelcomeSetupBanner({
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         <div>
           <div className="flex items-center gap-1.5">
-            <p className="simple-label text-[10px] font-semibold tracking-[0.16em] text-slate-500 uppercase">
+            <p className="type-eyebrow text-fg-subtle simple-label">
               1 · How much play money?
             </p>
             <InfoTip
@@ -183,20 +183,20 @@ export function WelcomeSetupBanner({
                 aria-pressed={budget === amount}
                 onClick={() => setBudget(amount)}
                 className={cn(
-                  'rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition',
+                  'rounded-lg border px-2.5 py-1.5 type-caption font-semibold transition',
                   budget === amount
                     ? 'border-mint-400/50 bg-mint-400/10 text-mint-400'
-                    : 'border-line/80 bg-ink-800/60 text-slate-400 hover:text-slate-200',
+                    : 'border-line/80 bg-ink-800/60 text-fg-muted hover:text-fg',
                 )}
               >
                 {formatCompactPeso(amount)}
               </button>
             ))}
           </div>
-          <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-500">
+          <label className="mt-2 flex items-center gap-2 type-caption text-fg-subtle">
             <span>Or type it:</span>
             <span className="flex items-center gap-1 rounded-lg border border-line/80 bg-ink-900 px-2 py-1">
-              <span aria-hidden className="text-slate-500">
+              <span aria-hidden className="text-fg-subtle">
                 ₱
               </span>
               <input
@@ -207,18 +207,18 @@ export function WelcomeSetupBanner({
                 value={budget}
                 onChange={(event) => setBudget(Math.max(0, Number(event.target.value) || 0))}
                 aria-label="Starting practice capital in pesos"
-                className="tabular w-24 bg-transparent text-xs text-slate-200 outline-none"
+                className="tabular w-24 bg-transparent type-body text-fg outline-none"
               />
             </span>
           </label>
-          <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600">
+          <p className="mt-1.5 text-2xs leading-relaxed text-fg-faint">
             Changing this resets the cash balance only while the account is empty.
           </p>
         </div>
 
         <div>
           <div className="flex items-center gap-1.5">
-            <p className="simple-label text-[10px] font-semibold tracking-[0.16em] text-slate-500 uppercase">
+            <p className="type-eyebrow text-fg-subtle simple-label">
               2 · How careful should the desk be?
             </p>
             <InfoTip
@@ -240,38 +240,38 @@ export function WelcomeSetupBanner({
                     : 'border-line/80 bg-ink-850/60 hover:border-slate-500/50',
                 )}
               >
-                <p className="text-xs font-semibold text-slate-100">{entry.label}</p>
-                <p className="mt-0.5 text-[10px] text-slate-500">{entry.tagline}</p>
-                <p className="tabular mt-1 text-[11px] font-semibold text-mint-400">
+                <p className="type-body font-semibold text-fg">{entry.label}</p>
+                <p className="mt-0.5 text-2xs text-fg-subtle">{entry.tagline}</p>
+                <p className="tabular mt-1 type-body font-semibold text-mint-400">
                   {entry.settings.maxRiskPerTradePct?.toFixed(2)}% risk
                 </p>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-2xs text-fg-subtle">
                   {entry.settings.maxPortfolioHeatPct?.toFixed(0)}% total limit
                 </p>
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{preset.detail}</p>
-          <p className="mt-1 text-[10px] text-slate-500">
+          <p className="mt-2 type-body measure text-fg-muted">{preset.detail}</p>
+          <p className="mt-1 text-2xs text-fg-subtle">
             {describeRiskPerTrade(preset.settings.maxRiskPerTradePct, budget)}
           </p>
         </div>
       </div>
 
       {error ? (
-        <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-[11px] text-rose-400">
+        <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3.5 py-3 type-caption text-rose-400">
           {error}
         </p>
       ) : null}
 
       {saved ? (
-        <p className="mt-3 rounded-lg border border-mint-400/30 bg-mint-400/5 px-3 py-2 text-[11px] text-mint-400">
+        <p className="mt-3 rounded-lg border border-mint-400/30 bg-mint-400/5 px-3.5 py-3 type-caption text-mint-400">
           Saved. Every buy plan on this page now uses your play-money budget and safety level.
         </p>
       ) : null}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] text-slate-600">
+        <p className="text-2xs text-fg-faint">
           You can change any of this later under My Trades → My Rules.
         </p>
         <div className="flex flex-wrap items-center gap-2">

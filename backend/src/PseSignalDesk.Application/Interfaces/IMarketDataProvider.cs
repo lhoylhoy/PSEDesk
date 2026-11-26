@@ -65,4 +65,23 @@ public interface IMarketDataProvider
         DateOnly tradeDate,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<OhlcvBar>>(Array.Empty<OhlcvBar>());
+
+    /// <summary>
+    /// Re-reads disclosures for specific companies through the exchange's <b>per-company</b>
+    /// listing, so a filing is attributed by the exchange's own company identifier instead of by
+    /// matching its headline to a company name.
+    /// <para>
+    /// This is a second, bounded pass rather than part of <see cref="FetchAsync"/>: the caller
+    /// knows which names survived the liquidity screen, and a walk-forward replay that fetches two
+    /// years of tape must not pay for a fan-out it does not use. The result is keyed by ticker and
+    /// contains only names that actually have filings; a failed lookup leaves that name on the
+    /// market-wide scrape. Providers that cannot resolve companies return an empty map.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>>> FetchCompanyDisclosuresAsync(
+        IReadOnlyList<string> tickers,
+        DateOnly sessionDate,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>>>(
+            new Dictionary<string, IReadOnlyList<StockDisclosure>>(StringComparer.OrdinalIgnoreCase));
 }

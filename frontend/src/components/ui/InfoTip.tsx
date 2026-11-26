@@ -24,7 +24,7 @@ export function InfoTip({ label, term, className }: InfoTipProps) {
         className={cn(
           // `relative` + the ::after ring grow the tap target to ~36px without changing the
           // 16px pill the desktop layout was designed around.
-          'relative inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-line bg-ink-800 text-[9px] font-semibold text-slate-400 transition after:absolute after:-inset-2.5 after:content-[""] hover:border-mint-400/50 hover:text-mint-400',
+          'relative inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-line bg-ink-800 text-2xs font-semibold text-fg-muted transition after:absolute after:-inset-2.5 after:content-[""] hover:border-mint-400/50 hover:text-mint-400',
           className,
         )}
       >

@@ -11,6 +11,7 @@ using PseSignalDesk.Application.Interfaces;
 using PseSignalDesk.Application.Services;
 using PseSignalDesk.Infrastructure.AI;
 using PseSignalDesk.Infrastructure.Configuration;
+using PseSignalDesk.Infrastructure.Diagnostics;
 using PseSignalDesk.Infrastructure.Knowledge;
 using PseSignalDesk.Infrastructure.MarketData;
 using PseSignalDesk.Infrastructure.Persistence;
@@ -184,6 +185,11 @@ builder.Services.AddSingleton<IDailyQuotationParser, PseDailyQuotationParser>();
 // backtest all request the same Yahoo chart URLs, and the cache serves those repeats (and
 // concurrent duplicates) from a single download.
 builder.Services.AddSingleton<MarketDataCache>();
+
+// What each upstream actually answered, so a silent degradation — PSE Edge returning an empty
+// disclosure page with HTTP 200 — is reported by GET /api/health/feeds instead of only existing
+// as a log line. In memory only: a restart honestly reports "unknown" until the first fetch.
+builder.Services.AddSingleton<IFeedHealthRegistry, FeedHealthRegistry>();
 
 builder.Services.AddHttpClient<IOllamaSignalEngine, OllamaSignalEngine>((serviceProvider, client) =>
 {

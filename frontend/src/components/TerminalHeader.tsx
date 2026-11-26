@@ -75,11 +75,14 @@ type SegmentOption<T extends string> = {
  */
 function SegmentedControl<T extends string>({
   label,
+  hint,
   value,
   options,
   onChange,
 }: {
   label: string;
+  /** Plain-language explanation of what the switch changes, read on hover and by a reader. */
+  hint?: string;
   value: T;
   options: SegmentOption<T>[];
   onChange: (value: T) => void;
@@ -88,6 +91,8 @@ function SegmentedControl<T extends string>({
     <div
       role="group"
       aria-label={label}
+      aria-description={hint}
+      title={hint}
       className="inline-flex items-center gap-0.5 rounded-xl border border-line/80 bg-ink-900/80 p-1 sm:h-10"
     >
       {options.map((option) => (
@@ -102,10 +107,10 @@ function SegmentedControl<T extends string>({
             // `sm:h-full` makes the inner pill exactly fill the 40px frame, so segments never
             // float shorter than the buttons next to them. `ui-button` lifts the label to the
             // Simple-mode type floor (Pro keeps the 10px terminal scale).
-            'inline-flex min-h-9 items-center rounded-lg px-3 text-[10px] font-semibold uppercase tracking-[0.14em] transition ui-button sm:h-full sm:min-h-0 sm:px-2.5',
+            'inline-flex min-h-9 items-center rounded-lg px-3 type-badge transition ui-button sm:h-full sm:min-h-0 sm:px-2.5',
             value === option.value
               ? 'bg-mint-400/10 text-mint-400 ring-1 ring-mint-400/30'
-              : 'text-slate-500 hover:text-slate-200',
+              : 'text-fg-subtle hover:text-fg',
           )}
         >
           {option.icon ? (
@@ -125,6 +130,7 @@ function ViewModeSwitch({ value, onChange }: { value: ViewMode; onChange: (mode:
   return (
     <SegmentedControl
       label="Detail level"
+      hint="Simple lists today’s calls — tap a row to open its detail sheet. Pro is the full quant table: odds, R:R, sizing and every indicator."
       value={value}
       onChange={onChange}
       options={[
@@ -174,21 +180,21 @@ function MoreMenu({
   };
 
   const itemClass =
-    'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-300 transition hover:bg-ink-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40';
+    'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left type-body font-medium text-fg-muted transition hover:bg-ink-700 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40';
   // Two tiny group labels replace a flat list of four unrelated sheets, so "what is this desk"
   // and "show me a result" stop reading as the same kind of thing.
   const groupClass =
-    'px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600';
+    'type-eyebrow px-3 pt-2.5 pb-1 text-fg-faint';
 
   return (
     <details className="group relative">
-      <summary className="flex h-10 cursor-pointer list-none items-center gap-1 rounded-xl border border-line/80 bg-ink-900/80 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition select-none ui-button hover:border-mint-400/40">
+      <summary className="flex h-10 cursor-pointer list-none items-center gap-1 rounded-xl border border-line/80 bg-ink-900/80 px-3 text-xs font-semibold text-fg transition select-none ui-button hover:border-mint-400/40">
         More
-        <span aria-hidden className="text-[10px] text-slate-500 transition group-open:rotate-180">
+        <span aria-hidden className="text-2xs text-fg-subtle transition group-open:rotate-180">
           ▾
         </span>
       </summary>
-      <div className="absolute right-0 z-40 mt-2 w-60 rounded-xl border border-line bg-ink-850 p-1 shadow-2xl shadow-black/60">
+      <div className="absolute right-0 z-40 mt-2 w-64 rounded-xl border border-line bg-ink-850 p-1.5 shadow-2xl shadow-black/60">
         <p className={groupClass}>Learn</p>
         <button
           type="button"
@@ -317,22 +323,22 @@ export function TerminalHeader({
 
   const alertBadge =
     portfolioAlerts > 0 ? (
-      <span className="rounded-full bg-amber-400/20 px-1.5 text-[9px] font-semibold text-amber-400">
+      <span className="type-caption rounded-full bg-amber-400/20 px-1.5 font-semibold text-amber-400">
         {portfolioAlerts}
       </span>
     ) : null;
 
   return (
-    <header className="panel flex flex-col gap-3 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5 lg:gap-4">
+    <header className="panel flex flex-col gap-3 p-4 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5 lg:gap-4">
       {/* Phone & small tablet: two thumb-sized rows instead of nine wrapped controls. */}
       <div className="flex flex-col gap-2 lg:hidden">
         <div className="flex items-center gap-2">
           <DeskLogo size="sm" />
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold tracking-tight text-white">
+            <h1 className="truncate text-lg font-semibold tracking-tight text-fg">
               PSE Signal Desk
             </h1>
-            <p className="truncate text-[10px] text-slate-500">
+            <p className="type-caption truncate text-fg-subtle">
               {simple
                 ? 'Clear buy, target and cut-loss plans'
                 : 'Probabilistic desk · server-owned odds'}
@@ -389,8 +395,8 @@ export function TerminalHeader({
         <div className="flex min-w-0 items-center gap-3">
           <DeskLogo />
           <div className="min-w-0 max-w-md">
-            <h1 className="text-lg font-semibold tracking-tight text-white">PSE Signal Desk</h1>
-            <p className="truncate text-[11px] text-slate-500" title={tagline}>
+            <h1 className="text-xl font-semibold tracking-tight text-fg">PSE Signal Desk</h1>
+            <p className="type-caption truncate text-fg-subtle" title={tagline}>
               {shortTagline}
             </p>
           </div>
@@ -427,7 +433,7 @@ export function TerminalHeader({
       <div className="flex flex-col gap-2 border-t border-line/60 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           {simple ? (
-            <span className="hidden text-[10px] uppercase tracking-[0.16em] text-slate-500 xl:inline">
+            <span className="type-caption hidden text-fg-subtle xl:inline">
               How long do you want to hold?
             </span>
           ) : null}
@@ -456,7 +462,7 @@ export function TerminalHeader({
         <div className="hidden items-center gap-2 lg:flex">
           <ThemeSwitch value={theme} onChange={onThemeChange} />
           <ViewModeSwitch value={viewMode} onChange={onViewModeChange} />
-          <span className="hidden whitespace-nowrap text-[11px] text-slate-500 xl:inline">
+          <span className="type-caption hidden whitespace-nowrap text-fg-subtle xl:inline">
             {dates.length} day{dates.length === 1 ? '' : 's'} saved
           </span>
         </div>
@@ -467,8 +473,8 @@ export function TerminalHeader({
         <DialogContent className="sm:max-w-md">
           <DialogStickyHeader>
             <div className="min-w-0">
-              <DialogTitle className="text-sm font-semibold text-white">Desk controls</DialogTitle>
-              <DialogDescription className="mt-0.5 text-[11px] text-slate-500">
+              <DialogTitle className="type-title text-fg">Desk controls</DialogTitle>
+              <DialogDescription className="type-caption mt-1 text-fg-subtle">
                 Trading day, detail level, theme and every sheet — one tap away.
               </DialogDescription>
             </div>
@@ -481,7 +487,7 @@ export function TerminalHeader({
 
           <div className="flex flex-col gap-4 pb-2">
             <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+              <span className="type-eyebrow text-fg-subtle">
                 Trading day
               </span>
               {datePicker()}
@@ -515,7 +521,7 @@ export function TerminalHeader({
 
             {simple || !quotationImport ? null : (
               <div className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-                <p className="mb-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                <p className="mb-2 type-eyebrow text-fg-subtle">
                   Daily quotations
                 </p>
                 {quotationImport}

@@ -35,13 +35,13 @@ export function Select({
         className={cn(
           // Full-width on phones (a 14rem trigger does not fit a 320px screen); compact from
           // `sm` up where the command bar has room for it.
-          'flex h-10 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-line/80 bg-ink-900/80 px-3 text-xs font-medium text-slate-200 transition sm:inline-flex sm:w-auto sm:min-w-54',
+          'flex h-10 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-line/80 bg-ink-900/80 px-3 text-xs font-medium text-fg transition sm:inline-flex sm:w-auto sm:min-w-54',
           'hover:border-mint-400/40 disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
       >
         <SelectPrimitive.Value placeholder={placeholder} />
-        <SelectPrimitive.Icon className="text-[10px] text-slate-500">▼</SelectPrimitive.Icon>
+        <SelectPrimitive.Icon className="text-2xs text-fg-subtle">▼</SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
@@ -57,14 +57,14 @@ export function Select({
                 value={option.value}
                 disabled={option.disabled}
                 className={cn(
-                  'flex cursor-pointer items-center justify-between gap-4 rounded-lg px-3 py-2 text-xs text-slate-300 outline-none',
-                  'data-highlighted:bg-ink-700 data-highlighted:text-white',
+                  'flex cursor-pointer items-center justify-between gap-4 rounded-lg px-3 py-2 type-caption text-fg-muted outline-none',
+                  'data-highlighted:bg-ink-700 data-highlighted:text-fg',
                   'data-disabled:cursor-not-allowed data-disabled:opacity-40',
                 )}
               >
                 <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
                 {option.hint ? (
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{option.hint}</span>
+                  <span className="type-eyebrow text-fg-subtle">{option.hint}</span>
                 ) : null}
               </SelectPrimitive.Item>
             ))}

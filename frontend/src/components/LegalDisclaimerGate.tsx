@@ -16,17 +16,17 @@ export function LegalDisclaimerGate({ onAccept }: { onAccept: () => void }) {
       <DialogContent size="md">
         <div className="flex flex-col gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+            <p className="type-eyebrow text-fg-subtle">
               Before you use the desk
             </p>
-            <DialogTitle className="mt-1 text-xl font-semibold text-white">
+            <DialogTitle className="mt-1 text-xl font-semibold text-fg">
               A research notebook, not an adviser
             </DialogTitle>
-            <DialogDescription className="mt-2 text-sm leading-relaxed text-slate-300">
+            <DialogDescription className="mt-2 text-sm leading-relaxed text-fg-muted">
               Five things worth knowing. The full text lives in{' '}
-              <code className="rounded bg-ink-800 px-1 py-0.5 text-[11px] text-slate-300">DISCLAIMER.md</code>,{' '}
-              <code className="rounded bg-ink-800 px-1 py-0.5 text-[11px] text-slate-300">PRIVACY.md</code> and{' '}
-              <code className="rounded bg-ink-800 px-1 py-0.5 text-[11px] text-slate-300">
+              <code className="rounded bg-ink-800 px-1 py-0.5 text-xs text-fg-muted">DISCLAIMER.md</code>,{' '}
+              <code className="rounded bg-ink-800 px-1 py-0.5 text-xs text-fg-muted">PRIVACY.md</code> and{' '}
+              <code className="rounded bg-ink-800 px-1 py-0.5 text-xs text-fg-muted">
                 THIRD_PARTY_NOTICES.md
               </code>{' '}
               in the repository.
@@ -36,10 +36,10 @@ export function LegalDisclaimerGate({ onAccept }: { onAccept: () => void }) {
           <ul className="flex flex-col gap-3">
             {LEGAL_SECTIONS.map((section) => (
               <li key={section.title} className="rounded-xl border border-line/70 bg-ink-800/50 px-3.5 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200">
+                <p className="type-eyebrow text-fg">
                   {section.title}
                 </p>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-slate-400">{section.body}</p>
+                <p className="type-body measure mt-1.5 text-fg-muted">{section.body}</p>
               </li>
             ))}
           </ul>
@@ -48,7 +48,7 @@ export function LegalDisclaimerGate({ onAccept }: { onAccept: () => void }) {
             <Button variant="primary" onClick={onAccept} className="w-full">
               I understand — open the desk
             </Button>
-            <p className="text-center text-[11px] leading-relaxed text-slate-500">
+            <p className="text-center type-caption text-fg-subtle">
               Accepting stores one flag in this browser. There is no account, and leaving the desk is as
               simple as closing the tab.
             </p>

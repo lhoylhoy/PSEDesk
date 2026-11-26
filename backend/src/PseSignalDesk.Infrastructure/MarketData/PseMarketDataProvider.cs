@@ -11,6 +11,7 @@ using PseSignalDesk.Application.Services;
 using PseSignalDesk.Domain.Enums;
 using PseSignalDesk.Domain.Services;
 using PseSignalDesk.Infrastructure.Configuration;
+using PseSignalDesk.Infrastructure.Diagnostics;
 using PseSignalDesk.Infrastructure.Scheduling;
 
 namespace PseSignalDesk.Infrastructure.MarketData;
@@ -57,6 +58,13 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     private const string LiveQuotationSource = "pse-dqr-live";
 
     /// <summary>
+    /// How many per-company disclosure pages are in flight at once. The fan-out is at most one
+    /// request per screened name, so the cap is politeness to the exchange rather than a
+    /// throughput requirement.
+    /// </summary>
+    private const int CompanyDisclosureConcurrency = 8;
+
+    /// <summary>
     /// Upstream freshness bounds. A run only needs the tape to be right for as long as it lasts,
     /// and the daily run, a backtest and the research panel all request the same chart URLs, so a
     /// chart body is reused for ten minutes and an Edge page for five. <see cref="InvalidateCache"/>
@@ -97,11 +105,42 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         @"(?<m>\d{1,2})/(?<d>\d{1,2})/(?<y>\d{4})",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// The disclosure table prints <c>Nov 26, 2026 05:20 PM</c> instead of <c>11/26/2026</c>. Both
+    /// forms have to be readable: a date the parser misses is not merely unparsed, it is kept as a
+    /// <em>subject line</em> and the filing is back-dated to the session.
+    /// </summary>
+    private static readonly Regex AnnounceDateRegex = new(
+        @"(?<mon>Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(?<d>\d{1,2}),\s*(?<y>\d{4})",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly string[] MonthAbbreviations =
+    {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+
+    /// <summary>
+    /// The short code cells of a disclosure table — <c>13-1</c>, <c>4-23</c>, <c>ETF-1</c>,
+    /// <c>DD-5</c>, <c>C08413-2026</c>, <c>DN00191-2026</c>. They are the PSE form and report
+    /// numbers that identify a filing, never a subject line, and the live table prints them in the
+    /// same row after the subject.
+    /// </summary>
+    private static readonly Regex FilingIdentifierRegex = new(
+        @"^(?:[A-Z]{0,4}\d{0,5}-\d{1,4}(?:-\d{4})?|\d{1,3}-[A-Z])$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly HttpClient _httpClient;
     private readonly MarketDataOptions _options;
     private readonly ILogger<PseMarketDataProvider> _logger;
     private readonly IDailyQuotationParser _quotationParser;
     private readonly MarketDataCache _cache;
+
+    /// <summary>
+    /// What each upstream actually answered during the last run. A silent degradation (Edge
+    /// answering "no records found" for the disclosure feed) is invisible in the return value, so
+    /// it is recorded here and surfaced by <c>GET /api/health/feeds</c>.
+    /// </summary>
+    private readonly IFeedHealthRegistry _feedHealth;
 
     /// <summary>
     /// The index symbols and proxy constituents as they are actually fetched: blank and repeated
@@ -118,23 +157,36 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     /// </summary>
     private readonly PseEdgeHistorySource? _edgeHistory;
 
+    /// <summary>
+    /// The per-company disclosure listing, used to attribute a filing by the exchange's own
+    /// <c>cmpy_id</c>. Always constructed — the option that bounds it is read per call, so a limit
+    /// of zero disables the work without changing the object graph.
+    /// </summary>
+    private readonly PseEdgeDisclosureSource _companyDisclosures;
+
     public PseMarketDataProvider(
         HttpClient httpClient,
         IOptions<MarketDataOptions> options,
         ILogger<PseMarketDataProvider> logger,
         IDailyQuotationParser? quotationParser = null,
-        MarketDataCache? cache = null)
+        MarketDataCache? cache = null,
+        IFeedHealthRegistry? feedHealth = null)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _logger = logger;
         _quotationParser = quotationParser ?? new PseDailyQuotationParser();
         _cache = cache ?? new MarketDataCache();
+
+        // A hand-built provider (every test, any DI-free caller) gets its own private ledger, so
+        // recording never requires the container and never leaks between instances.
+        _feedHealth = feedHealth ?? new FeedHealthRegistry();
         _indexSymbols = MarketDataOptions.DistinctNonBlank(_options.IndexYahooSymbols);
         _proxyConstituents = MarketDataOptions.DistinctNonBlank(_options.IndexProxyConstituents);
         _edgeHistory = _options.EnablePseEdgeHistory
-            ? new PseEdgeHistorySource(httpClient, _options, _cache, logger)
+            ? new PseEdgeHistorySource(httpClient, _options, _cache, logger, _feedHealth)
             : null;
+        _companyDisclosures = new PseEdgeDisclosureSource(httpClient, _options, _cache, logger, _feedHealth);
     }
 
     /// <summary>
@@ -159,6 +211,10 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         int? lookbackDaysOverride,
         CancellationToken cancellationToken = default)
     {
+        // Every counter below describes this run. Process-lifetime sources (embeddings) keep
+        // theirs, because they are exercised at indexing time rather than per session.
+        _feedHealth.BeginRun();
+
         var lookbackDays = NormalizeLookback(lookbackDaysOverride);
         var index = await ResolveIndexAsync(tradeDate, lookbackDays, cancellationToken);
         var indexBars = index.Bars;
@@ -383,6 +439,29 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         var brent = ReadMacroValue(await brentTask, sessionDate, decimals: 2);
         var ephe = ReadMacroValue(await epheTask, sessionDate, decimals: 2);
 
+        // The dials are context, not signals: a missing one is reported, never fabricated. The
+        // health ledger says how many of the three survived, so a permanently absent symbol is
+        // visible instead of being read as "no macro risk today".
+        var reported = new[] { us10Y.Close, brent.Close, ephe.Close }.Count(close => close is not null);
+
+        if (reported == 0)
+        {
+            _feedHealth.RecordFailure(
+                FeedSource.MacroDials,
+                "none of the three cross-asset dials (US 10Y, Brent, EPHE) reported.");
+        }
+        else if (reported < 3)
+        {
+            _feedHealth.RecordDegraded(
+                FeedSource.MacroDials,
+                $"{reported} of 3 cross-asset dials reported; the rest stay unreported.",
+                reported);
+        }
+        else
+        {
+            _feedHealth.RecordSuccess(FeedSource.MacroDials, "3 of 3 cross-asset dials reported.", reported);
+        }
+
         return new MacroBenchmarks(
             us10Y.Close,
             us10Y.Change,
@@ -515,6 +594,10 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
                 if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
                 {
+                    _feedHealth.RecordSkipped(
+                        FeedSource.QuotationReport,
+                        $"{sessionDate:yyyy-MM-dd}: no report published at {(int)response.StatusCode} for the configured template.");
+
                     _logger.LogInformation(
                         "No PSE Daily Quotation Report at {Url} (HTTP {Status}).",
                         uri,
@@ -524,6 +607,10 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    _feedHealth.RecordFailure(
+                        FeedSource.QuotationReport,
+                        $"{sessionDate:yyyy-MM-dd}: HTTP {(int)response.StatusCode}.");
+
                     _logger.LogWarning(
                         "PSE Daily Quotation Report at {Url} returned HTTP {Status}; foreign flow stays unreported.",
                         uri,
@@ -536,11 +623,20 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
                 if (!report.HasData)
                 {
+                    _feedHealth.RecordDegraded(
+                        FeedSource.QuotationReport,
+                        $"{sessionDate:yyyy-MM-dd}: the report answered but contained no recognizable foreign-flow rows.");
+
                     _logger.LogWarning(
                         "PSE Daily Quotation Report at {Url} contained no recognizable foreign-flow rows.",
                         uri);
                     continue;
                 }
+
+                _feedHealth.RecordSuccess(
+                    FeedSource.QuotationReport,
+                    $"{sessionDate:yyyy-MM-dd}: market net foreign {(report.MarketNetForeignFlowPhp is decimal flow ? flow.ToString("0.##", CultureInfo.InvariantCulture) : "unreported")}, {report.ByTicker.Count} ticker(s).",
+                    report.ByTicker.Count);
 
                 _logger.LogInformation(
                     "Parsed the official PSE Daily Quotation Report for {Date}: market net foreign {Flow}, " +
@@ -558,6 +654,10 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
             }
             catch (Exception ex)
             {
+                _feedHealth.RecordFailure(
+                    FeedSource.QuotationReport,
+                    $"{sessionDate:yyyy-MM-dd}: {ex.GetType().Name} while reading the report.");
+
                 _logger.LogWarning(ex, "PSE Daily Quotation Report fetch failed for {Url}.", uri);
             }
         }
@@ -986,6 +1086,72 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     }
 
     /// <summary>
+    /// Reads each screened name's disclosures from the exchange's <b>per-company</b> listing, so
+    /// the attribution is the exchange's own <c>cmpy_id</c> rather than a headline match.
+    /// <para>
+    /// The market-wide page prints subject, date and form numbers with no company column, which
+    /// leaves a template like "Mergers and Consolidations" attributable to nobody and the
+    /// structural trap screen silently unenforced. This pass closes that gap for the names that
+    /// could actually reach the book — at most
+    /// <see cref="MarketDataOptions.DisclosureCompanyFanoutLimit"/> of them — and costs one GET
+    /// each, eight at a time. Every name that comes back empty keeps whatever the market-wide
+    /// scrape attributed, so the two paths compose instead of replacing one another.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>>> FetchCompanyDisclosuresAsync(
+        IReadOnlyList<string> tickers,
+        DateOnly sessionDate,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new Dictionary<string, IReadOnlyList<StockDisclosure>>(StringComparer.OrdinalIgnoreCase);
+        var limit = Math.Max(0, _options.DisclosureCompanyFanoutLimit);
+
+        // A limit of zero is the documented rollback: the run keeps the market-wide scrape alone.
+        var targets = limit == 0
+            ? new List<string>()
+            : MarketDataOptions.DistinctNonBlank(tickers).Take(limit).ToList();
+
+        if (targets.Count == 0)
+        {
+            return result;
+        }
+
+        await Parallel.ForEachAsync(
+            targets,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = CompanyDisclosureConcurrency,
+                CancellationToken = cancellationToken
+            },
+            async (ticker, token) =>
+            {
+                var filings = await _companyDisclosures.FetchAsync(ticker, sessionDate, token);
+
+                if (filings.Count == 0)
+                {
+                    return;
+                }
+
+                // A fan-out writes from eight threads; the dictionary is the only shared state.
+                lock (result)
+                {
+                    result[ticker] = filings;
+                }
+            });
+
+        if (result.Count > 0)
+        {
+            _feedHealth.RecordSuccess(
+                FeedSource.PseEdgeDisclosures,
+                $"{sessionDate:yyyy-MM-dd}: {result.Count} of {targets.Count} screened name(s) filed " +
+                "through their own Edge page.",
+                result.Count);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Scrapes PSE Edge announcements across the configured pages and both listings. The first
     /// announcement page is the live contract: a transport error, timeout, non-2xx status or an
     /// empty page is fatal (503). Extra pages and the company-disclosure listing are best-effort,
@@ -1000,10 +1166,18 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
         if (filings.Count == 0)
         {
+            // PSE Edge answers 200 with a "no records found" page, so this is not a transport
+            // failure — it is the silent state that leaves the trap screen unenforced. Recording
+            // it as degraded is what makes the desk report it instead of looking healthy.
+            _feedHealth.RecordDegraded(
+                FeedSource.PseEdgeDisclosures,
+                $"{sessionDate:yyyy-MM-dd}: PSE Edge answered with no filing rows.");
             return result;
         }
 
-        foreach (var (ticker, tickerFilings) in AttributeFilings(filings))
+        var attributed = AttributeFilings(filings);
+
+        foreach (var (ticker, tickerFilings) in attributed)
         {
             var matches = tickerFilings
                 .GroupBy(filing => filing.Headline, StringComparer.OrdinalIgnoreCase)
@@ -1017,6 +1191,20 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
             {
                 result[ticker] = matches;
             }
+        }
+
+        if (result.Count == 0)
+        {
+            _feedHealth.RecordDegraded(
+                FeedSource.PseEdgeDisclosures,
+                $"{sessionDate:yyyy-MM-dd}: {filings.Count} filing(s) read, none attributable to a tracked ticker.");
+        }
+        else
+        {
+            _feedHealth.RecordSuccess(
+                FeedSource.PseEdgeDisclosures,
+                $"{sessionDate:yyyy-MM-dd}: {filings.Count} filing(s) across {result.Count} tracked name(s).",
+                filings.Count);
         }
 
         return result;
@@ -1435,7 +1623,26 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
                     return ChartFetch.Missing($"HTTP 404 for {symbol}.");
                 }
 
-                return ParseChart(symbol, body, tradeDate, roundToTick, dropZeroVolume);
+                var fetch = ParseChart(symbol, body, tradeDate, roundToTick, dropZeroVolume);
+
+                // One observation per answered chart. A body with no series is a skip: the host
+                // answered correctly, it simply does not publish this symbol (every {TICKER}.PS
+                // is in that state today).
+                if (fetch.SymbolUnavailable)
+                {
+                    _feedHealth.RecordSkipped(
+                        FeedSource.YahooCharts,
+                        $"{symbol}: {(fetch.UnavailableReason ?? "no series").TrimEnd('.')}");
+                }
+                else
+                {
+                    _feedHealth.RecordSuccess(
+                        FeedSource.YahooCharts,
+                        $"{symbol}: {fetch.Bars.Count} bar(s).",
+                        fetch.Bars.Count);
+                }
+
+                return fetch;
             }
             catch (MarketDataUnavailableException ex) when (hostIndex < hosts.Count - 1)
             {
@@ -1490,11 +1697,18 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
+                _feedHealth.RecordSkipped(
+                    FeedSource.YahooCharts,
+                    $"{symbol}: HTTP 404 (Yahoo does not publish this symbol).");
                 return null;
             }
 
             if (!response.IsSuccessStatusCode)
             {
+                _feedHealth.RecordFailure(
+                    FeedSource.YahooCharts,
+                    $"{symbol}: HTTP {(int)response.StatusCode}.");
+
                 throw new MarketDataUnavailableException(
                     $"Yahoo Finance returned HTTP {(int)response.StatusCode} for {symbol}. " +
                     "The live feed is unavailable, so no signal can be produced.");
@@ -1509,12 +1723,20 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         }
         catch (OperationCanceledException ex)
         {
+            _feedHealth.RecordFailure(
+                FeedSource.YahooCharts,
+                $"{symbol}: no answer within {_options.RequestTimeoutSeconds}s.");
+
             throw new MarketDataUnavailableException(
                 $"Yahoo Finance did not answer for {symbol} within {_options.RequestTimeoutSeconds}s.",
                 ex);
         }
         catch (HttpRequestException ex)
         {
+            _feedHealth.RecordFailure(
+                FeedSource.YahooCharts,
+                $"{symbol}: transport error ({ex.GetType().Name}).");
+
             throw new MarketDataUnavailableException($"Could not reach Yahoo Finance for {symbol}.", ex);
         }
     }
@@ -2089,6 +2311,14 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
                     continue;
                 }
 
+                // The PSE form and report numbers that follow the subject on the live disclosure
+                // table are identifiers, not subjects: read as headlines they turned one filing
+                // into three and pushed "— C08413-2026" into the prompt.
+                if (candidate.Length <= 20 && FilingIdentifierRegex.IsMatch(candidate))
+                {
+                    continue;
+                }
+
                 if (seen.Add(candidate))
                 {
                     texts.Add(candidate);
@@ -2101,25 +2331,41 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
     private static DateOnly? ParseFilingDate(string text)
     {
-        var match = FilingDateRegex.Match(text);
-        if (!match.Success)
+        var numeric = FilingDateRegex.Match(text);
+
+        if (numeric.Success)
+        {
+            return BuildDate(
+                int.Parse(numeric.Groups["m"].Value, CultureInfo.InvariantCulture),
+                int.Parse(numeric.Groups["d"].Value, CultureInfo.InvariantCulture),
+                int.Parse(numeric.Groups["y"].Value, CultureInfo.InvariantCulture));
+        }
+
+        var spelled = AnnounceDateRegex.Match(text);
+
+        if (!spelled.Success)
         {
             return null;
         }
 
-        var month = int.Parse(match.Groups["m"].Value, CultureInfo.InvariantCulture);
-        var day = int.Parse(match.Groups["d"].Value, CultureInfo.InvariantCulture);
-        var year = int.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture);
+        var month = Array.FindIndex(
+            MonthAbbreviations,
+            name => name.Equals(spelled.Groups["mon"].Value, StringComparison.OrdinalIgnoreCase)) + 1;
 
-        if (month is < 1 or > 12 ||
-            day < 1 ||
-            day > DateTime.DaysInMonth(year, month))
-        {
-            return null;
-        }
-
-        return new DateOnly(year, month, day);
+        return month == 0
+            ? null
+            : BuildDate(
+                month,
+                int.Parse(spelled.Groups["d"].Value, CultureInfo.InvariantCulture),
+                int.Parse(spelled.Groups["y"].Value, CultureInfo.InvariantCulture));
     }
+
+    private static DateOnly? BuildDate(int month, int day, int year) =>
+        month is < 1 or > 12 ||
+        day < 1 ||
+        day > DateTime.DaysInMonth(year, month)
+            ? null
+            : new DateOnly(year, month, day);
 
     private static string FormatNumber(decimal value, string format) =>
         value.ToString(format, CultureInfo.InvariantCulture);

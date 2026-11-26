@@ -31,10 +31,10 @@ export function DropPanel({ drops, friendly = false }: DropPanelProps) {
   // calm day. One quiet line is enough to reassure the reader the desk checked.
   if (friendly && drops.length === 0) {
     return (
-      <section className="panel px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <p className="text-[11px] font-semibold text-slate-300">Nothing changed on yesterday’s picks</p>
-          <p className="text-[10px] text-slate-500">The same names are still in play — no action needed.</p>
+      <section className="panel px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <p className="type-body font-semibold text-fg-muted">Nothing changed on yesterday’s picks</p>
+          <p className="type-caption text-fg-subtle">The same names are still in play — no action needed.</p>
         </div>
       </section>
     );
@@ -42,25 +42,25 @@ export function DropPanel({ drops, friendly = false }: DropPanelProps) {
 
   return (
     <section className="panel @container p-4 sm:p-5">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">
+          <h2 className="type-title text-fg">
             {friendly ? "Updates on Yesterday's Picks" : 'Dropped from yesterday'}
           </h2>
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="type-caption measure mt-1.5 text-fg-subtle">
             {friendly
               ? 'These names left the list. If you owned them, this is what it means for you.'
               : 'Every exit is reconciled server-side: stop breached, target achieved, or displaced by a stronger setup.'}
           </p>
         </div>
-        <span className="tabular rounded-full border border-line/80 bg-ink-850 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-slate-400">
-          {drops.length} {friendly ? 'UPDATE' : 'EXIT'}
-          {drops.length === 1 ? '' : 'S'}
+        <span className="tabular type-badge rounded-full border border-line/80 bg-ink-850 px-2.5 py-1 text-fg-muted">
+          {drops.length} {friendly ? 'update' : 'exit'}
+          {drops.length === 1 ? '' : 's'}
         </span>
       </header>
 
       {drops.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-dashed border-line/80 bg-ink-950/40 px-4 py-6 text-center text-xs text-slate-500">
+        <p className="type-body measure measure-tight mx-auto mt-4 rounded-xl border border-dashed border-line/80 bg-ink-950/40 px-5 py-8 text-center text-fg-subtle">
           {friendly
             ? 'Nothing changed versus the last list — the same names are still in play.'
             : 'No names left the ranked list versus the previous session.'}
@@ -75,37 +75,37 @@ export function DropPanel({ drops, friendly = false }: DropPanelProps) {
             return (
               <li
                 key={`${drop.ticker}-${drop.previousRank ?? 'x'}`}
-                className="flex flex-col gap-2 rounded-xl border border-line/70 bg-ink-850/70 p-3"
+                className="flex flex-col gap-2.5 rounded-xl border border-line/70 bg-ink-850/70 px-3.5 py-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p
                       className={cn(
-                        'text-sm font-semibold text-slate-100',
-                        friendly ? 'leading-tight' : 'font-mono tracking-wide',
+                        'type-lead font-semibold text-fg',
+                        friendly ? null : 'font-mono',
                       )}
                     >
                       {friendly ? companyLabel(drop.ticker, drop.companyName) : drop.ticker}
                     </p>
-                    <p className="truncate text-[11px] text-slate-500">
+                    <p className="type-caption mt-0.5 truncate text-fg-subtle">
                       {friendly ? `${drop.ticker} · ${drop.companyName}` : drop.companyName}
                     </p>
                   </div>
-                  <span className="tabular shrink-0 rounded-md border border-line/70 bg-ink-900 px-1.5 py-0.5 text-[10px] text-slate-400">
+                  <span className="tabular type-caption shrink-0 rounded-md border border-line/70 bg-ink-900 px-1.5 py-0.5 text-fg-muted">
                     {drop.previousRank != null ? `was #${drop.previousRank}` : 'unranked'}
                   </span>
                 </div>
 
                 <span
                   className={cn(
-                    'inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase',
+                    'type-badge inline-flex w-fit items-center rounded-full border px-2 py-0.5',
                     style.className,
                   )}
                 >
                   {friendly ? style.friendlyLabel : style.label}
                 </span>
 
-                <p className="text-[11px] leading-relaxed text-slate-400">{drop.reason}</p>
+                <p className="type-caption measure text-fg-muted">{drop.reason}</p>
               </li>
             );
           })}

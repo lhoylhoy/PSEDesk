@@ -47,12 +47,12 @@ function KpiTile({
 }) {
   const tile = (
     <div
-      className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2"
+      className="rounded-xl border border-line/70 bg-ink-850/80 px-3.5 py-3"
       tabIndex={hint ? 0 : undefined}
     >
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={cn('tabular mt-1 text-sm font-semibold text-slate-100', tone)}>{value}</p>
-      {detail ? <p className="tabular mt-0.5 text-[10px] text-slate-500">{detail}</p> : null}
+      <p className="type-eyebrow text-fg-subtle">{label}</p>
+      <p className={cn('tabular mt-1 text-sm font-semibold text-fg', tone)}>{value}</p>
+      {detail ? <p className="tabular mt-0.5 text-2xs text-fg-subtle">{detail}</p> : null}
     </div>
   );
 
@@ -68,7 +68,7 @@ function outcomeTone(status: string): string {
     return 'text-rose-400';
   }
 
-  return 'text-slate-400';
+  return 'text-fg-muted';
 }
 
 /**
@@ -77,14 +77,14 @@ function outcomeTone(status: string): string {
  */
 function realizedTone(value: number | null): string {
   if (value == null) {
-    return 'text-slate-400';
+    return 'text-fg-muted';
   }
 
   if (value > 0) {
     return 'text-mint-400';
   }
 
-  return value < 0 ? 'text-rose-400' : 'text-slate-300';
+  return value < 0 ? 'text-rose-400' : 'text-fg-muted';
 }
 
 export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simple' }: ScorecardDialogProps) {
@@ -186,10 +186,10 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
       <DialogContent size="lg">
         <DialogStickyHeader>
           <div className="min-w-0">
-            <DialogTitle className="text-lg font-semibold text-white">
+            <DialogTitle className="text-lg font-semibold text-fg">
               {simple ? 'Past Results & Track Record' : 'Desk scorecard'}
             </DialogTitle>
-            <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
+            <DialogDescription className="mt-1 max-w-2xl type-body measure text-fg-muted">
               {simple
                 ? `Every pick the desk published for the ${meta.friendlyTab.toLowerCase()} list, checked against what the price actually did afterwards. This is the model’s own paper record, not a client account, and nothing is back-filled.`
                 : `${meta.label} book · every persisted pick graded against the ${meta.holding} of OHLC sessions that followed it. Win rate, expectancy and Brier calibration come from the stored ledger, never from the model's own claims, and the book is the desk's own paper record rather than a client account.`}
@@ -213,7 +213,7 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
         {view === 'scorecard' ? (
           <>
         {status === 'loading' ? (
-          <p className="mt-4 text-xs text-slate-500">Grading the ledger…</p>
+          <p className="mt-4 text-xs text-fg-subtle">Grading the ledger…</p>
         ) : null}
 
         {status === 'error' ? (
@@ -237,7 +237,7 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                 label={labels.winRate}
                 value={graded ? formatProbability(scorecard.winRate) : '—'}
                 detail={simple ? 'hit target or ended higher' : 'target hit or positive expiry'}
-                tone={graded ? (scorecard.winRate >= 0.5 ? 'text-mint-400' : 'text-amber-400') : 'text-slate-500'}
+                tone={graded ? (scorecard.winRate >= 0.5 ? 'text-mint-400' : 'text-amber-400') : 'text-fg-subtle'}
                 hint={
                   simple
                     ? 'Out of every 100 picks, how many made money. Anything above half is decent; the desk still needs the winners to be bigger than the losers.'
@@ -281,7 +281,7 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                       ? 'not enough graded picks yet'
                       : 'no forecasted pick graded yet'
                 }
-                tone={calibrated && scorecard.brierScore < 0.25 ? 'text-mint-400' : 'text-slate-200'}
+                tone={calibrated && scorecard.brierScore < 0.25 ? 'text-mint-400' : 'text-fg'}
                 hint={
                   simple
                     ? 'How close the desk’s win-chance guesses were to what actually happened. 0.250 is the score of always guessing 50/50, so lower than that means the guess is adding information.'
@@ -291,7 +291,7 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
             </dl>
 
             {simple ? (
-              <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+              <p className="mt-2 type-caption text-fg-subtle">
                 Short version: the hit rate says how often the desk was right, the average result says how much it
                 made per trade after fees, and the profit factor says whether the winners outweighed the losers. All
                 three are measured on what the price actually did afterwards — never on what the model claims.
@@ -299,14 +299,14 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
             ) : null}
 
             {!graded ? (
-              <p className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2.5 text-[11px] leading-relaxed text-slate-400">
+              <p className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 px-4 py-3 type-body measure text-fg-muted">
                 {simple
                   ? `Nothing has finished yet for this list. A pick is only graded once its ${meta.holding} holding window has passed, so this page fills in over time — nothing is back-filled or simulated.`
                   : `No ${meta.label.toLowerCase()} pick has been graded yet. The resolver waits for the horizon window to elapse, so this table fills in as the store accumulates sessions. Nothing is back-filled or simulated.`}
               </p>
             ) : null}
             {graded && !calibrated ? (
-              <p className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2.5 text-[11px] leading-relaxed text-slate-400">
+              <p className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 px-4 py-3 type-body measure text-fg-muted">
                 The graded picks here were stored before the odds migration, so they carry no forecast:
                 their realized R counts, but they are excluded from the Brier score and the calibration
                 buckets. The next forecasted run that resolves will start filling the table.
@@ -315,11 +315,11 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
             <OptionalDisclosure enabled={simple} title="Calibration & verdict breakdown">
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <section className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-                <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <h3 className="type-eyebrow text-fg-subtle">
                   Calibration · predicted vs realized
                 </h3>
                 {scorecard.calibration.length === 0 ? (
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-fg-subtle">
                     Calibration needs graded picks in at least one probability bucket. Picks stored
                     before the odds migration carry no probability and are excluded.
                   </p>
@@ -327,7 +327,7 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                   <div className="scroll-x mt-2">
                     <table className="w-full min-w-56 border-collapse text-left">
                     <thead>
-                      <tr className="text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                      <tr className="type-eyebrow text-fg-subtle">
                         <th className="py-1.5 font-medium">Bucket</th>
                         <th className="py-1.5 text-right font-medium">Predicted</th>
                         <th className="py-1.5 text-right font-medium">Realized</th>
@@ -340,19 +340,19 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
 
                         return (
                           <tr key={bucket.label} className="border-t border-line/50">
-                            <td className="py-1.5 text-[11px] text-slate-300">{bucket.label}</td>
-                            <td className="tabular py-1.5 text-right text-[11px] text-slate-400">
+                            <td className="py-1.5 text-xs text-fg-muted">{bucket.label}</td>
+                            <td className="tabular py-1.5 text-right text-xs text-fg-muted">
                               {bucket.predictedWinPct.toFixed(1)}%
                             </td>
                             <td
                               className={cn(
-                                'tabular py-1.5 text-right text-[11px] font-medium',
+                                'tabular py-1.5 text-right text-xs font-medium',
                                 Math.abs(drift) <= 10 ? 'text-mint-400' : 'text-amber-400',
                               )}
                             >
                               {bucket.actualWinPct.toFixed(1)}%
                             </td>
-                            <td className="tabular py-1.5 text-right text-[11px] text-slate-500">
+                            <td className="tabular py-1.5 text-right text-xs text-fg-subtle">
                               {formatInteger(bucket.sampleCount)}
                             </td>
                           </tr>
@@ -362,18 +362,18 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                     </table>
                   </div>
                 )}
-                <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
+                <p className="mt-2 type-caption text-fg-faint">
                   A bucket is on target when realized and predicted agree within ten points; the Brier score
                   above summarizes the whole table.
                 </p>
               </section>
 
               <section className="rounded-xl border border-line/70 bg-ink-850/60 p-3">
-                <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <h3 className="type-eyebrow text-fg-subtle">
                   Verdict breakdown · does TRADE beat WATCH?
                 </h3>
                 {scorecard.verdicts.length === 0 ? (
-                  <p className="mt-2 text-xs text-slate-500">No verdicts recorded for this horizon yet.</p>
+                  <p className="mt-2 text-xs text-fg-subtle">No verdicts recorded for this horizon yet.</p>
                 ) : (
                   <ul className="mt-2 space-y-1.5">
                     {scorecard.verdicts.map((row) => (
@@ -383,12 +383,12 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                       >
                         <span className="flex items-center gap-2">
                           <VerdictBadge verdict={row.verdict} friendly={simple} />
-                          <span className="tabular text-[10px] text-slate-500">
+                          <span className="tabular text-2xs text-fg-subtle">
                             {formatInteger(row.resolvedCount)} / {formatInteger(row.count)} graded
                           </span>
                         </span>
-                        <span className="flex items-center gap-3 text-[11px]">
-                          <span className="tabular text-slate-300">
+                        <span className="flex items-center gap-3 text-xs">
+                          <span className="tabular text-fg-muted">
                             {row.resolvedCount > 0 ? formatProbability(row.winRate) : '—'} win
                           </span>
                           <span
@@ -399,13 +399,13 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                           >
                             {row.resolvedCount > 0 ? formatR(row.averageRealizedNetR) : '—'} avg
                           </span>
-                          <span className="tabular text-slate-500">{formatR(row.totalRealizedNetR)} total</span>
+                          <span className="tabular text-fg-subtle">{formatR(row.totalRealizedNetR)} total</span>
                         </span>
                       </li>
                     ))}
                   </ul>
                 )}
-                <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
+                <p className="mt-2 type-caption text-fg-faint">
                   If TRADE does not beat WATCH_ONLY over a real sample, the verdict rule is wrong and must be
                   revised — that is the point of grading the desk.
                 </p>
@@ -414,31 +414,31 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
             </OptionalDisclosure>
 
             <section className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-              <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{labels.recent}</h3>
+              <h3 className="type-eyebrow text-fg-subtle">{labels.recent}</h3>
               {scorecard.recentResolved.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-500">Nothing has resolved yet.</p>
+                <p className="mt-2 text-xs text-fg-subtle">Nothing has resolved yet.</p>
               ) : (
                 <ul className="mt-2 space-y-1.5">
                   {scorecard.recentResolved.map((pick) => (
                     <li
                       key={`${pick.ticker}-${pick.runDate}`}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line/60 bg-ink-900/60 px-2.5 py-1.5 text-[11px]"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line/60 bg-ink-900/60 px-2.5 py-1.5 text-xs"
                     >
                       <span className="flex items-center gap-2">
-                        <span className="font-mono font-semibold tracking-wide text-slate-200">
+                        <span className="font-mono font-semibold tracking-wide text-fg">
                           {pick.ticker}
                         </span>
                         <VerdictBadge verdict={pick.edgeVerdict} friendly={simple} />
-                        <span className="tabular text-slate-500">{formatDate(pick.runDate)}</span>
+                        <span className="tabular text-fg-subtle">{formatDate(pick.runDate)}</span>
                       </span>
                       <span className="flex flex-wrap items-center gap-3">
-                        <span className="tabular text-slate-500">
+                        <span className="tabular text-fg-subtle">
                           {formatPrice(pick.entryPrice)} →{' '}
                           {pick.outcomeExitPrice != null ? formatPrice(pick.outcomeExitPrice) : '—'}
                         </span>
                         <span
                           className={cn(
-                            'tabular text-[10px] uppercase tracking-wider',
+                            'tabular type-eyebrow',
                             outcomeTone(pick.outcomeStatus),
                           )}
                         >
@@ -449,7 +449,7 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                         >
                           {formatR(pick.realizedNetR)}
                         </span>
-                        <span className="tabular text-[10px] text-slate-600">
+                        <span className="tabular text-2xs text-fg-faint">
                           {pick.barsHeld != null ? `${pick.barsHeld}d held` : '—'} · P(win){' '}
                           {pick.winProbability > 0 ? formatProbability(pick.winProbability) : '—'}
                         </span>

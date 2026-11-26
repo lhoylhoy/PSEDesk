@@ -4,11 +4,13 @@ using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using PseSignalDesk.Application.Interfaces;
 using PseSignalDesk.Application.Models;
 using PseSignalDesk.Application.Services;
 using PseSignalDesk.Domain.Enums;
 using PseSignalDesk.Domain.Services;
 using PseSignalDesk.Infrastructure.Configuration;
+using PseSignalDesk.Infrastructure.Diagnostics;
 using PseSignalDesk.Infrastructure.MarketData;
 
 namespace PseSignalDesk.Tests.Infrastructure;
@@ -358,6 +360,34 @@ public sealed class PseMarketDataProviderTests
     }
 
     [Fact]
+    public async Task FetchAsync_reads_the_live_disclosure_table_date_and_ignores_its_identifier_columns()
+    {
+        // The shape companyDisclosures/search.ax actually serves (captured 2026-11-26): the subject
+        // is a link, the announce cell prints "Nov 21, 2026 10:05 AM", then the PSE form and report
+        // numbers. While the month-name date was unreadable the timestamp became a subject and
+        // every filing was re-dated to the session.
+        var html = "<table><thead><tr><th>Template Name</th><th>Announce Date and Time</th></tr></thead>" +
+                   "<tbody><tr>" +
+                   "<td><a href=\"#viewer\">SM Investments Corporation: Property-for-Share Swap - Additional Listing</a></td>" +
+                   "<td class=\"alignC\">Nov 21, 2026 10:05 AM</td>" +
+                   "<td class=\"alignC\">LD-3</td><td class=\"alignC\">LN00207-2026</td>" +
+                   "</tr></tbody></table>";
+
+        var provider = CreateProvider(new LiveFeedHandler(TradeDate, edgeHtml: html));
+
+        var batch = await provider.FetchAsync(TradeDate);
+
+        var sm = batch.Stocks.Single(stock => stock.Ticker == "SM");
+        var disclosure = Assert.Single(sm.Disclosures);
+
+        Assert.Equal(new DateOnly(2026, 11, 21), disclosure.Date);
+        Assert.Contains("Property-for-Share Swap", disclosure.Headline, StringComparison.Ordinal);
+        Assert.DoesNotContain("10:05", disclosure.Headline, StringComparison.Ordinal);
+        Assert.DoesNotContain("LD-3", disclosure.Headline, StringComparison.Ordinal);
+        Assert.DoesNotContain("LN00207", disclosure.Headline, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FetchAsync_reads_the_regime_from_the_heavyweight_proxy_when_the_index_has_no_history()
     {
         // Yahoo answers PSEI.PS with a single bar and no history, which is why the trend has to
@@ -698,12 +728,138 @@ public sealed class PseMarketDataProviderTests
         Assert.Equal(0, edge.RequestCount);
     }
 
+    [Fact]
+    public async Task FetchAsync_reports_the_disclosure_feed_degraded_when_edge_answers_with_no_filings()
+    {
+        // The live defect this ledger exists for: announcements/search.ax answers 200 with a "no
+        // records found" page, so FetchDisclosuresAsync returns an empty map and nothing throws.
+        // The trap screen is silently unenforced, and before this the run looked healthy.
+        var feedHealth = new FeedHealthRegistry();
+        var provider = CreateProvider(EdgeOnlyFeed(announcements: EmptyDisclosurePage()), configure: null, feedHealth);
+
+        var batch = await provider.FetchAsync(TradeDate);
+
+        Assert.True(batch.Stocks.Count >= 10, $"only {batch.Stocks.Count} tickers survived");
+        Assert.All(batch.Stocks, stock => Assert.Empty(stock.Disclosures));
+
+        var disclosures = FeedOf(feedHealth, FeedSource.PseEdgeDisclosures);
+
+        Assert.Equal(FeedStatus.Degraded, disclosures.Status);
+        Assert.Equal(0, disclosures.Failures);
+        Assert.Contains("no filing rows", disclosures.LastDetail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FetchAsync_reports_the_edge_history_feed_ok_and_yahoo_ok_with_skips_when_edge_fills_the_session()
+    {
+        var feedHealth = new FeedHealthRegistry();
+        var provider = CreateProvider(EdgeOnlyFeed(announcements: PlainDisclosurePage()), configure: null, feedHealth);
+
+        await provider.FetchAsync(TradeDate);
+
+        var history = FeedOf(feedHealth, FeedSource.PseEdgeHistory);
+
+        Assert.Equal(FeedStatus.Ok, history.Status);
+        Assert.True(history.Successes >= 10, $"only {history.Successes} Edge series were counted");
+        Assert.Equal(0, history.Failures);
+        Assert.True(history.LastItemCount > 0);
+
+        // Yahoo is reachable but publishes no PSE equity: the host answered, so it is not failed —
+        // the 404s are skips, and the FX series keeps the feed from being "all skips".
+        var yahoo = FeedOf(feedHealth, FeedSource.YahooCharts);
+
+        Assert.Equal(FeedStatus.Ok, yahoo.Status);
+        Assert.True(yahoo.Skips > 0);
+        Assert.Equal(0, yahoo.Failures);
+    }
+
+    [Fact]
+    public async Task FetchAsync_reports_a_dead_edge_chart_as_a_feed_failure_not_a_skip()
+    {
+        var feedHealth = new FeedHealthRegistry();
+        var provider = CreateProvider(
+            new DarkYahooHandler(new EdgeFeedHandler(TradeDate, chartFails: true)),
+            configure: null,
+            feedHealth);
+
+        await Assert.ThrowsAsync<MarketDataUnavailableException>(() => provider.FetchAsync(TradeDate));
+
+        var history = FeedOf(feedHealth, FeedSource.PseEdgeHistory);
+
+        Assert.Equal(FeedStatus.Failed, history.Status);
+        Assert.True(history.Failures > 0);
+        Assert.Equal(0, history.Successes);
+        Assert.NotNull(history.LastFailureUtc);
+    }
+
+    [Fact]
+    public async Task FetchAsync_counts_one_observation_per_name_per_run_even_when_the_body_is_cached()
+    {
+        // A second run in the same process re-parses the cached bodies, so the ledger must count
+        // that read as an observation — otherwise the four horizons would report the tape as
+        // unobserved after the first one.
+        var feedHealth = new FeedHealthRegistry();
+        var provider = CreateProvider(EdgeOnlyFeed(announcements: PlainDisclosurePage()), configure: null, feedHealth);
+
+        await provider.FetchAsync(TradeDate);
+        var firstRun = FeedOf(feedHealth, FeedSource.PseEdgeHistory).Successes;
+
+        await provider.FetchAsync(TradeDate);
+        var secondRun = FeedOf(feedHealth, FeedSource.PseEdgeHistory).Successes;
+
+        Assert.True(firstRun > 0);
+        Assert.Equal(firstRun, secondRun);
+    }
+
+    /// <summary>
+    /// Yahoo is dark on every <c>.PS</c> symbol and PSE Edge fills the session, which is the live
+    /// shape of the tape. Both disclosure URLs answer with the supplied page.
+    /// </summary>
+    private static HttpMessageHandler EdgeOnlyFeed(string announcements)
+    {
+        var live = new LiveFeedHandler(TradeDate);
+        var edge = new EdgeFeedHandler(TradeDate);
+
+        return new StubHandler((request, token) =>
+        {
+            var uri = request.RequestUri?.ToString() ?? string.Empty;
+
+            if (uri.Contains("announcements/search.ax", StringComparison.Ordinal) ||
+                uri.Contains("companyDisclosures/search.ax", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(announcements, Encoding.UTF8, "text/html")
+                });
+            }
+
+            if (uri.Contains("edge.pse.com.ph", StringComparison.Ordinal))
+            {
+                return edge.RespondAsync(request, token);
+            }
+
+            // Yahoo still answers the FX and macro symbols; only the PSE series are dark.
+            return uri.Contains(".PS", StringComparison.Ordinal)
+                ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound))
+                : live.RespondAsync(request, token);
+        });
+    }
+
+    /// <summary>The page PSE Edge actually serves when the listing has no rows.</summary>
+    private static string EmptyDisclosurePage() =>
+        "<html><body><div class=\"list\">No records found.</div></body></html>";
+
+    /// <summary>A filing that names a tracked issuer, so attribution succeeds.</summary>
+    private static string PlainDisclosurePage() =>
+        "<html><body><a href=\"#\">SM Investments Corporation declares cash dividend</a></body></html>";
+
     private static PseMarketDataProvider CreateProvider(HttpMessageHandler handler) =>
         CreateProvider(handler, configure: null);
 
     private static PseMarketDataProvider CreateProvider(
         HttpMessageHandler handler,
-        Action<MarketDataOptions>? configure)
+        Action<MarketDataOptions>? configure,
+        IFeedHealthRegistry? feedHealth = null)
     {
         var options = new MarketDataOptions
         {
@@ -719,8 +875,12 @@ public sealed class PseMarketDataProviderTests
         return new PseMarketDataProvider(
             new HttpClient(handler),
             Options.Create(options),
-            NullLogger<PseMarketDataProvider>.Instance);
+            NullLogger<PseMarketDataProvider>.Instance,
+            feedHealth: feedHealth);
     }
+
+    private static FeedHealth FeedOf(FeedHealthRegistry registry, FeedSource source) =>
+        registry.Snapshot().Single(feed => feed.Source == source);
 
     private static bool IsMacroSymbol(HttpRequestMessage request)
     {

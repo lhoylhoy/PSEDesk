@@ -28,9 +28,9 @@ function Tile({
 }) {
   return (
     <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={cn('tabular mt-1 text-sm font-semibold text-slate-100', tone)}>{value}</p>
-      {detail ? <p className="tabular mt-0.5 text-[10px] text-slate-500">{detail}</p> : null}
+      <p className="type-eyebrow text-fg-subtle">{label}</p>
+      <p className={cn('tabular mt-1 text-sm font-semibold text-fg', tone)}>{value}</p>
+      {detail ? <p className="tabular mt-0.5 text-2xs text-fg-subtle">{detail}</p> : null}
     </div>
   );
 }
@@ -39,7 +39,7 @@ function Curve({ result }: { result: BacktestResult }) {
   const points = result.equityCurve;
 
   if (points.length < 2) {
-    return <p className="text-[11px] text-slate-500">Not enough settled sessions for a curve.</p>;
+    return <p className="text-xs text-fg-subtle">Not enough settled sessions for a curve.</p>;
   }
 
   // The index benchmark is drawn on the desk curve's own scale, so the vertical gap between the
@@ -81,7 +81,7 @@ function Curve({ result }: { result: BacktestResult }) {
             strokeWidth="1.2"
             strokeDasharray="2 2"
             vectorEffect="non-scaling-stroke"
-            className="text-slate-500"
+            className="text-fg-subtle"
           />
         ) : null}
         <polyline
@@ -93,7 +93,7 @@ function Curve({ result }: { result: BacktestResult }) {
           className={result.netReturnPct >= 0 ? 'text-mint-400' : 'text-rose-400'}
         />
       </svg>
-      <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+      <div className="mt-1 flex justify-between text-2xs text-fg-subtle">
         <span>{formatDate(result.startDate)}</span>
         <span className="tabular">
           {formatPrice(min)} – {formatPrice(max)}
@@ -101,7 +101,7 @@ function Curve({ result }: { result: BacktestResult }) {
         <span>{formatDate(result.endDate)}</span>
       </div>
       {hasBenchmark ? (
-        <p className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
+        <p className="mt-1 flex flex-wrap items-center gap-3 text-2xs text-fg-subtle">
           <span className="inline-flex items-center gap-1">
             <span
               className={cn(
@@ -183,7 +183,7 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
 
   if (status === 'loading') {
     return (
-      <p className="mt-4 text-xs text-slate-500">
+      <p className="mt-4 text-xs text-fg-subtle">
         {simple
           ? 'Replaying past prices to see how this plan would have done…'
           : `Replaying ${horizonMeta[horizon].label} rules on the tape…`}
@@ -193,7 +193,7 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
 
   if (status === 'error' && !result) {
     return (
-      <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-[11px] text-rose-400">
+      <p className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-xs text-rose-400">
         {error ?? 'Could not replay the horizon.'}
       </p>
     );
@@ -206,16 +206,16 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
   return (
     <div className="mt-4">
       {status === 'error' ? (
-        <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-400">
+        <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-xs text-amber-400">
           Showing the last replay from memory — the refresh failed: {error ?? 'unknown error'}
         </p>
       ) : null}
-      <p className="max-w-3xl text-[11px] leading-relaxed text-slate-400">
+      <p className="max-w-3xl type-body measure text-fg-muted">
         {simple
           ? `A simulated run on real past prices — not a real account. Up to five trades at once, about 1% of the practice money risked per trade inside a 6% total risk limit, at most two names and 35% of equity per sector, board lots, the full 0.690% round-trip broker fee and a realistic fill cost. It is then compared with just buying the whole market (the PSEi) and holding it. Nothing here looks into the future: every entry is decided only on prices that came before it.`
           : 'Up to five concurrent positions, 1% of equity risked at the stop inside a 6% portfolio heat cap, at most two names and 35% of equity per sector, fractional-Kelly sizing, board-lot rounded, charged the 0.690% statutory round trip plus a board-lot slippage estimate, with the money-manager weights refitted every 60 sessions, and measured against holding PSEI.PS over the identical window. Alpha is the slippage-adjusted net return minus the index — the desk pays friction, the benchmark does not. Every entry is decided on the bars that preceded it: no look-ahead, no re-optimised parameters, no synthetic fill.'}
       </p>
-      <p className="mt-2 max-w-3xl rounded-lg border border-line/70 bg-ink-850/60 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+      <p className="mt-2 max-w-3xl rounded-lg border border-line/70 bg-ink-850/60 px-3 py-2 type-caption text-fg-subtle">
         These are hypothetical results from one simulated path. They are not the record of a real
         account, they exclude taxes and your broker’s own pricing, and a favourable past path does not
         repeat. Past or simulated performance is not a reliable indicator of future results.
@@ -296,12 +296,12 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
         />
       </dl>
 
-      <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+      <p className="mt-2 type-caption text-fg-subtle">
         {describeAlphaPct(result.excessReturnPct)}
       </p>
 
       <div className="mt-3 rounded-xl border border-line/70 bg-ink-850/60 p-3">
-        <h3 className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+        <h3 className="type-eyebrow text-fg-subtle">
           {simple ? 'Your practice money over the test' : 'Equity curve'}
         </h3>
         <div className="mt-2">
@@ -310,7 +310,7 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
       </div>
 
       {result.trades.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-6 text-center text-xs text-slate-500">
+        <p className="mt-3 rounded-xl border border-line/60 bg-ink-850/50 px-4 py-6 text-center text-xs text-fg-subtle">
           {simple
             ? 'The plan never found a trade it liked in this window. A quiet test is an honest result, not a bug.'
             : 'The rules never fired a qualifying entry in this window — a flat replay is an honest result, not a bug.'}
@@ -325,8 +325,8 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-mono text-sm font-semibold text-white">{trade.ticker}</p>
-                    <p className="tabular text-[10px] text-slate-500">
+                    <p className="font-mono text-sm font-semibold text-fg">{trade.ticker}</p>
+                    <p className="tabular text-2xs text-fg-subtle">
                       {formatDate(trade.entryDate)} → {formatDate(trade.exitDate)} · {trade.barsHeld}{' '}
                       {simple ? 'days' : 'bars'}
                     </p>
@@ -340,16 +340,16 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
                     >
                       {formatPrice(trade.netPnlPhp)}
                     </p>
-                    <p className={cn('tabular text-[10px]', trade.netR >= 0 ? 'text-mint-400' : 'text-rose-400')}>
+                    <p className={cn('tabular text-2xs', trade.netR >= 0 ? 'text-mint-400' : 'text-rose-400')}>
                       {formatR(trade.netR)}
                     </p>
                   </div>
                 </div>
-                <p className="tabular mt-2 text-[10px] text-slate-400">
+                <p className="tabular mt-2 text-2xs text-fg-muted">
                   {formatPrice(trade.entryPrice)} → {formatPrice(trade.exitPrice)} ·{' '}
                   {formatInteger(trade.shares)} shares
                 </p>
-                <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                <p className="mt-1 text-2xs leading-snug text-fg-subtle">
                   {simple ? describeBacktestExit(trade.exitReason) : trade.exitReason.toLowerCase()}
                 </p>
               </li>
@@ -358,7 +358,7 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
           <div className="mt-3 hidden scroll-x rounded-xl border border-line/60 md:block">
             <table className="w-full min-w-176 border-collapse text-left">
               <thead>
-                <tr className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                <tr className="type-eyebrow text-fg-subtle">
                   <th className="sticky-col px-3 py-2 font-medium">{simple ? 'Stock' : 'Name'}</th>
                 <th className="px-3 py-2 font-medium">{simple ? 'Bought' : 'Entry'}</th>
                 <th className="px-3 py-2 font-medium">{simple ? 'Sold' : 'Exit'}</th>
@@ -372,21 +372,21 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
             <tbody>
               {result.trades.slice(-20).map((trade) => (
                 <tr key={`${trade.ticker}-${trade.entryDate}`} className="border-t border-line/60">
-                  <td className="sticky-col px-3 py-2 font-mono text-xs font-semibold tracking-wide text-white">
+                  <td className="sticky-col px-3 py-2 font-mono text-xs font-semibold tracking-wide text-fg">
                     {trade.ticker}
                   </td>
-                  <td className="tabular px-3 py-2 text-[11px] text-slate-400">
+                  <td className="tabular px-3 py-2 text-xs text-fg-muted">
                     {formatDate(trade.entryDate)} · {formatPrice(trade.entryPrice)}
                   </td>
-                  <td className="tabular px-3 py-2 text-[11px] text-slate-400">
+                  <td className="tabular px-3 py-2 text-xs text-fg-muted">
                     {formatDate(trade.exitDate)} · {formatPrice(trade.exitPrice)}
                   </td>
-                  <td className="tabular px-3 py-2 text-right text-[11px] text-slate-300">
+                  <td className="tabular px-3 py-2 text-right text-xs text-fg-muted">
                     {formatInteger(trade.shares)}
                   </td>
                   <td
                     className={cn(
-                      'tabular px-3 py-2 text-right text-[11px] font-semibold',
+                      'tabular px-3 py-2 text-right text-xs font-semibold',
                       trade.netPnlPhp >= 0 ? 'text-mint-400' : 'text-rose-400',
                     )}
                   >
@@ -394,14 +394,14 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
                   </td>
                   <td
                     className={cn(
-                      'tabular px-3 py-2 text-right text-[11px]',
+                      'tabular px-3 py-2 text-right text-xs',
                       trade.netR >= 0 ? 'text-mint-400' : 'text-rose-400',
                     )}
                   >
                     {formatR(trade.netR)}
                   </td>
-                  <td className="tabular px-3 py-2 text-right text-[11px] text-slate-400">{trade.barsHeld}</td>
-                  <td className="px-3 py-2 text-[10px] leading-snug text-slate-500">
+                  <td className="tabular px-3 py-2 text-right text-xs text-fg-muted">{trade.barsHeld}</td>
+                  <td className="px-3 py-2 text-2xs leading-snug text-fg-subtle">
                     {simple ? describeBacktestExit(trade.exitReason) : trade.exitReason.toLowerCase()}
                   </td>
                 </tr>
@@ -412,7 +412,7 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
         </>
       )}
 
-      <p className="mt-2 text-[10px] text-slate-600">
+      <p className="mt-2 text-2xs text-fg-faint">
         {result.trades.length > 20
           ? simple
             ? `Showing the last 20 of ${result.trades.length} trades. `

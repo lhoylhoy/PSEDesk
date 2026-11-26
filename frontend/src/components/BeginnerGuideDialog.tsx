@@ -69,10 +69,10 @@ export function BeginnerGuideDialog({ open, onOpenChange }: BeginnerGuideDialogP
       <DialogContent className="sm:w-[min(46rem,94vw)] 3xl:w-[min(54rem,88vw)]">
         <DialogStickyHeader>
           <div className="min-w-0">
-            <DialogTitle className="text-lg font-semibold text-white">
+            <DialogTitle className="text-lg font-semibold text-fg">
               How the PSE Signal Desk works
             </DialogTitle>
-            <DialogDescription className="mt-1 max-w-xl text-xs leading-relaxed text-slate-400">
+            <DialogDescription className="mt-1 type-body measure text-fg-muted">
               A stock-research notebook for Philippine shares. For each name it reports the entry it would
               size, the target, and where its cut-loss would sit — in pesos, with broker fees already counted.
               It is not an adviser and does not place orders.
@@ -86,27 +86,27 @@ export function BeginnerGuideDialog({ open, onOpenChange }: BeginnerGuideDialogP
         <ol className="mt-4 space-y-2">
           {STEPS.map((step) => (
             <li key={step.title} className="rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2.5">
-              <p className="text-xs font-semibold text-slate-100">{step.title}</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{step.body}</p>
+              <p className="type-body font-semibold text-fg">{step.title}</p>
+              <p className="mt-1 type-body measure text-fg-muted">{step.body}</p>
             </li>
           ))}
         </ol>
 
         <section className="mt-4 rounded-xl border border-line/70 bg-ink-900/60 p-3">
-          <h3 className="text-[11px] font-semibold text-slate-200">Words you will see</h3>
+          <h3 className="type-body font-semibold text-fg">Words you will see</h3>
           <dl className="mt-2 grid gap-2 sm:grid-cols-2">
             {GLOSSARY.map((entry) => (
               <div key={entry.term}>
-                <dt className="text-[11px] font-semibold text-mint-400">{entry.term}</dt>
-                <dd className="mt-0.5 text-[11px] leading-relaxed text-slate-400">{entry.meaning}</dd>
+                <dt className="type-body font-semibold text-mint-400">{entry.term}</dt>
+                <dd className="mt-0.5 type-body measure text-fg-muted">{entry.meaning}</dd>
               </div>
             ))}
           </dl>
         </section>
 
         <section className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
-          <h3 className="text-[11px] font-semibold text-amber-400">What it will not do</h3>
-          <ul className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-slate-400">
+          <h3 className="type-body font-semibold text-amber-400">What it will not do</h3>
+          <ul className="mt-1.5 space-y-1 type-body measure text-fg-muted">
             <li>· It cannot promise a profit. Every plan can lose money.</li>
             <li>· It never places an order with your broker. You stay in control.</li>
             <li>· It does not use your real savings — only the practice amount you set.</li>
@@ -114,7 +114,7 @@ export function BeginnerGuideDialog({ open, onOpenChange }: BeginnerGuideDialogP
         </section>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[10px] leading-relaxed text-slate-600">
+          <p className="text-2xs leading-relaxed text-fg-faint">
             Research tooling only, not investment advice. Prices and company filings come from live
             PSE/Yahoo Finance feeds.
           </p>
