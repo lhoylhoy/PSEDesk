@@ -103,6 +103,21 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     private readonly IDailyQuotationParser _quotationParser;
     private readonly MarketDataCache _cache;
 
+    /// <summary>
+    /// The index symbols and proxy constituents as they are actually fetched: blank and repeated
+    /// entries removed. The configuration binder appends a section onto the code defaults, so a
+    /// section that repeats them would otherwise request the same symbol twice and report a
+    /// doubled constituent count in the failure message.
+    /// </summary>
+    private readonly IReadOnlyList<string> _indexSymbols;
+    private readonly IReadOnlyList<string> _proxyConstituents;
+
+    /// <summary>
+    /// The exchange's own daily history, used when a Yahoo chart carries no series. Null when
+    /// <see cref="MarketDataOptions.EnablePseEdgeHistory"/> is off.
+    /// </summary>
+    private readonly PseEdgeHistorySource? _edgeHistory;
+
     public PseMarketDataProvider(
         HttpClient httpClient,
         IOptions<MarketDataOptions> options,
@@ -115,6 +130,11 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         _logger = logger;
         _quotationParser = quotationParser ?? new PseDailyQuotationParser();
         _cache = cache ?? new MarketDataCache();
+        _indexSymbols = MarketDataOptions.DistinctNonBlank(_options.IndexYahooSymbols);
+        _proxyConstituents = MarketDataOptions.DistinctNonBlank(_options.IndexProxyConstituents);
+        _edgeHistory = _options.EnablePseEdgeHistory
+            ? new PseEdgeHistorySource(httpClient, _options, _cache, logger)
+            : null;
     }
 
     /// <summary>
@@ -276,13 +296,22 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
             cancellationToken,
             dropZeroVolume: true);
 
+        chart = await WithEdgeHistoryAsync(
+            chart,
+            ticker,
+            tradeDate,
+            _options.LookbackCalendarDays,
+            MinimumStockBars,
+            cancellationToken);
+
         if (chart.SymbolUnavailable || chart.Bars.Count < MinimumStockBars)
         {
             _logger.LogInformation(
                 "No usable research series for {Ticker} ({Symbol}): {Reason}.",
                 ticker,
                 yahooSymbol,
-                chart.SymbolUnavailable ? chart.UnavailableReason : $"{chart.Bars.Count} bars");
+                (chart.SymbolUnavailable ? chart.UnavailableReason ?? "no chart" : $"{chart.Bars.Count} bars")
+                    .TrimEnd('.'));
 
             return null;
         }
@@ -624,12 +653,12 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         var reasons = new List<string>();
         var quotes = new List<(DateOnly? Date, decimal Price)>();
 
-        foreach (var symbol in _options.IndexYahooSymbols.Where(symbol => !string.IsNullOrWhiteSpace(symbol)))
+        foreach (var symbol in _indexSymbols)
         {
             // The index is date-bearing for the whole run, so a flat zero-volume echo row for a
             // session that never traded must be dropped here as well as on the stocks.
             var chart = await FetchChartAsync(
-                symbol.Trim(),
+                symbol,
                 tradeDate,
                 lookbackDays,
                 cancellationToken,
@@ -668,8 +697,8 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         {
             throw new MarketDataUnavailableException(
                 "No PSEi index series is published by the live feed and the equal-weight heavyweight proxy " +
-                $"could only use {constituentBars.Count} of {_options.IndexProxyConstituents.Count} constituents " +
-                $"({MinimumProxyConstituents} required): {string.Join("; ", reasons)}. The live market feed is unavailable.");
+                $"could only use {constituentBars.Count} of {_proxyConstituents.Count} constituents " +
+                $"({MinimumProxyConstituents} required): {JoinReasons(reasons)}. The live market feed is unavailable.");
         }
 
         var proxyBars = BuildConstituentProxy(constituentBars);
@@ -709,16 +738,14 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     {
         using var throttle = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrency));
 
-        var tasks = _options.IndexProxyConstituents
-            .Where(ticker => !string.IsNullOrWhiteSpace(ticker))
+        var tasks = _proxyConstituents
             .Select(async ticker =>
             {
-                var info = PseTickerCatalog.Find(ticker.Trim());
+                var info = PseTickerCatalog.Find(ticker);
 
                 if (info is null)
                 {
-                    reasons.Add($"{ticker}: not in the ticker catalog");
-                    return null;
+                    return new ProxyConstituentFetch(null, $"{ticker}: not in the ticker catalog");
                 }
 
                 await throttle.WaitAsync(cancellationToken);
@@ -732,16 +759,25 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
                         cancellationToken,
                         dropZeroVolume: true);
 
+                    chart = await WithEdgeHistoryAsync(
+                        chart,
+                        info.Ticker,
+                        tradeDate,
+                        lookbackDays,
+                        MinimumIndexBars,
+                        cancellationToken);
+
                     if (chart.SymbolUnavailable || chart.Bars.Count < MinimumIndexBars)
                     {
-                        reasons.Add($"{info.Ticker}: " +
-                                    (chart.SymbolUnavailable
-                                        ? chart.UnavailableReason
-                                        : $"{chart.Bars.Count} bar(s)"));
-                        return null;
+                        return new ProxyConstituentFetch(
+                            null,
+                            $"{info.Ticker}: " +
+                            (chart.SymbolUnavailable
+                                ? chart.UnavailableReason
+                                : $"{chart.Bars.Count} bar(s)"));
                     }
 
-                    return (IReadOnlyList<OhlcvBar>)chart.Bars;
+                    return new ProxyConstituentFetch(chart.Bars, null);
                 }
                 finally
                 {
@@ -752,8 +788,29 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
         var results = await Task.WhenAll(tasks);
 
-        return results.Where(bars => bars is not null).Select(bars => bars!).ToList();
+        // Each constituent reports its own reason and they are collected after the fan-out, in the
+        // configured order: the message a failed run prints is deterministic, and no two tasks
+        // append to the same List<T>.
+        foreach (var result in results)
+        {
+            if (result.Reason is not null)
+            {
+                reasons.Add(result.Reason);
+            }
+        }
+
+        return results
+            .Where(result => result.Bars is not null)
+            .Select(result => result.Bars!)
+            .ToList();
     }
+
+    /// <summary>
+    /// Joins the per-symbol reasons into one sentence fragment. Each reason already ends with a
+    /// period, so the trailing period is trimmed before the message adds its own.
+    /// </summary>
+    private static string JoinReasons(IEnumerable<string> reasons) =>
+        string.Join("; ", reasons.Select(reason => reason.TrimEnd('.', ' ')));
 
     /// <summary>
     /// Builds an equal-weight daily return index from the constituents' real closes: every session
@@ -1167,6 +1224,60 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     }
 
     /// <summary>
+    /// Gives a symbol the history it needs from the exchange itself when the Yahoo chart could
+    /// not supply it. Yahoo stopped publishing PSE-listed equities (every <c>{TICKER}.PS</c>
+    /// answers 404), so a chart with too few bars is retried against PSE Edge before the ticker is
+    /// skipped. The Yahoo reason is kept in the diagnostic either way, which is what makes a
+    /// failed run name both feeds instead of only the dead one.
+    /// </summary>
+    private async Task<ChartFetch> WithEdgeHistoryAsync(
+        ChartFetch chart,
+        string ticker,
+        DateOnly tradeDate,
+        int lookbackDays,
+        int requiredBars,
+        CancellationToken cancellationToken)
+    {
+        if (_edgeHistory is null || chart.Bars.Count >= requiredBars)
+        {
+            return chart;
+        }
+
+        var edge = await _edgeHistory.FetchDailyBarsAsync(ticker, tradeDate, lookbackDays, cancellationToken);
+
+        if (edge.Bars.Count >= requiredBars)
+        {
+            _logger.LogInformation(
+                "Reading {Ticker} from PSE Edge ({Bars} daily bars) because {Source} ({Reason}).",
+                ticker,
+                edge.Bars.Count,
+                chart.SymbolUnavailable ? "Yahoo Finance has no chart" : "Yahoo Finance has too little history",
+                chart.UnavailableReason ?? $"{chart.Bars.Count} bar(s)");
+
+            return chart with
+            {
+                Bars = edge.Bars,
+                SymbolUnavailable = false,
+                UnavailableReason = null
+            };
+        }
+
+        // Edge can answer with real bars that still fall short of the window the caller needs — a
+        // newly listed security, or a symbol Edge stopped printing — so the bar count and the
+        // newest session belong in the diagnostic rather than leaving it blank.
+        var edgeOutcome = edge.Failure ??
+            $"{edge.Bars.Count} bar(s), newest {edge.Bars[^1].Date:yyyy-MM-dd}";
+
+        var reason = chart.SymbolUnavailable
+            ? $"{chart.UnavailableReason} PSE Edge: {edgeOutcome}."
+            : $"{chart.Bars.Count} bar(s). PSE Edge: {edgeOutcome}.";
+
+        return chart.SymbolUnavailable
+            ? ChartFetch.Missing(reason)
+            : chart with { UnavailableReason = reason };
+    }
+
+    /// <summary>
     /// Fetches every tracked <c>{TICKER}.PS</c> chart with bounded concurrency. Symbols
     /// without a chart, without 200 bars or without a bar on the PSE session date are
     /// skipped with a warning; transport failures are fatal. Fewer than ten surviving
@@ -1221,13 +1332,21 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
                 cancellationToken,
                 dropZeroVolume: true);
 
+            chart = await WithEdgeHistoryAsync(
+                chart,
+                info.Ticker,
+                sessionDate,
+                lookbackDays,
+                MinimumStockBars,
+                cancellationToken);
+
             if (chart.SymbolUnavailable)
             {
                 _logger.LogWarning(
-                    "Skipping {Ticker}: Yahoo Finance has no chart for {Symbol} ({Reason}).",
+                    "Skipping {Ticker}: no live daily series for {Symbol} ({Reason}).",
                     info.Ticker,
                     info.YahooSymbol,
-                    chart.UnavailableReason);
+                    (chart.UnavailableReason ?? "no chart").TrimEnd('.'));
                 return null;
             }
 
@@ -2207,4 +2326,10 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
     /// <summary>One scraped Edge filing with the date the exchange published it.</summary>
     private sealed record RawFiling(DateOnly Date, string Headline);
+
+    /// <summary>
+    /// One heavyweight proxy constituent's outcome: the real bars when the feed published them,
+    /// or the reason the name was skipped, so the failure message can explain every constituent.
+    /// </summary>
+    private sealed record ProxyConstituentFetch(IReadOnlyList<OhlcvBar>? Bars, string? Reason);
 }

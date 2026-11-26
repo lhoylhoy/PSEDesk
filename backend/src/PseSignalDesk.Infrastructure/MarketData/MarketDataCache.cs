@@ -134,7 +134,16 @@ public sealed class MarketDataCache
 
         var excess = _entries.Count - _maxEntries;
 
-        foreach (var pair in _entries.OrderBy(pair => pair.Value.CreatedAt).Take(excess).ToList())
+        // A concurrent Clear() can hand this enumeration a node whose value is already gone, so a
+        // missing value is skipped instead of dereferenced. Eviction is best-effort: the next
+        // insert trims the map again.
+        var oldest = _entries
+            .Where(pair => pair.Value is not null)
+            .OrderBy(pair => pair.Value.CreatedAt)
+            .Take(excess)
+            .ToList();
+
+        foreach (var pair in oldest)
         {
             _entries.TryRemove(pair.Key, out _);
         }

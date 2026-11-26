@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -23,6 +24,14 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
     private readonly OllamaCloudOptions _options;
     private readonly SignalJsonParser _parser;
     private readonly ILogger<OllamaSignalEngine> _logger;
+
+    /// <summary>
+    /// A <see cref="OllamaCloudOptions.FastExtractionModel"/> the endpoint does not serve is a
+    /// configuration error, not a transient fault. Once the upstream answers <c>404</c> the pass
+    /// stays off for the life of this instance so the remaining horizons of the same session do
+    /// not repeat (and log) the same failure.
+    /// </summary>
+    private volatile bool _fastExtractionUnavailable;
 
     public OllamaSignalEngine(
         HttpClient httpClient,
@@ -58,7 +67,7 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
             new("user", OllamaPromptBuilder.BuildUserPrompt(enriched))
         };
 
-        var firstResponse = await SendChatAsync(messages, _options.Model, cancellationToken);
+        var firstResponse = await SendRankingChatAsync(messages, cancellationToken);
         var firstParse = _parser.Parse(firstResponse);
 
         if (firstParse.IsSuccess)
@@ -73,7 +82,7 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         messages.Add(new ChatMessage("assistant", firstResponse));
         messages.Add(new ChatMessage("user", OllamaPromptBuilder.BuildCorrectionPrompt(firstParse.Errors, enriched)));
 
-        var retryResponse = await SendChatAsync(messages, _options.Model, cancellationToken);
+        var retryResponse = await SendRankingChatAsync(messages, cancellationToken);
         var retryParse = _parser.Parse(retryResponse);
 
         if (retryParse.IsSuccess)
@@ -84,6 +93,25 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         throw new SignalGenerationException(
             "Ollama Cloud returned an invalid signal payload after one corrective retry: " +
             string.Join(" | ", retryParse.Errors));
+    }
+
+    /// <summary>
+    /// The reasoning call. A non-success answer is rethrown as
+    /// <see cref="SignalGenerationException"/> so the API keeps mapping a failed ranking to
+    /// <c>502</c>, exactly as before the optional pass learned to inspect the status code.
+    /// </summary>
+    private async Task<string> SendRankingChatAsync(
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SendChatAsync(messages, _options.Model, cancellationToken);
+        }
+        catch (ChatResponseException ex)
+        {
+            throw new SignalGenerationException(ex.Message, ex);
+        }
     }
 
     private async Task<string> SendChatAsync(
@@ -126,7 +154,8 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new SignalGenerationException(
+                throw new ChatResponseException(
+                    response.StatusCode,
                     $"Ollama Cloud returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}). " +
                     Truncate(body, 600));
             }
@@ -166,7 +195,7 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         OllamaSignalRequest request,
         CancellationToken cancellationToken)
     {
-        if (!_options.HasFastExtractionModel || request.Candidates.Count == 0)
+        if (!_options.HasFastExtractionModel || _fastExtractionUnavailable || request.Candidates.Count == 0)
         {
             return request;
         }
@@ -209,11 +238,44 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         {
             throw;
         }
+        catch (ChatResponseException ex) when (ex.Status == HttpStatusCode.NotFound)
+        {
+            // HTTP 404 means the endpoint does not serve the configured model name, so every
+            // later horizon would fail the same way. Switch the optional pass off and say once,
+            // plainly, what to change; the reasoning model is untouched.
+            _fastExtractionUnavailable = true;
+
+            _logger.LogWarning(
+                "Fast extraction is off for this process: Ollama Cloud does not serve the model " +
+                "'{Model}' (HTTP 404). Point OllamaCloud:FastExtractionModel (or OLLAMA_FAST_MODEL) " +
+                "at a model your account can reach, or leave it blank to skip the pass. The reasoning " +
+                "model ({ReasoningModel}) is unaffected.",
+                _options.FastExtractionModel,
+                _options.Model);
+
+            return request;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Fast extraction pass failed; continuing with the reasoning model only.");
             return request;
         }
+    }
+
+    /// <summary>
+    /// A non-success HTTP answer from the chat endpoint, carrying the status code so the
+    /// optional fast-extraction pass can tell "this model does not exist" apart from a
+    /// transient fault. The reasoning path converts it back to
+    /// <see cref="SignalGenerationException"/>.
+    /// </summary>
+    private sealed class ChatResponseException : Exception
+    {
+        public ChatResponseException(HttpStatusCode status, string message) : base(message)
+        {
+            Status = status;
+        }
+
+        public HttpStatusCode Status { get; }
     }
 
     private sealed class FastExtractionNote

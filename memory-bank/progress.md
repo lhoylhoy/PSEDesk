@@ -1,10 +1,38 @@
 # Progress — PSE Signal Desk
 
-**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session, deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
+**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **433 backend tests green + 1 skipped manual benchmark (434 total) / 49 frontend tests green** (2026-11-26, performance pass on top of the accuracy pass + live-drift wiring). The replay's published numbers are unchanged byte-for-byte (goldens pass against both the pre- and post-optimisation source) while allocations fell from 1,708.4 MB to ~1,402 MB per four-horizon run. Everything feed-dependent is unverified live in this environment (Yahoo/PSE answered 404/429 here); the open security remediation is listed under *Remaining*.
+**Latest verification:** **451 backend tests green + 1 skipped manual benchmark (452 total) / 49 frontend tests green** (2026-11-26, fast-model fix on top of the Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes). The fix replaced the shipped `FastExtractionModel` (`qwen3.5:4b`, a name Ollama Cloud never served → `404` on every run) with `glm-5.3-flash`, validated against the live catalogue, and made an unknown fast model latch the optional pass off instead of throwing once per horizon. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell (the key itself sits in user-secrets and was used for read-only `curl` probes); the open security remediation is listed under *Remaining*.
 
-## Latest verification (2026-11-26 — performance pass)
+## Latest verification (2026-11-26 — fast-model fix)
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 451, Skipped: 1, Total: 452` (8 s, exit 0) |
+| `dotnet build PseSignalDesk.slnx --nologo` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test … --filter FullyQualifiedName~OllamaSignalEngineTests` | `Passed! 4/4` (86 ms) |
+| `curl -H 'Authorization: Bearer <user-secret>' https://ollama.com/api/tags` | `200`, **25 models** listed; no `qwen3.5:4b` |
+| `curl POST /api/chat` per model | `qwen3.5:4b` → `404 {"error": "model 'qwen3.5:4b' not found. Try glm-5.3-flash:cloud."}`; `deepseek-v4.1-flash`, `glm-5.3-flash`, `mimo-v2.6-flash` → `200` |
+| `curl POST /api/chat` with the real fast-extraction prompt on `glm-5.3-flash` | `200`, `{"summary": "In a BULLISH regime, ICT shows the cleanest structure …", "trap_flags": [...]}` — parses as a JSON object |
+| `curl POST /api/embed` (`nomic-embed-text`, `nomic-embed-text:latest`, `glm-5.3-flash`) | `401 {"error": "unauthorized"}` for all three; legacy `/api/embeddings` → `404 path not found` → retrieval stays lexical |
+
+Not run: a full `run-now` past the LLM step (the fast prompt was exercised directly against the live endpoint) and the frontend suites (no frontend file changed).
+
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 447, Skipped: 1, Total: 448` (8 s, exit 0) |
+| `dotnet build PseSignalDesk.slnx --nologo` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test … --list-tests` (delta) | `PseMarketDataProviderTests` 22 → 28 (6 new Edge-fallback cases), `MarketDataCacheTests` 8 → 9 (the eviction/`Clear()` race) |
+| `curl` probes against the live feed | every `{TICKER}.PS` chart → `404`; `PSEI.PS` → `200` with a live `regularMarketPrice` and a sparse legacy series; Edge search / company page / `DisclosureCht.ax` → `200` |
+| fresh-DB smoke run (`/tmp/psedesk-fresh.db`, port 5299), `POST /api/signals/run-now?date=2026-11-25` | **280 Edge chart POSTs / 284 Yahoo `.PS` requests / 0 failures**, 283 daily bars per ticker, proxy note *"reading the 11/25/2026 trend from an equal-weight proxy of 12 PSE heavyweights"*, 4 honest skips (`VLL`, `RRHI`, `VREIT` stale on Edge itself, `RCB` one session behind), then `400 Ollama Cloud is not configured` |
+| `GET /api/research/JFC` | `200` — close `147.20`, turnover `₱72,828,984`, `rsi14 49.67`, `sma200 156.84`, `asOfDate 2026-11-25` |
+| `GET /api/research/{RCB,VLL,RRHI,VREIT}` | `RCB` `200` after the cache fix (was a `500 NullReferenceException`); the other three `503` "no live chart with 200 sessions" |
+| `git status --porcelain` | this pass touched `MarketDataOptions.cs`, `PseMarketDataProvider.cs`, `MarketDataCache.cs`, `appsettings.json`, the new `PseEdgeHistorySource.cs` and the two test files; `README.md`, `Program.cs`, `MarketDataOptionsTests.cs` and the memory bank still carry the earlier uncommitted passes |
+
+Not run: anything past the LLM step, and the frontend suites (no frontend file changed).
+
+## Verification (2026-11-26 — performance pass)
 
 | Command | Result |
 | --- | --- |
@@ -45,6 +73,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 
 ### Signal pipeline and pricing
 - [x] Live market data: Yahoo v8 charts with a mirror-host retry, index resolution plus an equal-weight heavyweight proxy, USD/PHP staleness guard, 10-ticker minimum, tick-rounded candles, zero-volume echo removal, row-aware PSE Edge disclosure attribution, best-effort macro dials and an optional official DQR.
+- [x] **PSE Edge daily history is the live PSE series source.** Yahoo stopped publishing PSE equities (every `{TICKER}.PS` answers `404`), so `PseEdgeHistorySource` resolves each symbol on Edge (search → `cmpy_id`, company page → `security_id`), POSTs `common/DisclosureCht.ax` for three to five years of `chartData`, and `WithEdgeHistoryAsync` substitutes it whenever the Yahoo chart is missing or shorter than the caller needs — for research, the stock fan-out and the proxy constituents alike. Sessions are de-duplicated (last print wins), clamped to the requested window and never carried forward, and Edge's peso `VALUE` becomes volume through `VALUE / ((HIGH+LOW+CLOSE)/3)` so `Close × Volume` still equals the official turnover the PHP 5M floor uses. A short Edge series names its own size and newest session in the diagnostic; `MarketData:EnablePseEdgeHistory = false` restores the Yahoo-only contract.
 - [x] **One download per upstream URL.** `MarketDataCache` (singleton, bounded at 200 entries, `TimeProvider`-injectable) caches the *task* of a raw body under the absolute URL — 10 minutes for a Yahoo chart, 5 for an Edge page — so the four horizons of one session, a replay and an ad-hoc research call share a single GET. Concurrent callers share one request, a failure is evicted rather than remembered, and an abandoned caller never cancels the download another request is waiting for (shared fetch on `CancellationToken.None`, per-caller `WaitAsync`, the download keeps its own timeout). `InvalidateCache()` (default no-op on the interface) clears it, and `POST /api/signals/run-now` calls it.
 - [x] **One fan-out per session.** With the session date fixed by the index, the FX series, the Edge pages, the DQR, the macro dials and the ticker charts start together; each ticker awaits the disclosure map only after its own chart lands. The typed client runs on a pooled `SocketsHttpHandler` (`AutomaticDecompression = All`, `UseCookies = false`, `PooledConnectionLifetime = 5 min`) and `GET /api/research/catalog` is client-cached for an hour.
 - [x] Quantitative filter: Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, RS63d, ATR%, VCP ratio, up/down volume, Chaikin money flow, Kaufman efficiency, beta, max drawdown, realized volatility, 20-day turnover/volume (mean **and** median + active-session count), support/resistance, weighted pre-score (85-point technical total rescaled when foreign flow is unreported), the PHP 5M floor plus `MinimumActiveTradingDays20d = 16`, and the top-25 cap.
@@ -114,11 +143,11 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 434 backend (433 executed + 1 skipped benchmark) + 49 frontend
+## Test inventory — 452 backend (451 executed + 1 skipped benchmark) + 49 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
-### Backend — `backend/tests/PseSignalDesk.Tests` (31 files)
+### Backend — `backend/tests/PseSignalDesk.Tests` (33 files)
 
 | Layer | Suite | Cases |
 | --- | --- | --- |
@@ -142,9 +171,11 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | Application | `MarketDirectionServiceTests` — pillar blend, clamp, bearish override, unreported dials | 6 |
 | Application | `DailyQuotationImportServiceTests` — live/upload paths, overlays, unmatched tickers, size guard | 4 |
 | Application | `MoneyManagerTrainingServiceTests` — promotion gate, purged split, inactive fallback | 3 |
-| Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials, chart-cache reuse, `InvalidateCache` | 20 |
-| Infrastructure | `MarketDataCacheTests` — shared task under concurrency, no refetch inside the TTL, a failure is never served, TTL refetch, an abandoned caller cannot cancel, pre-cancelled does nothing, `Clear`, oldest-entry eviction | 8 |
+| Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials, chart-cache reuse, `InvalidateCache`, distinct-constituent counting, ordered failure reasons, and the seven Edge-fallback cases (delisted Yahoo symbol, peso-`VALUE` volume, duplicate sessions, both-feed diagnostic, a full session from Edge, short-series diagnostic, `EnablePseEdgeHistory = false`) | 29 |
+| Infrastructure | `MarketDataOptionsTests` — the binder's collection doubling reproduced and undone, order-preserving de-duplication, case-insensitive `DistinctNonBlank` | 4 |
+| Infrastructure | `MarketDataCacheTests` — shared task under concurrency, no refetch inside the TTL, a failure is never served, TTL refetch, an abandoned caller cannot cancel, pre-cancelled does nothing, `Clear`, oldest-entry eviction, eviction safe against a concurrent `Clear()` | 9 |
 | Infrastructure | `OllamaPromptBuilderTests` — horizon block, knowledge, feedback, cross-asset, desk memory, guardrails | 16 |
+| Infrastructure | `OllamaSignalEngineTests` — stub `HttpMessageHandler` routed by the request body's `model`: a fast-model `404` keeps the ranking, one `404` per engine across two horizons (latch), a ranking `404` still surfaces as `SignalGenerationException`, a blank fast model makes zero fast calls | 4 |
 | Infrastructure | `SqliteKnowledgeServiceTests` — reindex idempotency, guardrail retrieval, delete protection, search boosts | 8 |
 | Infrastructure | `KnowledgeDocumentParserTests` — chunking, section refs, content hash | 6 |
 | Infrastructure | `PseDailyQuotationParserTests` — header mapping, negatives, suspension, missing markers | 6 |
@@ -170,7 +201,7 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] **Pillar 2 remainder** — `TrainedHorizonModel.FeatureKeysJson` (+ loader refusal on schema mismatch) so a book cannot price a feature vector it was not trained on.
 - [ ] **Pillar 5 remainder** — `InvalidationFirstPlanBuilder`, pipeline inversion (invalidation before target), `TradeExitLadderPolicy` as the single ladder, `OllamaTopPick` audit-only fields.
 - [ ] **Pillar 4 remainder** — real walk-forward folds (disjoint rolling windows + fold report); today the replay refits one rolling model.
-- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 433 executed + 1 skipped / 49). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 439 executed + 1 skipped / 49). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
 
 ### Performance pass — follow-ups
 
@@ -217,22 +248,93 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 ## Known issues and limitations
 
 - **The drift verdict is invisible in the UI.** Sizing changes and the ticket carries the `Describe` warning, but no DTO exposes `LiveDriftStatus`, so the pages cannot badge it.
+- **Trailing dividend yield is unreported on the live tape.** Yields are parsed from the Yahoo chart `events.dividends` block, and Yahoo no longer publishes PSE charts; the Edge history carries prices and turnover only. The desk reports `null` (UI `—`) rather than assuming a yield, so the dividend tilt is dormant until a dividend source lands.
+- **The live disclosure pillar currently yields nothing.** `edge.pse.com.ph/announcements/search.ax` answers `200` with a "no records found" page (2.4 KB) and `companyDisclosures/search.ax` returns rows with **no company column** (filing type, timestamp, form, reference only), so `AttributeFilings` cannot attach a headline to a ticker. The code path and its tests are intact; the upstream layout changed. Fixing it means reading a per-company disclosure listing (or the filing's own company id) rather than the market-wide table.
+- **Edge history stops where the exchange stops printing.** `VLL` (newest bar 2026-06-01), `RRHI` (2026-07-10) and `VREIT` (2026-06-01) have no recent Edge sessions and are skipped honestly (`no live daily series … PSE Edge: 160 bar(s), newest 2026-06-01.`); `RCB` lags one session. Expect those names missing from a session until the exchange resumes them.
 - **The drift read costs one full ledger pass.** `EvaluateLiveDriftAsync` loads the horizon's runs *with* their items on every book build (so `GET /api/signals/latest` pays for it too) and writes only when the verdict or the graded count changed. That is one query per book, not per ticket, but it is the expensive part of a list render; a `LIMIT 30` projection over graded rows is the obvious next optimisation.
 - **Prices are unadjusted.** History is raw OHLC; a split inside a lookback still distorts ATR/RS/barriers until `CorporateActionAdjuster` lands.
-- **Unverified live feeds.** Yahoo/PSE answered `404`/`429` from this environment, so ingestion, the model calls, DQR live templates and the replay's PSEi benchmark have never been observed end-to-end here. By design a failure is a `503`, never synthetic data.
+- **Unverified live feeds.** Yahoo no longer serves PSE equities at all (every `{TICKER}.PS` → `404`, `PSEI.PS` → a sparse legacy series plus a live price), so the PSE tape now comes from PSE Edge daily history, which **is** verified end-to-end here (283 real bars per ticker, proxy index, `GET /api/research/JFC` `200`). Still unobserved live: anything past the LLM step (`OLLAMA_API_KEY` unset), the DQR live templates and the replay's PSEi benchmark (the index has no Edge series either). By design a failure is a `503`, never synthetic data.
+- **The `MarketDataOptions` lists are additive.** `ConfigurationBinder` appends a bound section to the collection the class already initialized, so `appsettings.json` entries *extend* the code defaults and cannot remove one. `MarketDataOptions.Normalize()` (applied in `Program.cs` and again in the provider constructor) makes that harmless by de-duplicating, which is why the shipped file can keep listing the same 12 heavyweights the class already declares.
 - **No UI automation.** Responsiveness and the Simple/Pro switch are verified by reading code and by `tsc`, not by a test.
 - **Deliberately in-sample walk-forward.** `WalkForwardEdge` accepts its residual model by comparing it to the base rate on its own trades; it is a replay aid, not a validated out-of-sample result — and it never writes `TrainedHorizonModels`.
 - **Bootstrap success path unobserved.** Only the failure branch (`cold-boot refit skipped`) has been seen; the `LEARNED` path still needs a network run.
 - **SQLite decimals.** Amounts are `decimal` and read back through SQLite's `TEXT` provider; the desk treats values as advisory and rounds at the board lot.
 - **Calendar, not exchange calendar.** The scheduler fires on weekdays 15:35 Asia/Manila and does not know PSE holidays.
 - **Thin books start on the prior.** Below 25 held-out trades (training) or 20 graded picks (calibration) the desk prices off the structural prior with small tilts, so a fresh database reports `PRIOR_FALLBACK`.
-- **Retrieval degrades silently by design.** No embeddings key, an embeddings failure or a BM25-only fallback all still retrieve through guardrails rather than erroring.
+- **Retrieval degrades silently by design.** No embeddings key, an embeddings failure or a BM25-only fallback all still retrieve through guardrails rather than erroring. As of 2026-11-26 `POST /api/embed` answers `401 unauthorized` for every model name with the project's key, so this deployment is lexical-only until the account has embed access.
+- **Ollama Cloud model names are account-scoped, not free text.** `GET /api/tags` listed 25 chat models on 2026-11-26; anything else answers `404 "model … not found"`. Check the catalogue before trusting a name: the shipped fast model was `qwen3.5:4b`, which had never existed there. The engine now switches an unknown fast model off after one warning, but a wrong **ranking** model still fails the run with `502` (correctly — that run has no book).
 - **Ladder duplication.** The break-even/trail ladder lives in three services; a change must be applied in all three (training, replay, wave plans).
 - **Replay/training cost.** Both refetch long lookbacks for the liquid universe per call; the chart cache now absorbs the *repeat* requests (the four horizons of a session, research, a second refit within ten minutes), but a cold `train-all` on a fresh process is still the slowest operation in the app. The indicator work is linear in bars now, so what remains is upstream latency, not arithmetic.
 - **The download cache is per process.** It lives in memory, so a restart is cold and two API processes would each download their own copies; there is no on-disk cache and no cross-process invalidation.
 - **A failed extra Edge page is now silent.** `FetchDisclosuresAsync` still fails the run when the announcements page itself fails, but a failed second/third page is logged and skipped (the old `throwOnFailure` flag is gone). The suite pins the split; a real Edge outage has never been observed here.
 
 ## Verification log (newest first, observed output)
+
+**2026-11-26 — fast-model fix (448 → 452; +4 executed rows).**
+
+```
+cd backend && dotnet build PseSignalDesk.slnx --nologo
+  -> Build succeeded. 0 Warning(s) 0 Error(s)
+cd backend && dotnet test PseSignalDesk.slnx --nologo
+  -> Passed! - Failed: 0, Passed: 451, Skipped: 1, Total: 452 (net10.0), exit 0
+dotnet test --filter FullyQualifiedName~OllamaSignalEngineTests
+  -> Passed! 4/4 (86 ms)
+curl -H "Authorization: Bearer <user-secret>" https://ollama.com/api/tags
+  -> 200, 25 models (deepseek-v4.1-flash, glm-5.3-flash, mimo-v2.6-flash, ... no qwen3.5:4b)
+curl POST https://ollama.com/api/chat  model=qwen3.5:4b
+  -> 404 {"error": "model 'qwen3.5:4b' not found. Try glm-5.3-flash:cloud."}
+curl POST https://ollama.com/api/chat  model=glm-5.3-flash   (the real fast-extraction prompt)
+  -> 200 {"message":{"content":"{\"summary\": \"In a BULLISH regime, ICT shows the cleanest
+      structure: STAGE_2 uptrend, +1.25% on 1.40x volume ...", \"trap_flags\": [...]}"}}
+curl POST https://ollama.com/api/embed  model=nomic-embed-text
+  -> 401 {"error": "unauthorized"}   (same for nomic-embed-text:latest and glm-5.3-flash)
+```
+
+**2026-11-26 — Yahoo-delisting pass (440 → 448; Edge history fallback + a cache race, +8 executed rows).**
+
+```
+cd backend && dotnet build PseSignalDesk.slnx --nologo
+  -> Build succeeded. 0 Warning(s) 0 Error(s)
+cd backend && dotnet test PseSignalDesk.slnx --nologo
+  -> Passed! - Failed: 0, Passed: 447, Skipped: 1, Total: 448 (net10.0), exit 0
+dotnet test --list-tests -> 448 rows (PseMarketDataProviderTests 29, MarketDataCacheTests 9, ...)
+curl .../v8/finance/chart/JFC.PS  -> 404 {"chart":{"result":null,"error":{...,"description":"No data found, symbol may be delisted"}}}
+curl '.../autoComplete/searchCompanyNameSymbol.ax?term=VLL' -> [{"cmpyId":"607",...,"symbol":"VLL"}]
+curl '.../autoComplete/searchCompanyNameSymbol.ax?term=PSEI' -> []            (no index security exists)
+curl '.../psei/form.do' -> 200, but /psei/search.ax is a company-news list, not a chart
+fresh DB + POST /api/signals/run-now?date=2026-11-25
+  -> 280 Edge chart POSTs, 284 Yahoo .PS GETs, 0 failures
+  -> "Reading TEL from PSE Edge (283 daily bars)" ... for the whole universe
+  -> "The PSEi index has no live history; reading the 11/25/2026 trend from an
+      equal-weight proxy of 12 PSE heavyweights"
+  -> "Skipping VLL: no live daily series for VLL.PS (HTTP 404 for VLL.PS. PSE Edge: 160 bar(s), newest 2026-06-01)"
+  -> 400 Ollama Cloud is not configured   (ingestion and scoring completed)
+GET /api/research/JFC -> 200 close 147.20, turnover 72828984, rsi14 49.67, asOfDate 2026-11-25
+GET /api/research/RCB -> 200 (before the cache fix: 500 NullReferenceException in MarketDataCache.EvictOldest)
+```
+
+
+**2026-11-26 — feed-diagnostics pass (434 → 440; two failure-path defects, +6 executed rows).**
+
+```
+cd backend && dotnet build PseSignalDesk.slnx --nologo
+  -> Build succeeded. 0 Warning(s) 0 Error(s)
+cd backend && dotnet test PseSignalDesk.slnx --nologo
+  -> Passed! - Failed: 0, Passed: 439, Skipped: 1, Total: 440 (net10.0), exit 0
+     (skip: BacktestGoldenTests.Benchmark_reports_elapsed_time_and_allocations)
+dotnet test --list-tests -> 440 rows over 32 test files
+  (PseMarketDataProviderTests 22, MarketDataOptionsTests 4, MarketDataCacheTests 8, ...)
+curl .../v8/finance/chart/PSEI.PS?range=1y -> 200, regularMarketPrice 5465.79, 1 timestamp
+curl .../v8/finance/chart/{SM,TEL,BDO,JFC}.PS -> 404 each; then {AAPL,EPHE} -> 429
+smoke: dotnet bin/Debug/net10.0/PseSignalDesk.WebApi.dll on :5299, /tmp/psedesk-verify.db
+  POST /api/signals/run-now?horizon=WEEK -> 503
+  "No PSEi index series is published by the live feed and the equal-weight heavyweight proxy
+   could only use 0 of 12 constituents (6 required): PSEI.PS: 0 bar(s), 200 required;
+   TEL: HTTP 404 for TEL.PS; SM: ...; GLO: HTTP 404 for GLO.PS. The live market feed is unavailable."
+  (before the pass the same run said "0 of 24" and listed PSEI.PS twice)
+```
+
+The upstream probe is the important half of this pass: the `503` was **not** a desk bug. `PSEI.PS` still publishes a live level but no daily history, and no `.PS` stock resolves from this network, so the index/proxy resolution cannot be satisfied without fabricating bars — which the desk refuses to do by invariant.
 
 **2026-11-26 — performance pass (cache, fan-out, linear indicators; 416 → 434, +17 executed rows and 1 skipped benchmark).**
 

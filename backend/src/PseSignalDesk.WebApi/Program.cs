@@ -64,9 +64,13 @@ builder.Services
         }
     });
 
+// The binder appends configuration onto the initialized lists instead of replacing them, so a
+// section that repeats the code defaults (the shipped appsettings.json does) would double every
+// index symbol and proxy constituent. Normalize once, before any consumer reads the options.
 builder.Services
     .AddOptions<MarketDataOptions>()
-    .Bind(builder.Configuration.GetSection(MarketDataOptions.SectionName));
+    .Bind(builder.Configuration.GetSection(MarketDataOptions.SectionName))
+    .PostConfigure(options => options.Normalize());
 builder.Services
     .AddOptions<KnowledgeBaseOptions>()
     .Bind(builder.Configuration.GetSection(KnowledgeBaseOptions.SectionName));

@@ -13,7 +13,7 @@ The product is research tooling, **not investment advice**, and it is **not a li
 
 ## Core requirements
 
-1. **Live data only.** Every candle comes from the Yahoo Finance v8 chart endpoint (`PSEI.PS`, `PHP=X`, `{TICKER}.PS`) and every disclosure from the public PSE Edge announcement page. No synthetic series, no demo tape, no offline engine, no quant top-up: a missing feed is an error (`503`), not an excuse to invent data.
+1. **Live data only.** Every candle comes from a public exchange feed — the Yahoo Finance v8 chart endpoint (`PHP=X` and the `^TNX`/`BZ=F`/`EPHE` dials) and, for every PSE equity and the equal-weight index proxy, **PSE Edge's own daily history** (`common/DisclosureCht.ax`), because Yahoo stopped publishing `{TICKER}.PS` charts — and every disclosure from the public PSE Edge announcement page. No synthetic series, no demo tape, no offline engine, no quant top-up: a missing feed is an error (`503`), not an excuse to invent data.
 2. **Grounded, not free-form.** The reasoning model sees only retrieved `knowledge-base/` sections (mandatory PSE guardrails + horizon/sector/trap-matched playbooks) plus a deterministic candidate table. A citation the retrieval did not supply is dropped server-side.
 3. **Quant filter first.** Compute a deterministic technical picture per ticker from the live daily OHLCV: Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, 20-day turnover, volume ratio, support/resistance and a 0–100 pre-score. The 15-point foreign-flow pillar is scored only when the official PSE Daily Quotation Report was parsed for the session; otherwise it stays `null` and the verified 85 technical points are rescaled.
 4. **Hard liquidity floor.** Exclude any ticker below **PHP 5,000,000 average 20-day turnover**. Send at most the **top 25** survivors to the signal engine.
@@ -40,12 +40,12 @@ The product is research tooling, **not investment advice**, and it is **not a li
 | Deterministic disclosure classification + structural trap flags | Fundamental database (the model reads uploaded books, the desk stores no financials) |
 | PSEi regime strip (close, SMA50/200, foreign flow with provenance, USD/PHP, US 10Y / Brent / EPHE) | Full PSE universe (`PseTickerCatalog` is ~58 names; research reaches any ticker) |
 | SQLite single-file persistence, single-user desk (one paper account) | Server database, multi-tenant hosting, auth |
-| Yahoo Finance v8 charts + PSE Edge announcements | |
+| Yahoo Finance v8 charts (FX + macro dials) + PSE Edge daily history and announcements | |
 
 
 ## Success criteria
 
-- `dotnet test backend/PseSignalDesk.slnx` passes (**433 tests + 1 skipped manual benchmark** as of 2026-11-26), including the golden snapshots that pin the replay's published numbers byte-for-byte.
+- `dotnet test backend/PseSignalDesk.slnx` passes (**439 tests + 1 skipped manual benchmark** as of 2026-11-26), including the golden snapshots that pin the replay's published numbers byte-for-byte.
 - `npm test` in `frontend/` passes (**49 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/legalConsent.test.ts` and `lib/__tests__/queryCache.test.ts`).
 - `npm run build` in `frontend/` passes (`tsc --noEmit` + Vite build), with each dialog and the Pro table in their own chunk.
 - The terminal is usable one-thumbed on a 320px phone and dense on a 2560px desktop from the **same payload**: dialogs become bottom sheets, wide tables fall back to cards, and no mobile variant fetches a different endpoint.
@@ -73,11 +73,11 @@ backend/
     PseSignalDesk.Domain/          # entities, enums, PSE board-lot/tick/static-band rules, expectancy + fee maths
     PseSignalDesk.Application/     # quant filter, horizons, edge/odds, tickets, portfolio, research, backtest,
                                    # training, market direction, wave plans, pipeline, DTOs, interfaces
-    PseSignalDesk.Infrastructure/  # EF Core SQLite, live Yahoo/PSE Edge provider (+DQR) with its per-URL download cache,
-                                   # Ollama clients, RAG, scheduler
+    PseSignalDesk.Infrastructure/  # EF Core SQLite, live provider (Yahoo FX/macro + PSE Edge history & disclosures, DQR)
+                                   # with its per-URL download cache, Ollama clients, RAG, scheduler
     PseSignalDesk.WebApi/          # controllers (signals, research, portfolio, knowledge), compliance + 499 middleware,
                                    # DI wiring, appsettings, EF migrations
-  tests/PseSignalDesk.Tests/        # 434 cases (433 run + 1 skipped benchmark): board lot, quant, edge, tickets, portfolio,
+  tests/PseSignalDesk.Tests/        # 448 cases (447 run + 1 skipped benchmark): board lot, quant, edge, tickets, portfolio,
                                    # research/backtest, golden snapshots, outcome, training, drift policy, direction/wave,
                                    # classifier, parser, pipeline, knowledge, provider + download cache, prompt,
                                    # compliance, cancellation middleware

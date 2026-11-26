@@ -46,6 +46,33 @@ public sealed class MarketDataOptions
     public string PseEdgeAnnouncementsUrl { get; set; } = "https://edge.pse.com.ph/announcements/search.ax";
 
     /// <summary>
+    /// Whether a symbol whose Yahoo Finance chart carries no usable series is re-read from PSE
+    /// Edge's own daily history. Yahoo no longer publishes PSE-listed equities — every
+    /// <c>{TICKER}.PS</c> symbol answers 404 while <c>PSEI.PS</c> keeps only a live level and a
+    /// legacy quarterly series — so this is what keeps a run live-only instead of failing. Set it
+    /// to <c>false</c> to restore the strict Yahoo-only contract.
+    /// </summary>
+    public bool EnablePseEdgeHistory { get; set; } = true;
+
+    /// <summary>
+    /// PSE Edge daily chart endpoint. A JSON <c>POST</c> of
+    /// <c>{ cmpy_id, security_id, startDate, endDate }</c> answers
+    /// <c>{ chartData: [{ OPEN, HIGH, LOW, CLOSE, VALUE, CHART_DATE }] }</c>: the exchange's own
+    /// daily bars, with the peso value traded but no share count.
+    /// </summary>
+    public string PseEdgeChartUrl { get; set; } = "https://edge.pse.com.ph/common/DisclosureCht.ax";
+
+    /// <summary>PSE Edge symbol search, used to resolve a ticker to its Edge <c>cmpy_id</c>.</summary>
+    public string PseEdgeSymbolSearchUrl { get; set; } =
+        "https://edge.pse.com.ph/autoComplete/searchCompanyNameSymbol.ax";
+
+    /// <summary>
+    /// PSE Edge company page, used to resolve the common security's <c>security_id</c> for a
+    /// company (a company can list preferred series next to the common).
+    /// </summary>
+    public string PseEdgeCompanyPageUrl { get; set; } = "https://edge.pse.com.ph/companyPage/stockData.do";
+
+    /// <summary>
     /// PSE Edge company-disclosure search page. It is polled alongside the announcement page and
     /// is best-effort: a failure there never blocks a run, because the announcement page is the
     /// contract.
@@ -108,4 +135,47 @@ public sealed class MarketDataOptions
     /// Per-request timeout. A timeout is a feed failure (HTTP 503), never a fallback.
     /// </summary>
     public int RequestTimeoutSeconds { get; set; } = 15;
+
+    /// <summary>
+    /// Drops the blank and repeated entries from the three configured lists.
+    /// <para>
+    /// <c>ConfigurationBinder</c> populates an existing collection by <b>adding</b> to it, so
+    /// binding the <c>MarketData</c> section onto this class yields the code defaults <em>plus</em>
+    /// every entry written in <c>appsettings.json</c>. A section that repeats the defaults — the
+    /// shipped file does — therefore doubles both lists: the index symbol is requested twice and
+    /// the proxy reports 24 constituents for 12 names, which is exactly the number a failed run
+    /// prints back to the operator. Normalising once at the options boundary keeps the run, the
+    /// per-URL download cache and that diagnostic honest, and still lets an operator extend a
+    /// list from configuration.
+    /// </para>
+    /// </summary>
+    public void Normalize()
+    {
+        IndexYahooSymbols = DistinctNonBlank(IndexYahooSymbols);
+        IndexProxyConstituents = DistinctNonBlank(IndexProxyConstituents);
+        PseDailyQuotationUrlTemplates = DistinctNonBlank(PseDailyQuotationUrlTemplates);
+    }
+
+    /// <summary>
+    /// The usable entries of a configured list: trimmed, non-blank and unique
+    /// (case-insensitive, first occurrence wins, configured order preserved). Never null, so a
+    /// caller can iterate the result without a guard.
+    /// </summary>
+    public static List<string> DistinctNonBlank(IEnumerable<string>? values)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>();
+
+        foreach (var value in values ?? Array.Empty<string>())
+        {
+            var trimmed = value?.Trim();
+
+            if (!string.IsNullOrEmpty(trimmed) && seen.Add(trimmed))
+            {
+                result.Add(trimmed);
+            }
+        }
+
+        return result;
+    }
 }

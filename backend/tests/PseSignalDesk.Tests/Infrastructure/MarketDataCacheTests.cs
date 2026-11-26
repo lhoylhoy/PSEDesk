@@ -185,6 +185,44 @@ public sealed class MarketDataCacheTests
         Assert.Equal(new[] { "AC", "ALI", "BDO", "AC" }, fetched);
     }
 
+    [Fact]
+    public async Task GetOrAddAsync_evicts_safely_while_another_caller_clears_the_map()
+    {
+        // A live run presses Clear() (run-now) while Edge downloads are still landing and the map
+        // sits at its bound, so eviction enumerates a map another thread is emptying. That has to
+        // trim the map instead of faulting the run: an eviction that sees no value yet is skipped.
+        var cache = new MarketDataCache(maxEntries: 4);
+
+        for (var round = 0; round < 10; round++)
+        {
+            using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(60));
+
+            var fetchers = Enumerable.Range(0, 8).Select(worker => Task.Run(async () =>
+            {
+                var index = 0;
+
+                while (!stop.IsCancellationRequested)
+                {
+                    await cache.GetOrAddAsync(
+                        $"edge-chart:{worker}:{index++ % 40}",
+                        Ttl,
+                        () => Task.FromResult(worker));
+                }
+            }));
+
+            var clearer = Task.Run(() =>
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    cache.Clear();
+                    Thread.Sleep(1);
+                }
+            });
+
+            await Task.WhenAll(fetchers.Append(clearer));
+        }
+    }
+
     /// <summary>A clock the test moves by hand, so a TTL boundary is asserted without a sleep.</summary>
     private sealed class MutableTimeProvider : TimeProvider
     {

@@ -1,14 +1,62 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (performance pass — per-URL chart cache, one session fan-out, pooled HTTP and the O(B²) indicator work removed, all gated on byte-identical golden snapshots; **433 backend tests green + 1 skipped benchmark / 49 frontend tests green**)
-**Last feature pass:** 2026-11-26 (accuracy pass, five pillars) + live-drift wiring + this performance pass (same day)
-**Current task:** none in flight. The performance pass is landed and verified but **not committed** — the operator asked for no commits unless explicitly requested.
+**Last updated:** 2026-11-26 (fast-model fix — the shipped `FastExtractionModel` was `qwen3.5:4b`, a name Ollama Cloud never served, so every run logged `HTTP 404 model 'qwen3.5:4b' not found`; the default is now `glm-5.3-flash` and an unknown fast model latches the optional pass off after one warning; **451 backend tests green + 1 skipped benchmark / 49 frontend tests green**)
+**Last feature pass:** 2026-11-26 (fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and feed-diagnostics pass — same day)
+**Current task:** none in flight. The fast-model fix and the Yahoo-delisting pass are landed and verified live but **not committed** — the operator asked for no commits unless explicitly requested.
+
+## Session note (2026-11-26) — "where are the tickers?"
+
+Read-only inventory; no source file changed. Two different lists exist and they are easy to confuse:
+
+| List | Lives in | Reaches the browser via | Size / state |
+| --- | --- | --- | --- |
+| **Tracked universe** (static metadata, no prices) | `backend/src/PseSignalDesk.Infrastructure/MarketData/PseTickerCatalog.cs` → `PseTickerCatalog.All` | `GET /api/research/catalog` → `ResearchController.GetCatalog()` → `TickerResearchService.GetCatalog()` → `IMarketDataProvider.GetCatalog()` | **64 names** (verified live: ICT … RCR) |
+| **Tickers on the desk** (the ranked book) | SQLite `SignalItems.Ticker` rows joined to `SignalRuns` | `GET /api/signals/latest?horizon=…` → `run.items[].ticker` | whatever the last stored run for that horizon produced |
+
+Rendering: Pro → `frontend/src/components/SignalTable.tsx`; Simple → `AdviceCardList.tsx` + `RidingNowStrip.tsx`; detail sheet → `TickerDetailDialog.tsx`; catalog search → `ResearchDialog.tsx` + `lib/pseNicknames.ts`.
+
+Local `backend/src/PseSignalDesk.WebApi/pse_signals.db` at the time of the check: runs **14 (WEEK, 9 names)** and **15 (MONTH, 10 names)**, both `RunDate 2026-11-25`; **no DAY or YEAR run**, so those two horizons legitimately render the "Market data loaded, no signal run yet" empty state. `DailyMarketSnapshots` 1 row / `StockDailyMetrics` 60 rows, all `2026-11-25`.
+
+Verified commands:
+- API on a throwaway DB (`Data Source=/tmp/psedesk-tickers.db`, port 5399, `KnowledgeBase__IndexOnStartup=false`): `/health` `200`; `GET /api/research/catalog` `200` with **64** entries; `GET /api/signals/latest?horizon=WEEK` `200` with `run: null`, `dates: []` (fresh DB → no book, catalog still full). Throwaway DB removed afterwards; the real `pse_signals.db` was only opened read-only via `sqlite3 -readonly`.
+
+## Verified in the fast-model fix (2026-11-26)
+
+The operator's debugger showed two first-chance lines: `SignalGenerationException` in
+`PseSignalDesk.Infrastructure.dll` and the same exception surfaced from `System.Private.CoreLib.dll`,
+with `Ollama Cloud returned HTTP 404 (Not Found). {"error": "model 'qwen3.5:4b' not found. Try
+glm-5.3-flash:cloud."}`.
+
+| Finding | Evidence |
+| --- | --- |
+| **The fast-extraction default was never a cloud model.** | `GET https://ollama.com/api/tags` (Bearer user-secret key) → `200`, **25 models**: `deepseek-v4.1-flash`, `deepseek-v4.1-flash:1017`, `deepseek-v4-pro:0813`, `glm-5.2`, `glm-5.3`, `glm-5.3-flash`, `gpt-oss:20b/120b`, `kimi-k2.6/2.7-code/3/3.1-pro`, `mimo-v2.6-flash/pro`, `minimax-m3/3.1-flash`, `mistral-large-4`, `gemma4:31b`, `clef:27b`, `nemotron-3-super/ultra`, … — no `qwen3.5:4b`. |
+| **The 404 is the *optional* pass, not the ranking.** | `POST /api/chat` with `qwen3.5:4b` → `404`; `deepseek-v4.1-flash` → `200`; `glm-5.3-flash` → `200`; `mimo-v2.6-flash` → `200`. The exception was caught by `EnrichWithFastExtractionAsync` (warning, run continues), which is why the run still produced a book — the debugger was reporting first-chance throw sites. |
+| **`glm-5.3-flash` answers the real fast prompt.** | The exact fast system/user prompt (two candidates, `format: json`, `temperature 0.1`) → `200` and a parseable object: `{"summary": "In a BULLISH regime, ICT shows the cleanest structure: STAGE_2 uptrend … Avoid MER on dilution", "trap_flags": [...]}`. |
+| **Embeddings are unavailable for this key, by design harmless.** | `POST /api/embed` with `nomic-embed-text`, `nomic-embed-text:latest` and even `glm-5.3-flash` → `401 {"error": "unauthorized"}`; legacy `/api/embeddings` → `404 path not found`. `OllamaEmbeddingClient` logs and returns `null`, so retrieval stays lexical. |
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx --nologo` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 451, Skipped: 1, Total: 452` (8 s, exit 0); the skip is the manual replay benchmark |
+| `dotnet test … --filter FullyQualifiedName~OllamaSignalEngineTests` | `Passed! 4/4` — fast 404 keeps the ranking, one 404 per engine (latch), ranking 404 still `SignalGenerationException`, blank fast model makes no call |
+| live `curl` probes (see the table above) | `/api/tags` `200` (25 models); `qwen3.5:4b` `404`; `glm-5.3-flash` / `deepseek-v4.1-flash` / `mimo-v2.6-flash` `200`; `/api/embed` `401` |
+
+Not run in this pass: a full `run-now` past the LLM step (the fast prompt was exercised directly against
+the live endpoint instead), and the frontend suites (no frontend file changed).
+
+## What the fast-model fix changed
+
+Four files plus the memory bank; no indicator, plan level, fee, prompt or golden moved.
+
+- **`OllamaCloudOptions.FastExtractionModel`** default and **`appsettings.json`** → `glm-5.3-flash` (the model the provider itself pointed at, validated `200`); `README.md`'s env example follows.
+- **`OllamaSignalEngine`** now separates "the endpoint answered non-success" from "the ranking failed": `SendChatAsync` throws a private `ChatResponseException(status, message)`, `SendRankingChatAsync` re-wraps it as `SignalGenerationException` with the identical text (the API's `502` contract is untouched), and `EnrichWithFastExtractionAsync` treats `404` as a configuration error — one warning naming the setting and the reasoning model, then `_fastExtractionUnavailable` (volatile) latches the pass off for the life of the engine, so the four horizons stop repeating the call.
+- **New `OllamaSignalEngineTests`** (4 cases, stub `HttpMessageHandler` routed by the request body's `model`, no sockets): fast 404 keeps the book, one 404 per engine across two horizons, ranking 404 still `SignalGenerationException` with the upstream detail, blank fast model makes zero fast calls.
 
 ## Where the desk stands
 
 A single-operator research desk for the Philippine Stock Exchange, with all four horizons live:
 
-- **Ingestion.** Yahoo Finance v8 charts (`PSEI.PS` or an equal-weight heavyweight proxy, `PHP=X`, `{TICKER}.PS`), PSE Edge filings (row-attributed, word-boundary matched), an optional official PSE Daily Quotation Report (live templates or operator upload) and three best-effort macro series (`^TNX`, `BZ=F`, `EPHE`). A session fetches everything in one fan-out and each download is reused for ten minutes (charts) / five (Edge pages) per request URL, so the four horizons of one run share one network call. No synthetic series and no demo tape exist.
+- **Ingestion.** Yahoo Finance v8 charts (`PSEI.PS` or an equal-weight heavyweight proxy, `PHP=X`, `{TICKER}.PS`) **plus the PSE Edge daily-history fallback that now supplies every PSE series** (Yahoo answers `404` for all `{TICKER}.PS`), PSE Edge filings (row-attributed, word-boundary matched), an optional official PSE Daily Quotation Report (live templates or operator upload) and three best-effort macro series (`^TNX`, `BZ=F`, `EPHE`). A session fetches everything in one fan-out and each download is reused for ten minutes (charts) / five (Edge pages) per request URL, so the four horizons of one run share one network call. No synthetic series and no demo tape exist.
 - **Screening.** A deterministic quant pass (Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, RS63d, ATR%, VCP, turnover/volume), a hard PHP 5M floor on **both** the average and the 20-session median turnover plus ≥16 active sessions, a top-25 cap, market breadth and sector rotation. History is read point-in-time: no live foreign-flow print and no filing dated or timestamped after the session's close.
 - **Ranking.** One strict-JSON Ollama call per horizon, grounded in retrieved knowledge sections, then server-owned post-processing: unknown ticker / thesis-less / hard-trap discard, tick-grid normalisation, the `DAY` static band and net-R:R gate, drift recomputation, drop classification and citation verification.
 - **Pricing.** `ProbabilisticEdgeService` owns the win probability, break-even rate, EV, Quarter-Kelly stake and `TRADE` / `SMALL_SIZE` / `WATCH_ONLY` verdict. An optional **promoted** per-horizon logistic model (a residual over the prior, ±6pp tilt, Kelly rescale) and a live calibration offset feed in; the desk memory (realized record, sectors that paid/bled, stop-outs, ranked factors) is printed into the prompt.
@@ -17,6 +65,67 @@ A single-operator research desk for the Philippine Stock Exchange, with all four
 - **Paper book.** A cash ledger with raise-stop, close, trim and pyramid merge, plus expectancy / profit factor / payoff telemetry, drawdown posture and alerts.
 - **Terminal.** **Simple** (market call, then at most three plan cards) and **Pro** (dense table and tiles) read one payload; persisted light/dark, bottom-sheet dialogs, card fallbacks from 320px up, a zero-dependency SWR cache with intent preloaders, and a first-run legal gate.
 - **Knowledge base.** 8 built-in documents / 46 sections in SQLite, BM25 + cosine RRF retrieval with mandatory guardrails and horizon/sector/trap boosts, optional embeddings, and uploads behind a rights attestation.
+
+## Verified in the Yahoo-delisting pass (2026-11-26)
+
+The operator hit `MarketDataUnavailableException` — "No PSEi index series … 0 of 12 constituents" — on a healthy network. The cause is upstream: **Yahoo stopped publishing PSE equities.**
+
+| Finding | Evidence |
+| --- | --- |
+| **Every PSE equity chart is gone from Yahoo.** | `query1.finance.yahoo.com/v8/finance/chart/JFC.PS` (and `SM.PS`, `TEL.PS`, `BDO.PS`, …) → `404` "No data found, symbol may be delisted"; `PSEI.PS?range=1y` → `200` with a sparse legacy series (~quarterly) and a live `regularMarketPrice`, but no bar on the session date. |
+| **The Yahoo workarounds do not exist.** | A crumb/cookie handshake, the mirror host `query2` and the Yahoo search endpoint all return the same `404`; search only resolves the symbol, never a chart. |
+| **PSE Edge still publishes the exchange's own daily bars.** | `autoComplete/searchCompanyNameSymbol.ax?term=JFC` → `cmpyId 86`; `companyPage/stockData.do?cmpy_id=86` → `security_id 158`; `POST common/DisclosureCht.ax` with `{cmpy_id, security_id, startDate, endDate}` → `chartData[{OPEN,HIGH,LOW,CLOSE,VALUE,CHART_DATE}]` back 3–5 years (283 sessions for `date=2026-11-25`). |
+| **Edge reports peso value, not share volume.** | `VALUE` is the exact turnover; `VALUE / ((HIGH+LOW+CLOSE)/3)` reproduces the exchange's own share count within ~0.01% on a real JFC print, which keeps `Close × Volume` equal to the turnover the PHP 5M floor is measured on. |
+| **Edge has no index series at all.** | `psei/form.do` is a company-news search (`/psei/search.ax`), `index/form.do` a company lookup, and `?term=PSEI` answers `[]` — so the equal-weight proxy of 12 heavyweights stays the only live path for regime, breadth and realised volatility. |
+| **The extra cache traffic exposed a real cache race.** | `MarketDataCache.EvictOldest` dereferenced an entry whose value a concurrent `Clear()` had already removed → `NullReferenceException` → `GET /api/research/RCB` answered `500` mid-session. Reproduced in a stress probe in 133 ms, then fixed and pinned by a test. |
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 447, Skipped: 1, Total: 448` (8 s, exit 0); the skip is the manual replay benchmark |
+| `dotnet build PseSignalDesk.slnx --nologo` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `curl` probes against the live feed | `JFC.PS` / `SM.PS` / `TEL.PS` / `BDO.PS` → `404`; `PSEI.PS` → `200` with `regularMarketPrice` and a sparse legacy series; all three Edge endpoints → `200` |
+| fresh-DB smoke run (`Data Source=/tmp/psedesk-fresh.db`, port 5299), `POST /api/signals/run-now?date=2026-11-25` | reached the LLM step (`400 Ollama Cloud is not configured`) with **280 Edge chart POSTs / 284 Yahoo `.PS` requests / 0 failures**, **283 daily bars** per ticker, the proxy note *"The PSEi index has no live history; reading the 11/25/2026 trend from an equal-weight proxy of 12 PSE heavyweights"*, and 4 honest skips (`VLL` 2026-06-01, `RRHI` 2026-07-10, `VREIT` 2026-06-01, `RCB` one session behind — all stale on Edge itself) |
+| `GET /api/research/JFC` on the same build | `200` — close `147.20`, turnover `₱72,828,984`, `rsi14 49.67`, `sma200 156.84`, `maxDrawdown252dPct 44.39`, `asOfDate 2026-11-25`, `dataSource live` |
+| `GET /api/research/{RCB,VLL,RRHI,VREIT}` | `RCB` `200` after the cache fix (was `500`); `VLL`/`RRHI`/`VREIT` `503` **"no live chart with 200 sessions"** — correct, Edge stopped printing them |
+| `dotnet test … --list-tests` (delta) | +8 provider tests (`PseMarketDataProviderTests` 22 → 28) and +1 cache race test (`MarketDataCacheTests` 8 → 9) |
+
+Not run in this pass: any run past the LLM step (`OLLAMA_API_KEY` unset), and the frontend suites (no frontend file changed).
+
+## What the Yahoo-delisting pass changed
+
+Four files, all in the *feed* layer; no indicator, plan level, fee or golden moved.
+
+- **`PseEdgeHistorySource`** (new, `internal`) + `EdgeBarFetch(Bars, Failure)`: resolve (symbol search → `cmpyId`, company page → `security_id`) then one chart POST, parsed into one bar per session, 10-minute `MarketDataCache` TTL per call, per-request timeout, and every failure returned as a reason instead of thrown.
+- **`PseMarketDataProvider.WithEdgeHistoryAsync`** is the seam, called at exactly three points (single-symbol research, the stock fan-out, the proxy constituent fetch) and only when the Yahoo chart is unavailable or shorter than the caller's requirement. A replacement logs `Reading {TICKER} from PSE Edge ({n} daily bars) because …`; a short Edge series now reports `PSE Edge: {count} bar(s), newest {date}.` instead of a blank reason (the live run printed `PSE Edge: .` before this fix).
+- **`MarketDataOptions`** gained `EnablePseEdgeHistory` (default `true`), `PseEdgeChartUrl`, `PseEdgeSymbolSearchUrl`, `PseEdgeCompanyPageUrl`, mirrored in `appsettings.json`; `EnablePseEdgeHistory = false` keeps the strict Yahoo-only contract.
+- **`MarketDataCache.EvictOldest`** filters a value that a concurrent `Clear()` already removed before sorting, so eviction can no longer fault a request.
+
+
+The operator pasted the debugger output of a failing `run-now`: `MarketDataUnavailableException`, "equal-weight heavyweight proxy could only use **0 of 24** constituents (6 required)" with `PSEI.PS: 0 bar(s), 200 required` listed **twice** and duplicated/scrambled constituent names.
+
+| Finding | Evidence |
+| --- | --- |
+| **The upstream really is degraded here** (so the `503` was correct *at that time*, not a code fault — the Yahoo-delisting pass above then found the cause and the fix). | `curl` to `query1.finance.yahoo.com/v8/finance/chart/PSEI.PS?interval=1d&range=1y` → `200` with `regularMarketPrice: 5465.79` and **exactly 1 timestamp/close**; `SM.PS`, `TEL.PS`, `BDO.PS`, `JFC.PS` → **404**; after ~6 chart calls every symbol (incl. `AAPL`, `EPHE`) → **429 Too Many Requests**. |
+| **`ConfigurationBinder` appends instead of replacing.** | `MarketDataOptions` initializes `IndexYahooSymbols`/`IndexProxyConstituents`; the shipped `appsettings.json` repeats both lists, so binding produced **2** index symbols and **24** constituents. Pinned by `MarketDataOptionsTests.Normalize_undoes_the_doubling_a_real_configuration_section_causes` (asserts 2/24 raw → 1/12 normalised). |
+| **The failure message raced.** | `FetchProxyConstituentBarsAsync` had 24 tasks appending to one shared `List<string>`; that is why the reasons were duplicated *and* out of order. |
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 439, Skipped: 1, Total: 440` (7 s, exit 0); the skip is the manual replay benchmark |
+| `dotnet test … --list-tests` | 440 rows over 32 test files (`PseMarketDataProviderTests` 22, `MarketDataOptionsTests` 4) |
+| `dotnet build PseSignalDesk.slnx --nologo` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| smoke run: `ASPNETCORE_URLS=http://127.0.0.1:5299 … Data Source=/tmp/psedesk-verify.db KnowledgeBase__IndexOnStartup=false dotnet bin/Debug/net10.0/PseSignalDesk.WebApi.dll`, then `POST /api/signals/run-now?horizon=WEEK` | `/health` `200`; the run answered `503 Market data unavailable` with **"could only use 0 of 12 constituents (6 required): PSEI.PS: 0 bar(s), 200 required; TEL: HTTP 404 for TEL.PS; SM: …; GLO: HTTP 404 for GLO.PS. The live market feed is unavailable."** — one entry per distinct constituent, configured order, no double period. Throwaway DB and process removed afterwards; the real `pse_signals.db` was never opened. |
+
+Not run in this pass: anything that needs a healthy Yahoo feed (a real Top-10 run, DQR live templates, the replay benchmark), and the frontend (`npm test` / `npm run build` — no frontend file changed).
+
+## What the feed-diagnostics pass changed
+
+Three defects, all in the *failure* path (the success path is byte-identical — no golden moved, no plan level or fee changed):
+
+- **Normalised symbol lists (`MarketDataOptions.Normalize()`, `DistinctNonBlank`).** `ConfigurationBinder` adds a bound section to a collection the class already initialized, so a section that repeats the defaults doubles the list. `MarketDataOptions.Normalize()` trims, drops blanks and de-duplicates (`IndexYahooSymbols`, `IndexProxyConstituents`, `PseDailyQuotationUrlTemplates`, case-insensitive, first spelling wins), and `Program.cs` applies it in a `PostConfigure` on the `MarketData` options registration. An operator can still *extend* a list from configuration — a repeated entry is simply read once.
+- **The provider normalises again in its constructor** into `_indexSymbols` / `_proxyConstituents`, so a hand-built `Options.Create(new MarketDataOptions())` (every test, any DI-free caller) fetches one download per distinct symbol and reports an honest `of N constituents`.
+- **Deterministic, thread-safe failure reasons.** `FetchProxyConstituentBarsAsync` now returns a `ProxyConstituentFetch(bars, reason)` per constituent and collects the reasons **after** `Task.WhenAll`, in configured order — no shared `List<T>` written by parallel tasks, no duplicated or shuffled entries. `JoinReasons` trims the period each reason already ends with so the `503` detail does not print `GLO.PS..`.
+- **Behaviour is unchanged where it matters:** the index still needs 200 bars, the proxy still needs 6 of the configured heavyweights, and nothing is fabricated — the upstream outage still answers `503`.
 
 ## Verified in the performance pass (2026-11-26)
 
@@ -77,6 +186,8 @@ Still open from the wider plan: `FeatureKeysJson` per-horizon schema persistence
 - **Fees are per leg *and* dated, because the tax changed.** `BuyLegFeeRate` 0.295% and `SellLegFeeRate` 0.395% (the sell leg carries the 0.10% stock transaction tax) sum to `RoundTripFeeRate` 0.690% — but only on or after `CmepaEffectiveDate = 2025-07-01`. `StockTransactionTaxRate(date)` returns 0.60% before it, so historical calls take their own date. The commission floor (PHP 20, +12% VAT) means risk is settled pesos, never `shares × spread`.
 - **A replay sees only what had printed.** No live foreign-flow print, no disclosure dated after the session, and nothing filed after the close on the session's own day; a stop fills at the gap open, never at the stop it gapped through.
 - **A cache may serve an older real body, never a synthetic one.** Charts live ten minutes and Edge pages five, in memory only, and a manual run clears them first. The cached object is the downloaded body, so tick rounding, the date clamp and the volume filter are still applied per caller.
+- **A delisted feed is replaced by the exchange's own tape, never by an invented one.** When Yahoo has no PSE series, `PseEdgeHistorySource` supplies real Edge sessions inside the requested window; a row without a usable OHLC print is dropped rather than carried forward, and Edge's peso `VALUE` becomes volume through `VALUE / ((HIGH+LOW+CLOSE)/3)`. `MarketData:EnablePseEdgeHistory = false` restores the strict Yahoo-only contract.
+- **Eviction never trusts an entry it just enumerated.** A value a concurrent `Clear()` removed is skipped, not dereferenced.
 - **Output equivalence beats a speed claim.** Any change to an indicator, a plan level or a fee must leave the checked-in goldens byte-identical, or explain the diff.
 - **Liquidity is a median.** The floor requires the mean **and** the 20-session median to clear PHP 5M with ≥16 active sessions; a legacy row with `0`/`0` falls back to the mean rather than being rejected.
 - **Only an executed entry can be graded.** No fill inside the horizon window is `UNFILLED` — null exit, null R, excluded from the win rate, profit factor, Brier score and `openCount`.
@@ -122,7 +233,7 @@ Still open from the wider plan: `FeatureKeysJson` per-horizon schema persistence
 - `POST /api/signals/run-now` for all four horizons; a second session for real drift and drop categories.
 - `POST /api/signals/quotation-report` against a stored session; confirm `foreignFlowSource` and the suspension trap.
 - `POST /api/signals/train-all`, then read the four books: `optimalKellyFractionMultiplier`, the Brier/log-loss pair, `validationExpectancyR` and the status (`LEARNED` vs `PRIOR_FALLBACK`).
-- `GET /api/signals/backtest?horizon=WEEK` once `PSEI.PS` returns ≥200 bars; compare `ExcessReturnPct` with a prior-pinned baseline, and read the dated-friction fields (`feesPaidPhp` per trade) against a hand-computed pre-CMEPA and post-CMEPA round trip.
+- `GET /api/signals/backtest?horizon=WEEK` and a real Top-10 run now that the tape resolves from PSE Edge; compare `ExcessReturnPct` with a prior-pinned baseline, and read the dated-friction fields (`feesPaidPhp` per trade) against a hand-computed pre-CMEPA and post-CMEPA round trip.
 - The bootstrap's success path (`Bootstrap money-manager refit finished … LEARNED`, then `skipped: every horizon already carries a fitted model`).
 - Ticket parity: `SignalItemDto.orderTicket` vs `GET /api/research/{ticker}` vs `GET /api/portfolio/order-ticket` on the same plan.
 - A real browser/device pass (Simple and Pro) at 320–2560px; no component/DOM suite exists, so this is the only UI verification.
@@ -144,7 +255,7 @@ Follow the sync rules in `techContext.md` (*Documentation map*): behaviour → R
 ## Session checklist for contributors
 
 1. Read all six `memory-bank/*.md` files before starting.
-2. Confirm the baseline: backend `dotnet test PseSignalDesk.slnx` (**433 passed + 1 skipped benchmark = 434**), `cd frontend && npm test` (**49**), `npm run build`.
+2. Confirm the baseline: backend `dotnet test PseSignalDesk.slnx` (**447 passed + 1 skipped benchmark = 448**), `cd frontend && npm test` (**49**), `npm run build`.
 3. Update `activeContext.md` when starting/finishing a task and `progress.md` when status changes.
 4. Keep `systemPatterns.md` in sync with architectural changes and `techContext.md` with tool/config changes.
 5. Never persist secrets (`OLLAMA_API_KEY`, `OllamaCloud:ApiKey`, `PSEDESK_OPERATOR_API_KEY`) — env or user-secrets only.

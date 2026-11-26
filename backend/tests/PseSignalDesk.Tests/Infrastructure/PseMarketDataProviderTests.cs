@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -20,6 +21,16 @@ namespace PseSignalDesk.Tests.Infrastructure;
 public sealed class PseMarketDataProviderTests
 {
     private static readonly DateOnly TradeDate = new(2026, 11, 24);
+
+    /// <summary>
+    /// The heavyweights <see cref="MarketDataOptions"/> initializes, in the order the proxy fetches
+    /// them. The shipped <c>appsettings.json</c> repeats this same list, which is why the options
+    /// are normalised before anything is fetched.
+    /// </summary>
+    private static readonly string[] DefaultProxyConstituents =
+    {
+        "TEL", "SM", "SMPH", "ALI", "BDO", "BPI", "ICT", "JFC", "MER", "AC", "URC", "GLO"
+    };
 
     [Fact]
     public async Task FetchAsync_propagates_caller_cancellation_instead_of_using_a_fallback_series()
@@ -425,6 +436,82 @@ public sealed class PseMarketDataProviderTests
             $"invalidation did not refetch: {requests} requests, {afterFirstRun} before");
     }
 
+    [Fact]
+    public async Task FetchAsync_counts_each_proxy_constituent_once_when_configuration_repeats_it()
+    {
+        // ConfigurationBinder adds a bound section to the options' initialized lists, so a section
+        // that repeats the code defaults doubles both lists. The run must still read the trend from
+        // 12 distinct heavyweights (not 24 names fetched twice) and print that honest count.
+        var live = new LiveFeedHandler(TradeDate);
+        var requests = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        var routed = new SelectiveHandler(
+            request => (request.RequestUri?.ToString() ?? string.Empty)
+                .Contains("PSEI.PS", StringComparison.Ordinal),
+            new InlineHandler(SingleBarChartJson(TradeDate)).SendForTest,
+            live.RespondAsync);
+
+        var provider = CreateProvider(
+            new StubHandler((request, token) =>
+            {
+                requests.AddOrUpdate(request.RequestUri?.ToString() ?? string.Empty, 1, (_, count) => count + 1);
+                return routed.SendForTest(request, token);
+            }),
+            options =>
+            {
+                options.IndexYahooSymbols.Add(options.IndexYahooSymbols[0]);
+                options.IndexProxyConstituents = options.IndexProxyConstituents
+                    .Concat(options.IndexProxyConstituents)
+                    .ToList();
+            });
+
+        var batch = await provider.FetchAsync(TradeDate);
+
+        Assert.Contains(
+            $"equal-weight proxy of {DefaultProxyConstituents.Length} PSE heavyweights",
+            batch.RegimeNote,
+            StringComparison.Ordinal);
+
+        Assert.Equal(
+            1,
+            requests.Count(entry => entry.Key.Contains("PSEI.PS", StringComparison.Ordinal)));
+        Assert.Equal(
+            1,
+            requests.Count(entry => entry.Key.Contains("/chart/TEL.PS", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task FetchAsync_reports_each_distinct_proxy_constituent_once_in_configured_order()
+    {
+        // Every symbol and constituent 404s: the diagnostic must name 12 distinct heavyweights, in
+        // the configured order, instead of repeating the defaults the binder appended.
+        var provider = CreateProvider(
+            new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound))),
+            options =>
+            {
+                options.IndexYahooSymbols.Add(options.IndexYahooSymbols[0]);
+                options.IndexProxyConstituents = options.IndexProxyConstituents
+                    .Concat(options.IndexProxyConstituents)
+                    .ToList();
+            });
+
+        var error = await Assert.ThrowsAsync<MarketDataUnavailableException>(
+            () => provider.FetchAsync(TradeDate));
+
+        Assert.Contains(
+            $"could only use 0 of {DefaultProxyConstituents.Length} constituents",
+            error.Message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain($"{DefaultProxyConstituents.Length * 2} constituents", error.Message, StringComparison.Ordinal);
+
+        // One entry per constituent, no repeats, in the order they are configured to be fetched.
+        Assert.Equal(1, CountOccurrences(error.Message, "SM: HTTP 404"));
+        Assert.True(
+            error.Message.IndexOf("TEL: HTTP 404", StringComparison.Ordinal) <
+            error.Message.IndexOf("SM: HTTP 404", StringComparison.Ordinal),
+            error.Message);
+    }
+
     /// <summary>
     /// The one-bar index payload the live feed really returns for <c>PSEI.PS</c>: a price with no
     /// history, which is not enough to describe a 200-session trend.
@@ -438,6 +525,177 @@ public sealed class PseMarketDataProviderTests
                stamp.ToString(CultureInfo.InvariantCulture) +
                "],\"indicators\":{\"quote\":[{\"open\":[8000],\"high\":[8010],\"low\":[7990]," +
                "\"close\":[8005],\"volume\":[1200000]}]}}],\"error\":null}}";
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+
+        while (index < text.Length &&
+               (index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
+
+    [Fact]
+    public async Task FetchSingleStockAsync_reads_the_series_from_pse_edge_when_yahoo_delists_the_symbol()
+    {
+        // Yahoo answers every {TICKER}.PS with 404 ("No data found, symbol may be delisted"),
+        // which is exactly the state of the live feed. The exchange's own Edge history is the
+        // only live series left, so the desk has to read it instead of failing the ticker.
+        var provider = CreateProvider(new DarkYahooHandler(new EdgeFeedHandler(TradeDate)));
+
+        var stock = await provider.FetchSingleStockAsync("JFC", TradeDate);
+
+        Assert.NotNull(stock);
+        Assert.Equal("JFC", stock!.Ticker);
+        Assert.Equal(220, stock.Bars.Count);
+        Assert.Equal(TradeDate, stock.LatestBar!.Date);
+        Assert.Equal(TradeDate, stock.Bars[^1].Date);
+        Assert.All(stock.Bars, bar => Assert.True(bar.Close > 0m && bar.Volume > 0));
+    }
+
+    [Fact]
+    public async Task FetchSingleStockAsync_derives_share_volume_from_the_reported_peso_value()
+    {
+        // Edge publishes the peso value traded, not the share count. VALUE / typical price has to
+        // reproduce the exchange's own volume, because Close x Volume is what the PHP 5M
+        // liquidity floor is measured on.
+        const decimal valuePerBar = 12_000_000m;
+        var provider = CreateProvider(new DarkYahooHandler(
+            new EdgeFeedHandler(TradeDate, valuePerBar: valuePerBar)));
+
+        var stock = await provider.FetchSingleStockAsync("JFC", TradeDate);
+
+        Assert.NotNull(stock);
+        Assert.All(stock!.Bars, bar =>
+        {
+            var typicalPrice = (bar.High + bar.Low + bar.Close) / 3m;
+            var expected = (long)Math.Round(valuePerBar / typicalPrice, MidpointRounding.AwayFromZero);
+
+            Assert.Equal(expected, bar.Volume);
+
+            // Close x Volume reproduces the official turnover the liquidity floor uses, within
+            // the drift the typical-price approximation can introduce.
+            var turnover = bar.Close * bar.Volume;
+            Assert.True(
+                Math.Abs(turnover - valuePerBar) <= valuePerBar * 0.02m,
+                $"turnover {turnover} drifted from the reported {valuePerBar}");
+        });
+    }
+
+    [Fact]
+    public async Task FetchSingleStockAsync_collapses_repeated_edge_sessions_and_keeps_the_series_ordered()
+    {
+        // Edge repeats a session row now and then (JFC prints 2025-11-27 twice). One bar per
+        // session has to survive, in ascending order, with the last print winning.
+        var provider = CreateProvider(new DarkYahooHandler(
+            new EdgeFeedHandler(TradeDate, bars: 220, duplicateSessions: 1)));
+
+        var stock = await provider.FetchSingleStockAsync("JFC", TradeDate);
+
+        Assert.NotNull(stock);
+
+        var dates = stock!.Bars.Select(bar => bar.Date).ToList();
+
+        Assert.Equal(220, dates.Count);
+        Assert.Equal(dates.Distinct().Count(), dates.Count);
+        Assert.Equal(dates.OrderBy(date => date), dates);
+
+        // The repeated session's later print is the one that survives.
+        var repeated = Assert.Single(stock.Bars, bar => bar.Date == TradeDate.AddDays(-1));
+        Assert.Equal(1.5m, repeated.Close);
+    }
+
+    [Fact]
+    public async Task FetchAsync_names_both_feeds_when_neither_publishes_a_psei_series()
+    {
+        // Neither feed may be silently dropped from the diagnostic: an operator has to be able to
+        // see that Yahoo 404s and that Edge did not answer either.
+        var provider = CreateProvider(new DarkYahooHandler(
+            new EdgeFeedHandler(TradeDate, chartFails: true)));
+
+        var error = await Assert.ThrowsAsync<MarketDataUnavailableException>(
+            () => provider.FetchAsync(TradeDate));
+
+        Assert.Contains("404", error.Message, StringComparison.Ordinal);
+        Assert.Contains("PSE Edge", error.Message, StringComparison.Ordinal);
+        Assert.Contains("PSEI.PS", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FetchAsync_builds_the_session_from_pse_edge_when_yahoo_has_no_pse_series()
+    {
+        // The whole reason the fallback exists: with Yahoo dark on every .PS symbol but PSE Edge
+        // live, a session still has to be produced from real exchange history.
+        var live = new LiveFeedHandler(TradeDate);
+        var edge = new EdgeFeedHandler(TradeDate);
+
+        var provider = CreateProvider(new StubHandler((request, token) =>
+        {
+            var uri = request.RequestUri?.ToString() ?? string.Empty;
+
+            if (uri.Contains("edge.pse.com.ph", StringComparison.Ordinal))
+            {
+                return edge.RespondAsync(request, token);
+            }
+
+            // Yahoo still answers the FX and macro symbols; only the PSE series are dark.
+            return uri.Contains(".PS", StringComparison.Ordinal)
+                ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound))
+                : live.RespondAsync(request, token);
+        }));
+
+        var batch = await provider.FetchAsync(TradeDate);
+
+        Assert.True(batch.Stocks.Count >= 10, $"only {batch.Stocks.Count} tickers survived the Edge fallback");
+        Assert.All(batch.Stocks, stock => Assert.Equal(TradeDate, stock.LatestBar!.Date));
+        Assert.All(batch.Stocks, stock => Assert.True(stock.Bars.Count >= QuantitativeFilterService.MinBarsRequired));
+
+        var indexBars = Assert.IsAssignableFrom<IReadOnlyList<OhlcvBar>>(batch.IndexBars);
+        Assert.True(indexBars.Count >= 200);
+        Assert.Equal(TradeDate, indexBars[^1].Date);
+        Assert.Equal(MarketRegime.BULLISH, batch.MarketRegime);
+
+        // The proxy is still scale-free: a level and the PSEi moving averages stay unreported.
+        Assert.Equal(0m, batch.PseiClose);
+        Assert.Equal(0m, batch.PseiSma50);
+        Assert.Contains("proxy", batch.RegimeNote, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FetchAsync_reports_how_short_the_edge_series_is_when_it_cannot_fill_the_window()
+    {
+        // Edge answering with a real but short series is the one case where "no bars" and "not
+        // enough bars" look alike; the diagnostic has to say which, or the blank tail
+        // ("PSE Edge: .") tells an operator nothing.
+        var provider = CreateProvider(new DarkYahooHandler(new EdgeFeedHandler(TradeDate, bars: 40)));
+
+        var error = await Assert.ThrowsAsync<MarketDataUnavailableException>(
+            () => provider.FetchAsync(TradeDate));
+
+        Assert.Contains("40 bar(s), newest", error.Message, StringComparison.Ordinal);
+        Assert.Contains(TradeDate.ToString("yyyy-MM-dd"), error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("PSE Edge: .", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EnablePseEdgeHistory_false_keeps_the_strict_yahoo_only_contract()
+    {
+        var edge = new EdgeFeedHandler(TradeDate);
+        var provider = CreateProvider(
+            new DarkYahooHandler(edge),
+            options => options.EnablePseEdgeHistory = false);
+
+        var stock = await provider.FetchSingleStockAsync("JFC", TradeDate);
+
+        Assert.Null(stock);
+        Assert.Equal(0, edge.RequestCount);
     }
 
     private static PseMarketDataProvider CreateProvider(HttpMessageHandler handler) =>
@@ -500,6 +758,175 @@ public sealed class PseMarketDataProviderTests
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
             (_predicate(request) ? _matched : _fallback)(request, cancellationToken);
+
+        /// <summary>Allows a composing handler to route through this stub.</summary>
+        public Task<HttpResponseMessage> SendForTest(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            SendAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Stands in for the current live feed: every Yahoo chart answers <c>404</c> (Yahoo no longer
+    /// publishes PSE equities) while PSE Edge keeps serving.
+    /// </summary>
+    private sealed class DarkYahooHandler : HttpMessageHandler
+    {
+        private readonly EdgeFeedHandler _edge;
+
+        public DarkYahooHandler(EdgeFeedHandler edge) => _edge = edge;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            (request.RequestUri?.Host ?? string.Empty).Contains("edge.pse.com.ph", StringComparison.Ordinal)
+                ? _edge.RespondAsync(request, cancellationToken)
+                : Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+    }
+
+    /// <summary>
+    /// Answers the three PSE Edge calls the history source makes — the symbol search, the company
+    /// page and the chart POST — with a deterministic rising daily series. Every other Edge URL
+    /// gets a plain announcements page, so disclosures keep working.
+    /// </summary>
+    private sealed class EdgeFeedHandler : HttpMessageHandler
+    {
+        private readonly DateOnly _endDate;
+        private readonly int _bars;
+        private readonly decimal _start;
+        private readonly decimal _step;
+        private readonly decimal _valuePerBar;
+        private readonly int _duplicateSessions;
+        private readonly bool _chartFails;
+        private readonly string _securityId;
+        private int _requests;
+
+        public EdgeFeedHandler(
+            DateOnly endDate,
+            int bars = 220,
+            decimal start = 100m,
+            decimal step = 0.5m,
+            decimal valuePerBar = 12_000_000m,
+            int duplicateSessions = 0,
+            bool chartFails = false,
+            string securityId = "158")
+        {
+            _endDate = endDate;
+            _bars = bars;
+            _start = start;
+            _step = step;
+            _valuePerBar = valuePerBar;
+            _duplicateSessions = duplicateSessions;
+            _chartFails = chartFails;
+            _securityId = securityId;
+        }
+
+        /// <summary>Every request this stub answered, so a test can prove a feed was never called.</summary>
+        public int RequestCount => Volatile.Read(ref _requests);
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            RespondAsync(request, cancellationToken);
+
+        public Task<HttpResponseMessage> RespondAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref _requests);
+
+            var uri = request.RequestUri?.ToString() ?? string.Empty;
+
+            if (uri.Contains("searchCompanyNameSymbol.ax", StringComparison.Ordinal))
+            {
+                var term = ReadQuery(uri, "term");
+
+                return Json(
+                    $"[{{\"cmpyId\":\"86\",\"cmpyNm\":\"{term} Holdings\",\"symbol\":\"{term}\",\"etfYn\":\"0\"}}]");
+            }
+
+            if (uri.Contains("companyPage/stockData.do", StringComparison.Ordinal))
+            {
+                return Html(
+                    $"<select name=\"security_id\"><option value=\"{_securityId}\" selected>ISSUER</option></select>" +
+                    $"<script>sendData.security_id = \"{_securityId}\";</script>");
+            }
+
+            if (uri.Contains("common/DisclosureCht.ax", StringComparison.Ordinal))
+            {
+                if (_chartFails)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                    {
+                        Content = new StringContent("upstream unavailable", Encoding.UTF8, "text/plain")
+                    });
+                }
+
+                return Json(BuildChartJson());
+            }
+
+            return Html(
+                "<html><body><a href=\"#\">SM Investments Corporation declares cash dividend</a></body></html>");
+        }
+
+        private string BuildChartJson()
+        {
+            var rows = new List<string>(_bars + _duplicateSessions);
+
+            for (var offset = _bars - 1; offset >= 0; offset--)
+            {
+                var close = _start + (_step * (_bars - offset));
+
+                rows.Add(Row(_endDate.AddDays(-offset), close - 0.02m, close + 0.05m, close - 0.05m, close));
+            }
+
+            // Edge repeats a session now and then. The repeat lands last and prints a different
+            // close, so a test can tell which print survived the de-duplication.
+            for (var duplicate = 0; duplicate < _duplicateSessions; duplicate++)
+            {
+                rows.Add(Row(_endDate.AddDays(-1 - duplicate), 1.4m, 1.6m, 1.3m, 1.5m));
+            }
+
+            return "{\"chartData\":[" + string.Join(",", rows) + "]}";
+        }
+
+        private string Row(DateOnly date, decimal open, decimal high, decimal low, decimal close) =>
+            $"{{\"OPEN\":{Number(open)},\"VALUE\":{Number(_valuePerBar)},\"CLOSE\":{Number(close)}," +
+            $"\"CHART_DATE\":\"{date.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)} 00:00:00\"," +
+            $"\"HIGH\":{Number(high)},\"LOW\":{Number(low)}}}";
+
+        private static string ReadQuery(string uri, string name)
+        {
+            var query = new Uri(uri).Query.TrimStart('?');
+
+            foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var pair = part.Split('=', 2);
+
+                if (pair.Length == 2 && pair[0].Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Uri.UnescapeDataString(pair[1]);
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static Task<HttpResponseMessage> Json(string body) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            });
+
+        private static Task<HttpResponseMessage> Html(string body) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "text/html")
+            });
+
+        private static string Number(decimal value) =>
+            value.ToString("0.####", CultureInfo.InvariantCulture);
     }
 
     /// <summary>Answers with a fixed body and status, used for the DQR and the 404 cases.</summary>

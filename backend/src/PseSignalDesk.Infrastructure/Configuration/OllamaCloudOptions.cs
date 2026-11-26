@@ -19,9 +19,11 @@ public sealed class OllamaCloudOptions
 
     /// <summary>
     /// Cheap model used for the fast pre-extraction pass (one compact disclosure/trap
-    /// summary per trading day). Leave blank to skip the pass entirely.
+    /// summary per trading day). Leave blank to skip the pass entirely. It must be a model
+    /// the endpoint actually serves: an unknown name answers HTTP 404 and (because the pass
+    /// is optional) simply switches it off for the process.
     /// </summary>
-    public string FastExtractionModel { get; set; } = "qwen3.5:4b";
+    public string FastExtractionModel { get; set; } = "glm-5.3-flash";
 
     /// <summary>
     /// Embedding model used to vectorise knowledge-base chunks. Blank disables vector
