@@ -240,7 +240,7 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
             ) : null}
           </div>
 
-          <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <dl className="mt-3 grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-6">
             <Tile
               label={simple ? 'Picks it studied' : 'Train / held-out'}
               value={`${formatInteger(current.trainSampleCount)} / ${formatInteger(current.validationSampleCount)}`}

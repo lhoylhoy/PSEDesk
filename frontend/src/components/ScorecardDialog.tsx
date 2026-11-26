@@ -222,7 +222,7 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
 
         {status === 'ready' && scorecard ? (
           <>
-            <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <dl className="mt-4 grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-5">
               <KpiTile
                 label={labels.graded}
                 value={`${formatInteger(scorecard.resolvedCount)} / ${formatInteger(scorecard.totalPicks)}`}
@@ -324,7 +324,8 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                     before the odds migration carry no probability and are excluded.
                   </p>
                 ) : (
-                  <table className="mt-2 w-full border-collapse text-left">
+                  <div className="scroll-x mt-2">
+                    <table className="w-full min-w-56 border-collapse text-left">
                     <thead>
                       <tr className="text-[9px] uppercase tracking-[0.16em] text-slate-500">
                         <th className="py-1.5 font-medium">Bucket</th>
@@ -357,8 +358,9 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                           </tr>
                         );
                       })}
-                    </tbody>
-                  </table>
+                      </tbody>
+                    </table>
+                  </div>
                 )}
                 <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
                   A bucket is on target when realized and predicted agree within ten points; the Brier score

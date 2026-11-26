@@ -394,7 +394,7 @@ function BookTab({
 
   return (
     <div className="mt-4">
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <dl className="grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-5">
         <StatTile
           label={simple ? 'Total value' : 'Total equity'}
           value={formatPrice(summary.totalEquityPhp)}
@@ -421,7 +421,7 @@ function BookTab({
 
       {simple ? (
         <TechnicalDisclosure title="Risk & limits" className="mt-3">
-          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">{guardrailTiles}</dl>
+          <dl className="grid grid-cols-2 gap-2 xs:grid-cols-3">{guardrailTiles}</dl>
         </TechnicalDisclosure>
       ) : null}
 
@@ -498,7 +498,7 @@ function BookTab({
           </ul>
           <div
             className={cn(
-              'mt-4 overflow-x-auto rounded-xl border border-line/60',
+              'mt-4 scroll-x rounded-xl border border-line/60',
               simple ? 'hidden' : 'hidden md:block',
             )}
           >
@@ -766,7 +766,7 @@ function ClosedTab({ summary, simple }: { summary: PortfolioSummary; simple: boo
               <ClosedTradeCard key={trade.id} trade={trade} simple={simple} />
             ))}
           </ul>
-          <div className="mt-3 hidden overflow-x-auto rounded-xl border border-line/60 md:block">
+          <div className="mt-3 hidden scroll-x rounded-xl border border-line/60 md:block">
             <table className="w-full min-w-176 border-collapse text-left">
               <thead>
                 <tr className="text-[10px] uppercase tracking-[0.16em] text-slate-500">

@@ -41,7 +41,7 @@ export function DropPanel({ drops, friendly = false }: DropPanelProps) {
   }
 
   return (
-    <section className="panel p-4 sm:p-5">
+    <section className="panel @container p-4 sm:p-5">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-100">
@@ -66,7 +66,9 @@ export function DropPanel({ drops, friendly = false }: DropPanelProps) {
             : 'No names left the ranked list versus the previous session.'}
         </p>
       ) : (
-        <ul className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        /* Container-driven, not viewport-driven: the same panel is a full-width section in
+           Simple mode and a 22rem sidebar next to the Pro table on an ultra-wide monitor. */
+        <ul className="mt-4 grid gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {drops.map((drop) => {
             const style = categoryStyles[drop.dropCategory];
 

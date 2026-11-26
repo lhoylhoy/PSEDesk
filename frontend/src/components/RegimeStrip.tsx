@@ -56,7 +56,7 @@ function SummaryCard({
   return (
     <div className="rounded-xl border border-line/70 bg-ink-850/80 px-3 py-2.5">
       <dt className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</dt>
-      <dd className={cn('tabular mt-1 text-lg font-semibold text-slate-100', tone)}>{value}</dd>
+      <dd className={cn('tabular text-fluid-metric mt-1 font-semibold text-slate-100', tone)}>{value}</dd>
       <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{detail}</p>
     </div>
   );
@@ -102,7 +102,7 @@ export function RotationStrip({ rotation }: { rotation: SectorRotation[] }) {
       <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
         Sector rotation · best composite first
       </p>
-      <ul className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5">
+      <ul className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6">
         {rotation.map((card) => (
           <RotationCard key={card.sector} card={card} />
         ))}
@@ -157,7 +157,7 @@ export function IndicatorTiles({
   const breadthHealthy = breadthReported && breadthAbove50 >= 50;
 
   return (
-    <dl className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+    <dl className="grid w-full grid-cols-2 gap-2 xs:grid-cols-3 xl:grid-cols-5 3xl:grid-cols-9">
       <MetricTile
         label="PSEi close"
         value={regime.pseiClose.toLocaleString('en-PH', { maximumFractionDigits: 2 })}

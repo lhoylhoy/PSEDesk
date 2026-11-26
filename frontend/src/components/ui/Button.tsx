@@ -33,7 +33,9 @@ export function Button({ variant = 'secondary', busy, children, className, disab
       aria-busy={busy || undefined}
       className={cn(
         'inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition ui-button',
-        'select-none touch-manipulation active:scale-[0.98]',
+        // `tap` only raises the floor on coarse pointers, so the 40px desktop rhythm is
+        // untouched while every button is thumb-sized on a phone or tablet.
+        'tap select-none touch-manipulation active:scale-[0.98]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         variantClasses[variant],
         className,

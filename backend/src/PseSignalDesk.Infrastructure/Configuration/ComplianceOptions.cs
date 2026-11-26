@@ -46,6 +46,24 @@ public sealed class ComplianceOptions
     /// </summary>
     public string OperatorApiKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Host-header allowlist to use instead of the loopback default, and only in
+    /// <see cref="LicensedCommercialMode"/>. A licensed deployment is normally served under a real
+    /// host name, but the shipped <c>AllowedHosts</c> is <c>localhost;127.0.0.1;[::1]</c>, so every
+    /// request carrying a domain in <c>Host:</c> would answer <c>400</c> and the documented mode
+    /// could not be reached. Blank keeps the shipped allowlist. Ignored in personal mode, so a
+    /// leftover value here can never widen a personal deployment.
+    /// </summary>
+    public string AllowedHosts { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Hourly ceiling on the endpoints that fan out to Yahoo Finance / PSE Edge and spend model
+    /// credit (<c>run-now</c>, <c>backtest</c>, <c>train</c>, <c>train-all</c>). Thirty is generous
+    /// for one operator driving four horizons with retries, and it bounds a loop that would
+    /// otherwise hammer the exchange and the model provider. Clamped to 1..1000.
+    /// </summary>
+    public int ExpensiveRequestsPerHour { get; set; } = 30;
+
     /// <summary>True when the desk is running as the single-operator local research desk.</summary>
     public bool IsPersonalLocal =>
         !string.Equals(DeploymentMode, LicensedCommercialMode, StringComparison.OrdinalIgnoreCase);

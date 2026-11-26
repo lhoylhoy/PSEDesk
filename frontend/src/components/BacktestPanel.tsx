@@ -221,7 +221,7 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
         repeat. Past or simulated performance is not a reliable indicator of future results.
       </p>
 
-      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <dl className="mt-3 grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-6">
         <Tile
           label={simple ? 'Total result' : 'Net return'}
           value={formatPercent(result.netReturnPct, 2)}
@@ -355,7 +355,7 @@ export function BacktestPanel({ horizon, viewMode = 'simple' }: BacktestPanelPro
               </li>
             ))}
           </ul>
-          <div className="mt-3 hidden overflow-x-auto rounded-xl border border-line/60 md:block">
+          <div className="mt-3 hidden scroll-x rounded-xl border border-line/60 md:block">
             <table className="w-full min-w-176 border-collapse text-left">
               <thead>
                 <tr className="text-[10px] uppercase tracking-[0.16em] text-slate-500">

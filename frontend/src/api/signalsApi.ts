@@ -25,10 +25,17 @@ import type {
   PortfolioSummary,
   TrimTradeResult,
 } from '../types/portfolio';
+import { operatorKeyHeaders } from '../lib/operatorKey';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:5236';
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+
+/**
+ * Shared operator key for a `LicensedCommercial` deployment, read once at build time. Blank (the
+ * personal default) adds no header, so the local desk behaves exactly as before.
+ */
+const OPERATOR_API_KEY = (import.meta.env.VITE_OPERATOR_API_KEY ?? '').trim();
 
 export class ApiError extends Error {
   readonly status: number;
@@ -54,14 +61,22 @@ interface RequestOptions {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   let response: Response;
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const method = options.method ?? 'GET';
+
+  // A LicensedCommercial deployment rejects an unkeyed write with 401; a personal one leaves the
+  // key blank, so this spread is empty and nothing changes. Reads never carry it.
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...operatorKeyHeaders(method, OPERATOR_API_KEY),
+  };
+
   if (options.json !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
-      method: options.method ?? 'GET',
+      method,
       headers,
       body: options.json !== undefined ? JSON.stringify(options.json) : options.body,
       signal: options.signal,

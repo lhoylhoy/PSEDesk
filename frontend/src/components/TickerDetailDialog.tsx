@@ -234,7 +234,7 @@ export function TickerDetailDialog({
             <DialogStickyHeader>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <DialogTitle className="text-xl font-semibold leading-tight text-white">
+                  <DialogTitle className="text-lg font-semibold leading-tight text-white sm:text-xl">
                     {companyLabel(item.ticker, item.companyName)}
                   </DialogTitle>
                   <span className="rounded border border-line/70 bg-ink-850 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-slate-400">
@@ -253,14 +253,17 @@ export function TickerDetailDialog({
                     : `${item.companyName} · ${item.sector} · rank #${item.rank} · ${horizonMeta[horizon].label} book · ${horizonMeta[horizon].holding}`}
                 </DialogDescription>
               </div>
-              <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end sm:gap-4">
+              {/* Phone: the conviction figure and the two actions take their own rows and are
+                  allowed to wrap, so a long “Record in blotter · 1,240 sh” label cannot push
+                  the close button off a 320px sheet. */}
+              <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end sm:gap-4">
                 <div className="text-right">
                   <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
                     {simple ? 'Confidence' : 'Conviction'}
                   </p>
                   <p className="tabular text-lg font-semibold text-mint-400">{item.convictionScore}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="primary"
                     disabled={item.orderTicket == null || item.orderTicket.shares <= 0}
@@ -293,7 +296,7 @@ export function TickerDetailDialog({
             ) : null}
 
             <OptionalDisclosure enabled={simple} title="Sizing & odds">
-            <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <dl className="mt-4 grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-6">
               <PlanTile label="Entry" value={formatPrice(item.entryPrice)} />
               <PlanTile label="Stop" value={formatPrice(item.stopLoss)} tone="text-rose-400" />
               <PlanTile label="Target" value={formatPrice(item.targetPrice)} tone="text-mint-400" />

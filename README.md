@@ -4,8 +4,9 @@ A full-stack research notebook for the Philippine Stock Exchange: a .NET 10 Clea
 
 > **Research tooling only — not investment advice, and not a licensed market-data service.**
 > The desk is built for one person's own research on their own machine. Read
-> [`DISCLAIMER.md`](DISCLAIMER.md), [`PRIVACY.md`](PRIVACY.md) and
-> [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) before you run it.
+> [`LICENSE`](LICENSE), [`DISCLAIMER.md`](DISCLAIMER.md), [`PRIVACY.md`](PRIVACY.md) and
+> [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) before you run it. The licence grants one
+> personal, non-commercial copy and nothing else: no hosting for other people, no selling.
 
 ## What it does
 
@@ -62,8 +63,10 @@ backend/
                                    # drift policy, market direction/wave, classifier, parser, pipeline, knowledge,
                                    # provider + download cache, prompt, compliance, cancellation middleware
 frontend/
-  public/          # favicon.svg / favicon.ico (16+32+48) / apple-touch-icon.png — generated, see `npm run icons`
-  scripts/         # generate-icons.mjs: zero-dependency SVG/PNG/ICO writer driven by src/lib/deskMarkGeometry.ts
+  public/          # favicon.svg / favicon.ico (16+32+48) / apple-touch-icon.png — generated, see `npm run icons`;
+                   # fonts/ = Google Sans Flex (latin subset, OFL 1.1) — vendored, see `npm run fonts`
+  scripts/         # generate-icons.mjs: zero-dependency SVG/PNG/ICO writer driven by src/lib/deskMarkGeometry.ts;
+                   # fetch-fonts.mjs: re-download the bundled woff2 + its OFL licence from the Google Fonts API
   src/
     api/       # typed fetch client (ApiError + ProblemDetails handling, JSON + FormData bodies)
     components/# TerminalHeader, DeskLogo (the desk mark + its header badge), RegimeStrip, MarketDirectionHero,
@@ -109,21 +112,48 @@ switched off, so the book still ranks; an unknown **reasoning** model fails the 
 
 Without a key every `run-now` answers `400` with a configuration problem; the desk never fabricates a ranking.
 
-Legal and deployment posture (see `DISCLAIMER.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`):
+Legal and deployment posture (see `LICENSE`, `DISCLAIMER.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`):
 
 ```bash
 export Compliance__DeploymentMode="PersonalLocal"   # default; refuses non-loopback callers with 403
-export PSEDESK_OPERATOR_API_KEY="..."                # required for mutating calls in LicensedCommercial
+export PSEDESK_OPERATOR_API_KEY="..."               # required for mutating calls in LicensedCommercial
+export Compliance__AllowedHosts="desk.example.ph"   # licensed mode only; overrides the loopback allowlist
+export Compliance__ExpensiveRequestsPerHour=30      # hourly ceiling on run-now / backtest / train
 ```
+
+**This is not open source.** `LICENSE` grants one personal, non-commercial copy on a machine you
+control and nothing else: no redistribution, no hosting for other people, no selling, no derivative
+distribution. It also carries the "as is" warranty disclaimer and the liability cap, so the terms
+travel with a copy instead of living only in the README.
 
 `PersonalLocal` is the shipping default: any request whose remote address is not loopback is answered
 `403` before it reaches an endpoint (a caller with no remote address, e.g. an in-process test host,
 counts as loopback). `LicensedCommercial` only flips that check off — it assumes **you** hold the PSE
 market-data/redistribution agreement and an SEC licence for whatever you are offering. In that mode
 every mutating verb (`POST`, `PUT`, `PATCH`, `DELETE`) must present the operator key in
-`X-PseDesk-Key`; a missing or wrong key is `401`, and a blank key falls closed with `503`. `GET /health`
-bypasses both checks. The outbound `User-Agent` is `MarketData:UserAgent`, so the desk identifies itself
-honestly to Yahoo and PSE Edge instead of impersonating a browser.
+`X-PseDesk-Key`; a missing or wrong key is `401`, and a blank key falls closed with `503`. The terminal
+sends that header itself once `VITE_OPERATOR_API_KEY` is set at build time (see `frontend/.env.example`),
+so the documented mode is reachable from the UI and not only from `curl`. `Compliance:AllowedHosts`
+replaces the loopback-only `AllowedHosts` **only** when the licensed mode is declared, so a licensed
+deployment can answer to its own host name without a leftover value ever widening the personal desk.
+`GET /health` bypasses all of it. The outbound `User-Agent` is `MarketData:UserAgent`, so the desk
+identifies itself honestly to Yahoo and PSE Edge instead of impersonating a browser.
+
+Two guards keep the "polite, personal, bounded" claim true rather than aspirational. Only **one**
+expensive job runs at a time — a second concurrent `run-now`, `train` or `train-all` is answered
+`409` immediately instead of queueing behind minutes of work and re-fetching the same session — and
+those four endpoints share an hourly ceiling (`Compliance:ExpensiveRequestsPerHour`, default `30`,
+clamped 1–1000) that answers `429` with `Retry-After` and a ProblemDetails body. A human driving four
+horizons never notices either; a loop cannot hammer the exchange or spend unlimited model credit.
+Every other route, including all the stored-session reads, stays uncapped.
+
+One rule is not enforceable in code, so `DISCLAIMER.md` §7 states it plainly: the plain-language cards
+are written **as instructions for one self-user** ("buy in this band", "cut here", "lock break-even at
++1R"). Do not pass that output to another person as advice and do not run anyone else's money through
+it — that is what turns research tooling into unregistered investment advice under the Securities
+Regulation Code. The first-run gate repeats it, and bumping `CURRENT_LEGAL_VERSION` re-prompts every
+browser.
+
 
 Live feed tuning lives in the `MarketData` section (`YahooFinanceBaseUrl`, `PseEdgeAnnouncementsUrl`, `PseEdgeCompanyDisclosuresUrl`, `DisclosurePagesToScan` = 2, `EnablePseEdgeHistory` = true, `PseEdgeChartUrl`, `PseEdgeSymbolSearchUrl`, `PseEdgeCompanyPageUrl`, `PseDailyQuotationUrlTemplates` = `[]`, `Us10YahooSymbol` = `^TNX`, `BrentYahooSymbol` = `BZ=F`, `EpheYahooSymbol` = `EPHE`, `LookbackCalendarDays` = 420, `MaxConcurrency` = 8, `RequestTimeoutSeconds` = 15). The typed client runs on one pooled, decompressing `SocketsHttpHandler`, the session's charts, FX series, Edge pages, DQR and macro dials are fetched in a single fan-out once the index has fixed the session date, and repeat requests within ten minutes (charts and Edge history) / five minutes (Edge pages) are served from the in-process `MarketDataCache` instead of the network.
 
@@ -144,11 +174,13 @@ npm install
 npm run dev     # http://localhost:5173
 ```
 
-`VITE_API_BASE_URL` overrides the API base (see `.env.example`); CORS is pre-configured for `http://localhost:5173`.
+`VITE_API_BASE_URL` overrides the API base (see `.env.example`); CORS is pre-configured for `http://localhost:5173`. `VITE_OPERATOR_API_KEY` adds the `X-PseDesk-Key` header on writes and is only needed against a `LicensedCommercial` API — the personal loopback desk needs no key, and reads never carry one.
 
 The terminal opens behind a first-run **legal gate**, then in **Simple** mode. `Simple | Pro` (`psedesk.viewMode`) and **light / dark** (`psedesk.theme`) persist per browser, dialogs become bottom sheets below `sm`, and the same run reflows from a 320px phone to a 2560px desktop without a second endpoint or component tree. `npm test` runs the dependency-free `node:test` suites over the React-free `lib/` layer (advice/labels, legal consent, the SWR cache, formatters and the desk mark); `npm run build` is the UI gate.
 
 The tab icon is not a hand-drawn asset: `src/lib/deskMarkGeometry.ts` describes the mark once (three ascending candlesticks on a 32-unit grid), `DeskLogo` renders it in the header in `currentColor`, and `npm run icons` rasterises the same geometry into `public/favicon.svg`, `public/favicon.ico` (16/32/48, PNG-compressed entries) and `public/apple-touch-icon.png` (180px, full-bleed because iOS masks it and paints transparent corners black). Re-run `npm run icons` after touching the geometry — the command needs no dependency, it writes PNGs through `node:zlib` and the ICO container by hand.
+
+The typeface is **Google Sans Flex** (variable 100–900), served from `public/fonts/` rather than from a font CDN: the woff2 is bundled, `index.html` preloads it, and `npm run fonts` re-downloads the `latin` subset plus its OFL licence from the Google Fonts API if you ever want to move the font forward. Bundling is what keeps the privacy notice literal — a page load talks to nothing but the API — and the font file ships under the SIL Open Font License with `public/fonts/OFL.txt` beside it. The peso sign and the `▲ ▼` direction glyphs are not in any Google-served subset (measured), so those few characters render from the reader's system font beside Google Sans Flex digits; the rest of the UI — all copy, tickers and the digits of every price — is the bundled face.
 
 ### 3. First live run
 
@@ -259,7 +291,7 @@ The blotter is paper-only: no broker connection, no order routing. It exists so 
 | `DELETE` | `/api/knowledge/{id}` | Remove an upload; `409` for built-in documents |
 | `GET` | `/health` | Liveness probe |
 
-Failures use RFC 7807 `ProblemDetails`: `400` missing Ollama key, bad input, empty or oversized upload, unsupported quotation-report type or an unreadable report, **portfolio rule violation** (heat cap, position cap, non-lot shares, off-grid price, stop above the last close), `502` signal generation (model returned no tradeable pick), `503` market data, disclosure feed, research or backtest history unavailable, `404` unknown session/document (including a quotation report for a session that was never stored), `409` protected built-in document. A client-aborted request is rethrown as cancellation and answered `499`, never converted into a fake batch.
+Failures use RFC 7807 `ProblemDetails`: `400` missing Ollama key, bad input, empty or oversized upload, unsupported quotation-report type or an unreadable report, **portfolio rule violation** (heat cap, position cap, non-lot shares, off-grid price, stop above the last close), `502` signal generation (model returned no tradeable pick), `503` market data, disclosure feed, research or backtest history unavailable, `404` unknown session/document (including a quotation report for a session that was never stored), `409` protected built-in document, `409` a run or training job already in progress, `429` too many expensive requests (with `Retry-After`). A client-aborted request is rethrown as cancellation and answered `499`, never converted into a fake batch.
 
 ## Tests
 

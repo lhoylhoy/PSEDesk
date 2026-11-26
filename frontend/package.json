@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "test": "node --test \"src/lib/__tests__/*.test.ts\"",
     "icons": "node scripts/generate-icons.mjs",
+    "fonts": "node scripts/fetch-fonts.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

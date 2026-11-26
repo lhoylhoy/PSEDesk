@@ -22,8 +22,9 @@ export function TabsList({ children, className }: { children: ReactNode; classNa
     <TabsPrimitive.List
       className={cn(
         // On a phone the rail is wider than the screen: swipe it sideways rather than
-        // wrapping it into three rows that push the content below the fold.
-        'no-scrollbar inline-flex max-w-full items-center gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-line/80 bg-ink-900/80 p-1 sm:h-10',
+        // wrapping it into three rows that push the content below the fold. `.scroll-x`
+        // adds iOS momentum scrolling and stops a sideways swipe from bouncing the page.
+        'no-scrollbar scroll-x inline-flex max-w-full items-center gap-1 overscroll-x-contain rounded-xl border border-line/80 bg-ink-900/80 p-1 sm:h-10',
         className,
       )}
     >

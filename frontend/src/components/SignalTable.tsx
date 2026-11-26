@@ -157,7 +157,7 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
           <button
             type="button"
             onClick={openDetails}
-            className="rounded-lg border border-line/80 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300 transition hover:border-slate-500/60 hover:text-white"
+            className="tap rounded-lg border border-line/80 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300 transition hover:border-slate-500/60 hover:text-white"
           >
             Details
           </button>
@@ -165,7 +165,7 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
             type="button"
             disabled={sizing.shares <= 0}
             onClick={() => onTakeTrade(item)}
-            className="rounded-lg border border-mint-400/40 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-slate-600"
+            className="tap rounded-lg border border-mint-400/40 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-slate-600"
           >
             Take
           </button>
@@ -213,7 +213,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
             ))}
           </ul>
 
-          <div className="hidden overflow-x-auto md:block">
+          <div className="scroll-x hidden md:block">
             <table className="w-full min-w-248 border-collapse text-left">
             <thead>
               <tr className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -390,7 +390,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                         type="button"
                         aria-label={`Read the thesis for ${item.ticker}`}
                         onClick={(event) => event.stopPropagation()}
-                        className="inline-flex size-6 items-center justify-center rounded-full border border-line/80 text-[10px] font-semibold text-slate-400 transition hover:border-mint-400/50 hover:text-mint-400"
+                        className="tap inline-flex size-6 items-center justify-center rounded-full border border-line/80 text-[10px] font-semibold text-slate-400 transition hover:border-mint-400/50 hover:text-mint-400"
                       >
                         i
                       </button>
@@ -402,7 +402,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                         event.stopPropagation();
                         onTakeTrade(item);
                       }}
-                      className="mt-1 block w-full rounded border border-mint-400/40 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-slate-600"
+                      className="tap mt-1 block w-full rounded border border-mint-400/40 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-mint-400 transition hover:bg-mint-400/10 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-slate-600"
                     >
                       Take
                     </button>

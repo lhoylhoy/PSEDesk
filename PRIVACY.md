@@ -76,6 +76,11 @@ None. The frontend ships no analytics, no ad tech, no session cookies and no thi
 The only storage used is `localStorage` for the consent version, and every access is wrapped so a
 browser that refuses storage still runs the desk (the gate simply shows once per session).
 
+The typeface is no exception: **Google Sans Flex is bundled with the app** (`frontend/public/fonts/`,
+OFL 1.1) instead of being linked from a font CDN, so opening the terminal makes no request to
+`fonts.googleapis.com` or `fonts.gstatic.com` and no font provider learns your address. The only
+requests a page load makes are to the desk's own API.
+
 ## 6. Security posture
 
 - The API binds to loopback by default and refuses non-loopback requests in `PersonalLocal` mode
@@ -84,8 +89,11 @@ browser that refuses storage still runs the desk (the gate simply shows once per
   key from `PSEDESK_OPERATOR_API_KEY`, compared in constant time. With no key configured, mutations
   fail closed with `503` instead of running unauthenticated.
 - Credentials live in environment variables, not in the repo, and are redacted from logs.
+- The endpoints that fan out to the exchange and the model are bounded: one expensive job at a time (`409` for a second concurrent caller) and an hourly ceiling per endpoint group (`429` with `Retry-After`). Reads of stored data are uncapped.
 - There is no multi-user authentication. Do not expose the port to the internet, and do not put the
-  API behind a public reverse proxy without adding authentication and TLS yourself.
+  API behind a public reverse proxy without adding authentication and TLS yourself. A shared operator
+  key (`PSEDESK_OPERATOR_API_KEY` / `VITE_OPERATOR_API_KEY`) is a single-operator convenience, not
+  per-user identity, and a key shipped in a browser bundle is readable by anyone who loads the page.
 
 ## 7. Changes
 

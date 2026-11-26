@@ -1,0 +1,63 @@
+# PSE Signal Desk — Personal Research Licence
+
+Copyright (c) 2026 Froilan Banaticla. All rights reserved.
+
+This is **not** an open-source licence. No right is granted except the ones written below.
+
+## 1. What you may do
+
+You may read the source, build it, and run **one** copy for your **own personal,
+non-commercial research** on a machine you control, subject to every condition in this file,
+`DISCLAIMER.md`, `PRIVACY.md` and `THIRD_PARTY_NOTICES.md`.
+
+## 2. What you may not do
+
+Without a separate written agreement from the copyright holder, you may not:
+
+1. **Redistribute** the software, in source or binary form, or make it available to any other
+   person — including over a LAN, a tunnel, a container port-publish, a hosted instance, a
+   public URL, or a package registry.
+2. **Operate it for anyone else**, or use it to advise, manage or trade anyone else's money.
+3. **Sell, sublicense, rent or bundle** it, or offer it as a paid service.
+4. **Create or distribute derivative works**, except private modifications you never share.
+5. **Remove or alter** this licence or any notice in `DISCLAIMER.md`, `PRIVACY.md` or
+   `THIRD_PARTY_NOTICES.md`.
+
+## 3. Market data is not licensed here
+
+This licence grants you nothing in the market data the software reads. Prices come from Yahoo
+Finance and PSE Edge under a personal, non-commercial research posture; the Philippine Stock
+Exchange's market data is proprietary, and redistributing it requires a PSE market-data
+vendor/redistribution agreement that the copyright holder does not have and cannot pass on to
+you. See `THIRD_PARTY_NOTICES.md` §1.
+
+## 4. No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ACCURACY AND NON-INFRINGEMENT.
+
+## 5. Limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT HOLDER IS NOT LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY — INCLUDING TRADING LOSSES, LOST PROFITS, LOST DATA OR
+BUSINESS INTERRUPTION — ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+Nothing in this section limits any liability that Philippine law does not allow to be limited.
+
+## 6. Termination
+
+Any breach of sections 1 or 2 ends your permission immediately. On termination you must stop
+using the software and delete every copy you hold.
+
+## 7. Not legal, tax or investment advice
+
+This licence is not legal, tax or investment advice. The software is research tooling, not an
+investment adviser, broker, dealer or fund manager, and it is not registered or licensed by the
+Philippine Securities and Exchange Commission. See `DISCLAIMER.md`.
+
+---
+
+If you want to use this beyond the grant above — including any multi-user, commercial or
+client-facing deployment — obtain Philippine counsel on SEC licensing (investment adviser,
+broker/dealer), PSE market-data licensing and the Data Privacy Act **before** you run it, and
+contact the copyright holder for a written agreement.

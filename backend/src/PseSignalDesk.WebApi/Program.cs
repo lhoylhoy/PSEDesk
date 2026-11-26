@@ -1,5 +1,9 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -12,6 +16,7 @@ using PseSignalDesk.Infrastructure.MarketData;
 using PseSignalDesk.Infrastructure.Persistence;
 using PseSignalDesk.Infrastructure.Scheduling;
 using PseSignalDesk.WebApi.Middleware;
+using PseSignalDesk.WebApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -96,6 +101,79 @@ var allowedOrigins = builder.Configuration
 
 builder.Services.AddCors(options => options.AddPolicy("FrontendPolicy", policy =>
     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
+
+// A LicensedCommercial deployment is normally served under a real host name, but the shipped
+// AllowedHosts is the loopback allowlist (the personal default), so every request carrying a
+// domain in Host: would answer 400 and the documented licensed mode could not be reached. Only a
+// deployment that has explicitly declared the licensed mode may widen it, so a leftover value in
+// configuration can never loosen the personal desk.
+var complianceConfiguration = builder.Configuration.GetSection(ComplianceOptions.SectionName);
+
+if (string.Equals(
+        complianceConfiguration["DeploymentMode"],
+        ComplianceOptions.LicensedCommercialMode,
+        StringComparison.OrdinalIgnoreCase))
+{
+    var licensedHosts = complianceConfiguration["AllowedHosts"];
+
+    if (!string.IsNullOrWhiteSpace(licensedHosts))
+    {
+        builder.Configuration["AllowedHosts"] = licensedHosts.Trim();
+    }
+}
+
+// The expensive endpoints (the live run, the causal replay and the two training jobs) fan out to
+// PSE Edge and spend Ollama Cloud credit, so they get an hourly ceiling on top of the
+// single-job DeskWorkGate. Everything else stays uncapped: the terminal reads its stored session
+// as often as it likes.
+var expensiveRequestsPerHour = Math.Clamp(
+    complianceConfiguration.GetValue("ExpensiveRequestsPerHour", 30),
+    1,
+    1000);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(DeskRateLimitPolicies.Expensive, _ =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: DeskRateLimitPolicies.Expensive,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = expensiveRequestsPerHour,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+        }
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new ProblemDetails
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Too many expensive requests",
+                Detail = $"The desk allows {expensiveRequestsPerHour} live runs, replays and training " +
+                         "jobs per hour, so it never hammers PSE Edge or spends unbounded model credit. " +
+                         "Nothing was persisted; wait for the window to reset and try again."
+            },
+            options: (System.Text.Json.JsonSerializerOptions?)null,
+            contentType: "application/problem+json",
+            cancellationToken: cancellationToken);
+    };
+});
+
+// One expensive job at a time: a second concurrent run would double the upstream traffic and could
+// overwrite a newer run for the same (date, horizon).
+builder.Services.AddSingleton<DeskWorkGate>();
 
 builder.Services.AddSingleton<QuantitativeFilterService>();
 builder.Services.AddSingleton<SignalJsonParser>();
@@ -190,6 +268,10 @@ app.UseCors("FrontendPolicy");
 // Refuses non-loopback traffic in PersonalLocal mode (the scraped Yahoo Finance / PSE Edge feed
 // may not be redistributed off this machine) and enforces the optional operator key on writes.
 app.UseMiddleware<ComplianceGuardMiddleware>();
+
+// Placed after the compliance guard on purpose: a refused request costs nothing upstream, so it
+// must not consume the operator's hourly budget for the endpoints that actually fan out.
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {

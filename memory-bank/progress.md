@@ -2,7 +2,166 @@
 
 **Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **60 frontend tests green / 451 backend tests green + 1 skipped manual benchmark (452 total)** (2026-11-26, brand-mark + icon-set pass on top of the header visual-organization pass, the UI/UX legibility pass and the fast-model fix, which sit on the Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes). The brand pass replaced the placeholder `PS` badge with a generated candlestick mark: one geometry file feeds `DeskLogo` in the header and a zero-dependency generator that writes `favicon.svg`, `favicon.ico` (16/32/48) and a 180px `apple-touch-icon.png`; `npm test` (60/60) and `npm run build` (304 ms) both pass and `npm run preview` serves all three assets with the right content types. The header pass gives the desktop bar two deliberate rows at one 40px control height, moves the `Simple | Pro` and light/dark segments down to the horizon row, groups `More` into *Learn*/*Tools* and adds an opt-in filled `cta` variant used only by the primary Run; `npm test` (55/55) and `npm run build` (129 modules, 231 ms) both pass. The legibility pass added a Simple-mode type floor, one shell-wide polite live region, a narrated clock plus indeterminate bar for `run-now`, a full-width win-chance meter with conviction folded to one line, direction glyphs on every toned delta, and six `formatters.test.ts` cases (49 → 55). The fast-model fix replaced the shipped `FastExtractionModel` (`qwen3.5:4b`, a name Ollama Cloud never served → `404` on every run) with `glm-5.3-flash`, validated against the live catalogue, and made an unknown fast model latch the optional pass off instead of throwing once per horizon. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell (the key itself sits in user-secrets and was used for read-only `curl` probes); the open security remediation is listed under *Remaining*. **2026-11-26 tooling follow-up:** a debugger abort with `address already in use` on `:5236` traced to a hung, orphaned debuggee apphost (PPID 1, 3h55m old) that ignored SIGTERM — killed with SIGKILL, `backend: free port 5236` hardened with a 6 s SIGTERM→SIGKILL escalation plus a `curl /health` proof, and the API re-verified listening on `:5236` (`GET /health` → `200`) before being stopped and the port left free. No application code or test count moved.
+**Latest verification:** **464 backend tests green + 1 skipped manual benchmark (465 total) / 66 frontend tests green** (2026-11-26, typeface pass on top of the compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each of those keeps its own section below). This pass changed only the frontend's typeface: Google Sans Flex is **vendored** (`public/fonts/google-sans-flex-latin.woff2`, OFL 1.1) instead of CDN-linked, so the privacy notice stays literal and the terminal still renders with nothing but the API on loopback; only the `latin` subset ships, because the API's `latin-ext`/`symbols` subsets were measured and do not carry the desk's `₱`/`▲ ▼` glyphs. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+
+## Latest verification (2026-11-26 — typeface: Google Sans Flex)
+
+Frontend only: `src/index.css`, `index.html`, `package.json`, `scripts/fetch-fonts.mjs` (new),
+`public/fonts/` (new: the woff2 + `OFL.txt`), plus `README.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`
+and the memory bank. **No backend file, no API contract, no new dependency, no golden moved.**
+
+| Command | Result |
+| --- | --- |
+| `node scripts/fetch-fonts.mjs` | `google-sans-flex-latin.woff2 49988 bytes` · `OFL.txt 4488 bytes`, exit 0; a second run reproduced the identical MD5 (`306cc19…`) |
+| `node scripts/fetch-fonts.mjs --check` | prints the upstream `fonts.gstatic.com` subsets URL without writing; the URL matches the committed binary |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 231ms`; `grep -c @font-face dist/assets/index-*.css` → **1**; `dist/fonts/` = woff2 + `OFL.txt` only |
+| `cd frontend && npm test` | `ℹ tests 66 · ℹ pass 66 · ℹ fail 0` (≈0.25 s, exit 0) |
+| `npm run preview -- --port 5199` + `curl` | `/` `200 text/html`; `/fonts/google-sans-flex-latin.woff2` `200 font/woff2` (49,988 bytes) and `/fonts/OFL.txt` `200 text/plain` |
+| headless Chrome over `http://127.0.0.1:5290` (copy of `dist/`, legal gate seeded) | 1280px light Simple, 1280px dark Pro, 500px dark Pro — all render in the new face, header rows unwrapped, tabs intact; screenshots `/tmp/app-gsf.png`, `/tmp/app-gsf-dark.png`, `/tmp/app-gsf-phone.png` |
+| `document.fonts` + advance-width probe | one face, `loaded`, `U+0-FF …`; `A` = 26.81 px at 40 px vs 24.09 px for the Menlo fallback → the bundled face is applied |
+
+Not run: `dotnet test` (no backend file changed) and a real-device Safari/Firefox pass — the glyph-coverage
+finding below is Chrome-measured, and the official Google Fonts CSS behaves identically there.
+
+**What changed**
+
+- **Vendored, not linked.** `public/fonts/google-sans-flex-latin.woff2` (variable `100 900`, 49,988 bytes)
+  is served by the app; `index.html` preloads it (`as="font"`, `crossorigin`) and `index.css` declares a
+  single `@font-face` (`font-display: swap`, the API's own `unicode-range`) with
+  `--font-sans: 'Google Sans Flex', 'Inter', ui-sans-serif, …`. No `fonts.googleapis.com` request exists,
+  so `PRIVACY.md` §5 ("no third-party script tags") stays literally true and the terminal still renders
+  with nothing but the API on loopback. `--font-mono` is untouched.
+- **One subset, on evidence.** The API's `latin-ext` and `symbols` subsets were fetched, rendered and
+  compared against the Menlo fallback: `₱` (U+20B1), `▲`/`▼` (U+25B2/U+25BC) and `→` came out
+  **pixel-identical to the fallback**, and the official CDN CSS did the same in the same browser. They were
+  dropped (~51 kB saved, zero glyphs lost); the system font supplies those few characters.
+- **`scripts/fetch-fonts.mjs` (new, zero dependencies).** Reads the Google Fonts CSS with a desktop UA,
+  extracts the subset URL, verifies the `wOF2` signature before overwriting (an HTML error page can never
+  replace a good binary), writes `OFL.txt`, and supports `--check`. `package.json` gained `npm run fonts`.
+- **Licence + notices.** OFL 1.1 ships beside the font (OFL §1 requires it); `THIRD_PARTY_NOTICES.md` §4
+  gained a *Bundled assets* table, `PRIVACY.md` §5 and `README.md` document the font and the command. No
+  reader-facing legal copy changed, so `CURRENT_LEGAL_VERSION` was not bumped.
+
+## Latest verification (2026-11-26 — compliance hardening)
+
+Cross-stack but small: **4 new files** (`LICENSE`, `lib/operatorKey.ts`, `WebApi/Services/DeskWorkGate.cs`,
+`WebApi/Services/DeskRateLimitPolicies.cs`) plus **12 edited** (`DISCLAIMER.md`, `PRIVACY.md`,
+`THIRD_PARTY_NOTICES.md`, `README.md`, `legalConsent.ts`, `signalsApi.ts`, `vite-env.d.ts`, `.env.example`,
+`ComplianceOptions.cs`, `Program.cs`, `SignalsController.cs`, `appsettings.json`), **1 edited test**
+(`legalConsent.test.ts`) and **3 new test files**. No indicator, plan level, fee, prompt, golden snapshot or
+existing API status code moved; the four expensive endpoints gained `409` and `429`.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && NUGET_PACKAGES=$HOME/.nuget/packages dotnet build PseSignalDesk.slnx --nologo` | `Build succeeded. 0 Warning(s) 0 Error(s)` (12.6 s) |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 464, Skipped: 1, Total: 465` (8 s) — 452 → 465, +13 |
+| `cd frontend && npm test` | `ℹ tests 66 · ℹ pass 66 · ℹ fail 0` (≈0.42 s) — 60 → 66, +6 |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 129 modules, ✓ built in 189ms` |
+| `dotnet PseSignalDesk.WebApi.dll` on `:5411`, throwaway DB, every upstream → `127.0.0.1:9`, `Compliance__ExpensiveRequestsPerHour=2` | `GET /api/signals/dates` → **200**; `POST /api/signals/run-now` three times → **503, 503, 429**; the `429` carries `Content-Type: application/problem+json` and `Retry-After: 3600` |
+| `dotnet PseSignalDesk.WebApi.dll` on `:5412`, Python listener that accepts and never answers, `RequestTimeoutSeconds=30` | first `run-now` blocked inside the fetch; a **concurrent** second `run-now` → **409** `application/problem+json` `{"title":"The desk is already running a job", …}` while the first later answered `503` |
+
+Both smoke instances ran under `nohup`, were stopped with SIGTERM + SIGKILL, and used throwaway SQLite
+files in `/tmp` — the real `pse_signals.db` was never opened, and no process was left on `:5411` / `:5412`.
+
+### What the pass changed
+
+1. **`LICENSE` — the repo had no licence at all**, so `DISCLAIMER.md`'s warranty cap and liability limit
+   bound nobody who copied the code. The new file is explicitly **not** open source: one personal,
+   non-commercial copy on a machine you control; no redistribution, no hosting for others, no selling, no
+   derivative distribution; "as is" + liability cap; termination on breach; §3 states that market data is
+   not licensed by it (the PSE agreement is not the licensor's to give).
+2. **`DISCLAIMER.md` §7 (new) — "Instruction-shaped copy is for one self-user only"**, with §7/§8
+   renumbered to §8/§9 (the only inbound cross-reference, `THIRD_PARTY_NOTICES.md` §6, points at §6 and is
+   unaffected). This is the gap no code can close: Simple mode says "buy in this band", "cut here", "lock
+   break-even at +1R" because that is clarity for one informed reader — and it is precisely the shape of
+   personalised advice when a third party is reading it. The section forbids passing the output on as
+   advice, forbids running anyone else's money through it (names RA 8799 / the SRC and the SEC rules),
+   and says the portfolio-controls layer makes the *simulation* realistic, not the software a
+   portfolio-management system.
+3. **`legalConsent.ts` — new "Written for one reader" card** in the same voice as the other five, and
+   `CURRENT_LEGAL_VERSION` bumped `2026-11-v1` → **`2026-11-v2`**, so `hasAcceptedCurrentLegalVersion`
+   rejects the stored flag and the gate re-prompts. `legalConsent.test.ts` now asserts the card exists
+   and contains "not a recommendation", "anyone else's money" and "Securities Regulation Code" — a future
+   softening of that copy fails the suite.
+4. **The `LicensedCommercial` path is operable end to end.** `lib/operatorKey.ts` (pure, React-free,
+   `SAFE_METHODS`-aware) decides the header; `signalsApi`'s single `request()` spreads it in, so every
+   POST/PUT/PATCH/DELETE from the terminal carries `X-PseDesk-Key` while reads never do — the key is not
+   attached to a GET, and a blank `VITE_OPERATOR_API_KEY` (the personal default) adds nothing at all.
+   Server-side, `Compliance:AllowedHosts` replaces the loopback-only `AllowedHosts` **only** when
+   `DeploymentMode` is `LicensedCommercial`, applied before `builder.Build()`; previously a licensed
+   deployment behind a domain answered `400` to every request (host filter) and the SPA answered `401` to
+   every write (no key), so the mode was documented but unreachable.
+5. **Bounded expensive work.** `DeskWorkGate` is a singleton `SemaphoreSlim(1,1)` with a non-blocking
+   `TryEnter()`; `run-now`, `train` and `train-all` return `409` (`WorkAlreadyRunning()`, a ProblemDetails
+   that names the cause) when another job holds it, and release it in a `finally` on every path. The
+   `DeskRateLimitPolicies.Expensive` policy — one fixed one-hour window per process, `PermitLimit` from
+   `Compliance:ExpensiveRequestsPerHour` (default 30, `Math.Clamp(…, 1, 1000)`), `QueueLimit = 0` —
+   is attached with `[EnableRateLimiting]` to those three **plus** `backtest`, and `OnRejected` writes
+   `429` + `Retry-After` + ProblemDetails. `app.UseRateLimiter()` sits **after**
+   `ComplianceGuardMiddleware`, so a `403` never burns budget. Stored-session reads stay uncapped.
+
+Two tripwires keep the wiring from rotting: `DeskWorkGateTests` (idle→enter, refusal while held, release
+makes it reusable, exactly one of eight concurrent racers wins, an unmatched `Exit()` throws) and
+`SignalsControllerRateLimitTests`, which reflects over the controller and fails if any of the four
+expensive actions loses its attribute — or if a stored read grows one.
+
+## Latest verification (2026-11-26 — responsive pass, 320px → 2560px)
+
+A frontend-only pass: `index.css` plus 19 components (`App.tsx`, `ui/Button`, `ui/Dialog`, `ui/Tabs`,
+`ui/TechnicalDisclosure`, `TerminalHeader`, `SignalTable`, `AdviceCardList`, `DropPanel`, `RegimeStrip`,
+`MarketDirectionHero`, `BacktestPanel`, `ModelTrainerPanel`, `RiskSizerBar`, `PortfolioDialog`,
+`ResearchDialog`, `TickerDetailDialog`, `ScorecardDialog`, `BeginnerGuideDialog`). **No backend file, no
+API contract, no new dependency, no new architectural layer.**
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 60 · ℹ pass 60 · ℹ fail 0` (≈0.15–0.19 s, exit 0) — unchanged, run before and after the pass |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 131 modules transformed`, `✓ built in ~190ms`, exit 0 (run after the `App.tsx` JSX restructure, after the dialog/sheet edits and again after the final `xs:` sweep) |
+| built-CSS breakpoint audit | `@media (width>=30rem)`, `(width>=40rem)`, `(width>=48rem)`, `(width>=64rem)`, `(width>=80rem)`, `(width>=96rem)`, `(width>=120rem)`, `(width>=160rem)` all emitted — `xs`, `3xl` and `4xl` are real |
+| built-CSS utility audit | `.tap{` (inside `@media (pointer: coarse)`), `.scroll-x{`, `.shell{`, `.text-fluid-hero`, `pb-safe`, `2.75rem`, `container-type` all present |
+| container-variant audit | `@container` root plus `(width>=24rem / 28rem / 32rem / 36rem / 42rem / 56rem / 64rem / 80rem)` rules emitted for `@sm/@md/@lg/@xl/@2xl/@4xl/@5xl/@7xl` |
+| `git status --porcelain` | the intended 20 modified paths only; nothing deleted, no new file |
+
+Not run: a real-browser capture at 320px and 2560px. Headless Chrome still hangs on the seeded `dist/`
+page in this environment (see `techContext.md`), so the 320px/2560px behaviour is derived from the emitted
+CSS (column counts, clamp ranges, media conditions) rather than observed pixels. `dotnet test` was not
+re-run because no backend file changed.
+
+What changed, in the order it matters:
+
+1. **Three new breakpoints and one gutter/type ladder.** `@theme` gains `--breakpoint-xs` (30rem),
+   `--breakpoint-3xl` (120rem) and `--breakpoint-4xl` (160rem). `.shell` replaces the
+   `px-3 py-4 sm:px-5 sm:py-6` ladder with `clamp()` gutters; `App` widens to `128rem` at `3xl` and turns
+   the Pro book into `minmax(0,1fr) 22rem` (a 26rem sidebar at `4xl`) instead of stacking the dropped
+   names under the table forever.
+2. **Container queries where the component, not the window, decides.** `DialogContent`, the advice card
+   and `DropPanel` are `@container` roots; the card grids, the four-step `WavePlanGrid`, the
+   entry/stop/target `PlanSteps`, the technical rows, the watch list and the drop list all switched from
+   `sm:`/`lg:`/`xl:` viewport prefixes to `@sm:`/`@md:`/`@lg:`/`@xl:`/`@4xl:`/`@5xl:`/`@7xl:` — a card in
+   the 3-column layout now reflows to its own width, and the same `DropPanel` is a full-width section in
+   Simple mode and a 22rem sidebar in Pro without a second code path.
+3. **Phone band (`xs`) on every tile ladder.** `grid-cols-2 xs:grid-cols-3 …` on `IndicatorTiles`,
+   the portfolio KPIs and guardrails, the risk sizer, the detail/research/backtest/scorecard/model tiles:
+   a 480–639px phone gets three metric tiles per row instead of two, which is most of a screen of height
+   saved in every sheet.
+4. **Sheets.** `dvh` instead of `vh` for both sheet heights (`92dvh` phone, `88dvh` desktop),
+   `overscroll-contain`, the `3xl` width steps, a readable prose measure for `BeginnerGuideDialog`,
+   `TickerDetailDialog`'s conviction + action block now wraps (a `Record in blotter · 1,240 sh` label
+   could push `Close` off a 320px sheet), the scorecard calibration table got a `.scroll-x` wrapper, and
+   the calibration/verdict sections stack from one column.
+5. **Touch and scrolling.** `.tap` (44px floor, `pointer: coarse` only) on `Button`'s base, the technical
+   drawer, the signal-card `Details`/`Take`, the table's info/Take cells, the guide's `See the full
+   record`, the advice card's `Show N more` and the portfolio refresh. `.scroll-x` replaces every bare
+   `overflow-x-auto` (SignalTable, ledger, replay, scorecard, the tab rail), with the `.no-scrollbar`
+   interaction handled by `:not()` so the two utilities cannot fight over `scrollbar-width`.
+6. **Header on a tablet.** Between `md` and `lg` the phone command row now carries the trading-day picker
+   inline (`auto 1fr auto` grid), the run label ellipsizes instead of overflowing at 320px while the
+   `Book`/`My Trades` control keeps its place, and the picker's visibility lives on a wrapper (`hidden
+   md:block`) because `cn()` cannot arbitrate `hidden` against the trigger's own `sm:inline-flex`.
+7. **Fluid type where fixed sizes were wrong at both ends.** `.text-fluid-hero` on the market-call
+   headline (replacing `text-lg sm:text-xl`), `.text-fluid-metric` on the Simple summary figures
+   (replacing `text-lg`), a `clamp()` loading skeleton instead of `h-40`, and a `xs:grid-cols-3` /
+   `3xl:grid-cols-9` tape that is one row of dials on a 2560px monitor.
 
 ## Latest verification (2026-11-26 — `:5236` port recovery)
 
@@ -201,14 +360,17 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 
 ### API, compliance and operations
 - [x] Full REST surface: signals (`latest`, `by-date`, `dates`, `ticker/{symbol}/history`, `scorecard`, `backtest`, `model`, `train`, `train-all`, `desk-memory`, `run-now`, `quotation-report`), research (`catalog`, `{symbol}` with horizon/`averageCost`/`shares`), portfolio (summary, settings, order-ticket, trades, stop, close, trim), knowledge (list, reindex, upload, delete) and `/health`.
-- [x] RFC 7807 errors: `400` config/input/attestation/rule violation, `404` unknown session/document, `409` protected document, `499` client abort, `502` generation, `503` feed.
+- [x] RFC 7807 errors: `400` config/input/attestation/rule violation, `404` unknown session/document, `409` protected document, `409` a run or training job already in progress, `429` too many expensive requests (`Retry-After`), `499` client abort, `502` generation, `503` feed.
 - [x] `ComplianceGuardMiddleware` (loopback-only in `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`, `/health` bypass) and `AllowedHosts` narrowed to loopback names.
-- [x] First-run legal gate (`lib/legalConsent.ts`, `LegalDisclaimerGate`) plus `DISCLAIMER.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`; non-solicitation copy across the prompt and the UI.
+- [x] **Bounded expensive work** — `DeskWorkGate` makes `run-now`/`train`/`train-all` mutually exclusive (`409`), and `DeskRateLimitPolicies.Expensive` (`Compliance:ExpensiveRequestsPerHour`, default 30, clamped 1–1000) applies one fixed one-hour window to those three plus `backtest` (`429` + `Retry-After`). `UseRateLimiter()` runs after the compliance guard so a refused caller never burns budget; stored reads are uncapped. Verified live on `:5411` (`503, 503, 429`) and `:5412` (concurrent `409`).
+- [x] **`LicensedCommercial` reachable from the UI** — `lib/operatorKey.ts` + `VITE_OPERATOR_API_KEY` put `X-PseDesk-Key` on mutating requests only, and `Compliance:AllowedHosts` widens the host allowlist only when the licensed mode is declared.
+- [x] First-run legal gate (`lib/legalConsent.ts` v2, `LegalDisclaimerGate`) plus `LICENSE`, `DISCLAIMER.md` (§7 single-reader rule), `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`; non-solicitation copy across the prompt and the UI.
 - [x] `RequestCancellationMiddleware` (499), caller-cancellation rethrow in the provider, and a one-macrotask deferral in the terminal that removes the common StrictMode abort.
 - [x] Scheduler: weekdays 15:35 Asia/Manila, four horizons per session, weekly refit, cold-boot refit.
 
 ### Frontend
 - [x] React 19 + TypeScript 7 + Vite 8 + Tailwind 4 shell with a typed API client (`ApiError`, ProblemDetails, abort signals, FormData uploads) and centralized formatters.
+- [x] **Google Sans Flex is the UI typeface, vendored rather than CDN-linked** (`public/fonts/…-latin.woff2`, variable 100–900, OFL 1.1 + `OFL.txt`, preloaded in `index.html`, `--font-sans` in `index.css`, refreshed by `npm run fonts`). A page load still talks to nothing but the API; `₱` and `▲ ▼` come from the system font because no Google-served subset carries them (measured, same as the official CDN link). `--font-mono` stays for tickers.
 - [x] `Simple | Pro` view mode and light/dark theme, both persisted; Simple leads with `MarketDirectionHero` (traffic light, 10–90 gauge, reasons, sector chips, trust line) and `RidingNowStrip`, then at most three `AdviceCardList` cards with the four-step plan grid and a technical drawer.
 - [x] Pro keeps the dense `SignalTable`/`ProSignalCard` views, regime tiles, rotation strip, governor/slippage tiles, `RiskSizerBar`, verdict/drift badges and the Knowledge Base action.
 - [x] `TickerDetailDialog` (thesis, plan, odds, factors, technicals, dividends, disclosures with trap badges, server-verified citations, rank history), `ResearchDialog` (buy plan vs "already holding it" with `HoldingVerdictCard`), `ScorecardDialog` (forward scorecard, dual-line benchmarked replay, `ModelTrainerPanel` with learned edge / desk memory and refit buttons).
@@ -228,11 +390,11 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 452 backend (451 executed + 1 skipped benchmark) + 60 frontend
+## Test inventory — 465 backend (464 executed + 1 skipped benchmark) + 66 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
-### Backend — `backend/tests/PseSignalDesk.Tests` (33 files)
+### Backend — `backend/tests/PseSignalDesk.Tests` (35 files)
 
 | Layer | Suite | Cases |
 | --- | --- | --- |
@@ -266,18 +428,21 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | Infrastructure | `PseDailyQuotationParserTests` — header mapping, negatives, suspension, missing markers | 6 |
 | Infrastructure | `DailySignalSchedulerRetrainTests` — weekday/hour trigger, per-horizon retrain, scope isolation | 5 |
 | WebApi | `ComplianceGuardMiddlewareTests` — loopback gate, operator key (constant time), `/health` bypass, licensed passthrough | 18 |
+| WebApi | `DeskWorkGateTests` — idle gate admits, second caller refused while held, release makes it reusable, exactly one of eight concurrent racers wins, unmatched `Exit()` throws | 4 |
+| WebApi | `SignalsControllerRateLimitTests` — the four expensive actions carry `DeskRateLimitPolicies.Expensive` (reflection), five stored reads carry none | 9 |
 | WebApi | `RequestCancellationMiddlewareTests` — 499 on abort, no write after cancellation | 4 |
 | WebApi | `KnowledgeControllerTests` — upload attestation, protected-delete mapping | 2 |
 
-### Frontend — `frontend/src/lib/__tests__` (5 files, React-free)
+### Frontend — `frontend/src/lib/__tests__` (6 files, React-free)
 
 | File | Covers | Cases |
 | --- | --- | --- |
 | `plainAdvice.test.ts` | `plainAdvice` / `plainStatus` / formatter copy for every plan, verdict, scorecard and backtest field, plus the "not advice" wording | 35 |
 | `queryCache.test.ts` | cache read/write, ref-counted abort, in-flight dedupe, prefix invalidation, failed-refresh retention | 8 |
-| `legalConsent.test.ts` | first-run gate, versioned acceptance, stale notice, review clears flag, throwing storage, notice content | 6 |
+| `legalConsent.test.ts` | first-run gate, versioned acceptance, stale notice, review clears flag, throwing storage, notice content (incl. the single-reader card) | 6 |
 | `formatters.test.ts` | unit is never dropped (₱ / % / `: 1`), unreported renders `—` and never `0`, direction glyph for toned deltas, elapsed-clock formatting | 6 |
 | `deskMark.test.ts` | the brand mark as geometry: three candles, strictly ascending bodies and wicks, every shape inside the 32-unit tile with the trio centred, neighbouring bodies never closer than 2 units, exactly one full-strength candle | 5 |
+| `operatorKey.test.ts` | the `X-PseDesk-Key` fragment: every mutating verb carries it, no safe verb ever does, method case/padding normalised, blank key adds nothing, the value is trimmed, the header name matches `ComplianceOptions.OperatorKeyHeaderName` | 6 |
 
 ## Remaining
 
@@ -297,7 +462,7 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] Put the remaining Simple surfaces on the same type floor (`MarketDirectionHero` reason lines, `DropPanel` copy, `WelcomeSetupBanner`, `RidingNowStrip` chips); the advice-card path is done.
 - [ ] Optional: a `GET /api/signals/run-status` read so a mid-run reload attaches to the in-flight run instead of starting a second one — needs a `systemPatterns.md` decision first because it adds a run-state resource.
 - [ ] **Install surface is still missing** — no `site.webmanifest`, so there is no 192/512 install icon, no maskable icon and no `og:image` for link previews; the SVG + ICO + 180px touch trio covers browser tabs and iOS "Add to Home Screen" only.
-- [ ] **Remaining breakpoint + assistive pass** — 320px, 2560px and a VoiceOver/NVDA run. 390 (iframe), 768, 1024, 1280 and 1440-Pro are already captured from a seeded static `dist/` copy in headless Chrome (see *Latest verification*).
+- [~] **Remaining breakpoint + assistive pass** — the 2026-11-26 responsive pass now *covers* 320px and 2560px in CSS (new `xs`/`3xl`/`4xl` stops, `.shell` clamp gutters, container queries, `.tap`, `.scroll-x`), but only 390 (iframe), 768, 1024, 1280 and 1440-Pro were ever captured in a real browser. Still open: a visual capture at 320 and 2560, and the VoiceOver/NVDA run (never attempted — no DOM harness exists).
 - [ ] **Phase 2 — page-body hierarchy** (decision deferred until the header is seen in a browser): one shared section-header shape for `AdviceCardList` / `SignalTable` / `DropPanel` (they hand-write the same `h2` + `text-[11px]` block), a visual weight ladder so the market-call hero outranks the "Nothing changed" strip, and deleting the duplicated empty-state copy in `DropPanel`.
 
 ### Performance pass — follow-ups
@@ -310,9 +475,10 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 ### Security remediation (`security_audit_report.md`, 2026-11-26 — 15 findings)
 
 - **Done** — F-01/F-02 partly: `ComplianceGuardMiddleware` (loopback-only `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`), loopback `AllowedHosts`, `/health` bypass.
-- **P0/P1 open** — F-03 prompt fencing for retrieved text; F-04 lookback ceiling; F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings; F-05 mostly closed (`IsTradablePrice` bounds every peso identity, `GetBracket` itself still unguarded).
-- **P2 open** — F-08 security headers/HSTS, F-09 unbounded free text, F-10 regex timeout/response caps, F-11 SQLite file mode, F-12 committed lock files + `NuGetAudit` + `PdfPig` bump, F-13 rate limiting / run gate, F-14 `GET` mutating state, F-15 raw model response persistence.
-- **Auth** — no user authentication, no origin check on unsafe methods, no rate limiter: keep the desk on `127.0.0.1`.
+- **Done** — F-13: `DeskWorkGate` (`409` on a concurrent expensive job) plus `DeskRateLimitPolicies.Expensive` (`429` + `Retry-After` on `run-now`/`backtest`/`train`/`train-all`); `UseRateLimiter()` is placed after the compliance guard. Verified live (`503, 503, 429` and a concurrent `409`).
+- **P0/P1 open** — F-03 prompt fencing for retrieved text; F-04 lookback ceiling (`lookbackDays` still reaches the provider unbounded); F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings; F-05 mostly closed (`IsTradablePrice` bounds every peso identity, `GetBracket` itself still unguarded).
+- **P2 open** — F-08 security headers/HSTS, F-09 unbounded free text (`PortfolioTrades.Notes` is still unfiltered, which is the DPA/PII ingress), F-10 regex timeout/response caps, F-11 SQLite file mode still `0644`, F-12 committed lock files + `NuGetAudit` + `PdfPig` bump, F-14 `GET` mutating state, F-15 raw model response persistence.
+- **Auth** — still no user authentication and no origin check on unsafe methods; the operator key is a single-operator convenience (and a bundle-shipped key is readable by anyone who loads the page), so keep the desk on `127.0.0.1` and treat `LicensedCommercial` as "one trusted operator behind their own network boundary", not as multi-user identity.
 
 ### Live verification (needs network + `OLLAMA_API_KEY`)
 

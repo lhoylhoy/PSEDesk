@@ -350,15 +350,23 @@ export function TerminalHeader({
             </span>
           </Button>
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto]">
+          {/* From `md` the tablet command row gets the trading-day picker inline: a 768px
+              screen has room for three thumb-sized controls, and picking a stored session
+              should not require opening the sheet. The wrapper owns the `hidden`, so the
+              trigger's own `sm:inline-flex` cannot re-show it inside a 2-column grid. */}
+          <div className="hidden md:block">{datePicker()}</div>
           <Button
             variant="cta"
             busy={busy === 'run'}
             onClick={onRunNow}
             disabled={busy !== null}
-            className="w-full whitespace-nowrap"
+            className="w-full min-w-0"
           >
-            {busy === 'run' ? 'Running…' : runLabel}
+            {/* A 320px phone cannot fit “Run Latest Screen” and “My Trades” side by side
+                at the Simple-mode type floor, so the label ellipsizes instead of pushing
+                the second control off the screen. */}
+            <span className="min-w-0 truncate">{busy === 'run' ? 'Running…' : runLabel}</span>
           </Button>
           <Button
             variant="secondary"

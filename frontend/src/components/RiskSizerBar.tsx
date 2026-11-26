@@ -124,7 +124,7 @@ export function RiskSizerBar({ item, className }: RiskSizerBarProps) {
       ) : null}
 
       {sizing.serverSized && sizing.riskGovernor ? (
-        <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <dl className="mt-2 grid grid-cols-2 gap-2 xs:grid-cols-3">
           <SizerTile
             label="Risk governor"
             value={sizing.riskGovernor}

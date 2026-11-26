@@ -1,8 +1,142 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (port-5236 recovery — a hung orphaned API host freed, `backend: free port 5236` hardened with SIGKILL escalation, API relaunch on :5236 verified `200`; **451 backend tests + 1 skipped benchmark / 60 frontend tests unchanged**)
-**Last feature pass:** 2026-11-26 (brand mark + icon set, on top of the header visual organization, the UI/UX legibility pass, the fast-model fix, the Yahoo-delisting pass, the accuracy pass, live-drift wiring, the performance pass and the feed-diagnostics pass — same day)
+**Last updated:** 2026-11-26 (typeface pass — Google Sans Flex vendored into `public/fonts/`, one `@font-face`, preload, `npm run fonts` refresh script; **66 frontend tests, `npm run build` green**, backend untouched)
+**Last feature pass:** 2026-11-26 (typeface, on top of compliance hardening, the responsive pass, the brand mark + icon set, the header visual organization, the UI/UX legibility pass, the fast-model fix, the Yahoo-delisting pass, the accuracy pass, live-drift wiring, the performance pass and the feed-diagnostics pass — same day)
 **Current task:** none in flight. Every pass above is landed and verified but **not committed** — the operator asked for no commits unless explicitly requested.
+
+## Session note (2026-11-26) — "use Google Flex Sans as main font"
+
+Frontend only: `src/index.css`, `index.html`, `package.json`, the new `scripts/fetch-fonts.mjs`, the new
+`public/fonts/` assets, and the three notices. **No backend file, no API contract, no new dependency**
+(the fetcher uses Node's global `fetch`), no indicator/plan/fee/golden moved.
+
+| Command | Result |
+| --- | --- |
+| `node scripts/fetch-fonts.mjs` | `google-sans-flex-latin.woff2 49988 bytes` · `OFL.txt 4488 bytes`, exit 0; a second run reproduced the **identical MD5** (`306cc19…`) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 231ms`; `grep -c @font-face dist/assets/index-*.css` → **1**; `dist/fonts/` carries only the woff2 + `OFL.txt` |
+| `cd frontend && npm test` | `ℹ tests 66 · ℹ pass 66 · ℹ fail 0` (≈0.25 s) |
+| `npm run preview` + `curl` | `/`, `/fonts/*.woff2` → `200`, `font/woff2`, byte-exact sizes |
+| headless Chrome, built app over `http://127.0.0.1:5290` (legal gate seeded) | 1280px light Simple, 1280px dark Pro and 500px dark Pro all render in the new face with **no wrap/clip regression**; screenshots `/tmp/app-gsf*.png` |
+| `document.fonts` probe | 1 face, `U+0-FF …`, status `loaded`; advance `A` = **26.81 px** at 40 px vs **24.09** for the Menlo fallback → the bundled face really is applied |
+
+**The one measurement that shaped the change.** The API's other subsets were fetched and tested before
+being dropped: `latin-ext` and `symbols` do **not** contain `₱` (U+20B1), `▲`/`▼` (U+25B2/U+25BC) or `→`.
+Rendering those through `'Google Sans Flex', monospace` produced byte-identical pixels to the fallback,
+and the **official** `fonts.googleapis.com` CSS behaved the same way in the same browser — so the desk's
+peso sign and direction arrows come from the system font either way. Bundling them would have added
+~51 kB for zero glyphs, so `SUBSETS` in `scripts/fetch-fonts.mjs` (and the single `@font-face`) stays at
+`latin`. Do not "fix" that without re-running the same measurement.
+
+**What it built**
+
+1. **`public/fonts/google-sans-flex-latin.woff2` + `OFL.txt` (new, committed).** Google Sans Flex,
+   variable `100 900`, the `latin` subset, 49,988 bytes, OFL 1.1 with the licence beside it (OFL §1
+   requires the licence to travel with a redistribution).
+2. **`src/index.css`.** One `@font-face` (`font-display: swap`, the API's own `unicode-range`) and
+   `--font-sans: 'Google Sans Flex', 'Inter', ui-sans-serif, …` — Inter kept as a local-install fallback,
+   `--font-mono` untouched (tickers stay monospace).
+3. **`index.html`.** `<link rel="preload" as="font" type="font/woff2" crossorigin>` for the latin file, so
+   the first paint does not flash the fallback (the preload needs `crossorigin` even same-origin).
+4. **`scripts/fetch-fonts.mjs` (new, zero dependencies).** Reads the Google Fonts CSS with a desktop UA,
+   extracts the subset URL, **verifies the `wOF2` signature** before overwriting (an HTML error page can
+   never replace a good binary), writes the licence, and `--check` prints the upstream URLs without
+   writing. `package.json` gained `"fonts": "node scripts/fetch-fonts.mjs"`.
+5. **The notices stay true.** `PRIVACY.md` §5 now states the font is bundled rather than CDN-linked (the
+   only page-load requests are to the desk's own API); `THIRD_PARTY_NOTICES.md` §4 gained a *Bundled
+   assets* table with the OFL row; `README.md` documents the asset and the command. No copy in the
+   legal gate changed, so `CURRENT_LEGAL_VERSION` did **not** need a bump.
+
+Out of scope (not done): a wordmark typeface for the logo, per-weight `.woff2` instancing, and any
+change to `--font-mono` (tickers keep their monospace).
+
+## Session note (2026-11-26) — compliance hardening (is this government compliant?)
+
+Prompted by "is this government compliant? am I not violating any laws as a developer?". Answered with a
+technical compliance review rather than an opinion, then closed the three gaps that review called *one
+action away* from mattering. **No indicator, plan level, fee, prompt, golden or API contract changed** —
+the four endpoints kept every status code they had and gained two.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && NUGET_PACKAGES=$HOME/.nuget/packages dotnet build PseSignalDesk.slnx --nologo` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 464, Skipped: 1, Total: 465` (8 s) — 451 → 464 with 13 new cases |
+| `cd frontend && npm test` | `ℹ tests 66 · ℹ pass 66 · ℹ fail 0` (≈0.42 s) — 60 → 66 with `operatorKey.test.ts` |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 189ms` |
+| live smoke (`:5411`, throwaway DB, every upstream pointed at `127.0.0.1:9`, `ExpensiveRequestsPerHour=2`) | `GET /api/signals/dates` → **200** (uncapped); `POST run-now` → **503, 503, 429**; the 429 body is `application/problem+json` with `Retry-After: 3600` |
+| live gate proof (`:5412`, Python listener that accepts and never answers, 30 s timeout) | first `run-now` hangs inside the fetch, second concurrent `run-now` → **409** `application/problem+json` "The desk is already running a job" / `"first -> 503"` after the slow upstream timed out |
+
+**What changed, in the order it matters**
+
+1. **`LICENSE` (new).** Not open source: one personal non-commercial copy on a machine you control; no
+   redistribution, hosting for others, selling or derivative distribution; "as is" + liability cap;
+   termination on breach; explicit that market data is not licensed. The repo previously had only
+   `THIRD_PARTY_NOTICES.md`, so `DISCLAIMER.md`'s warranty cap bound nobody.
+2. **`DISCLAIMER.md` §7 (new) + §7/§8 renumbered to §8/§9**, and **`legalConsent.ts`** gained the matching
+   "Written for one reader" card with `CURRENT_LEGAL_VERSION` bumped `2026-11-v1` → **`2026-11-v2`**, so
+   every browser re-reads the gate. This is the one compliance point no code can enforce: Simple mode is
+   deliberately *instruction-shaped* ("buy in this band", "cut here", "lock break-even at +1R"), which is
+   clarity for one self-user and the exact shape of personalised advice for a third party. The text now
+   says so, names RA 8799 / the SRC, and forbids running anyone else's money through the paper book.
+3. **The licensed path is now operable.** `lib/operatorKey.ts` (new, React-free) decides the header; the
+   `signalsApi` client spreads it in on `POST`/`PUT`/`PATCH`/`DELETE` from `VITE_OPERATOR_API_KEY`, and
+   reads never carry it. `Compliance:AllowedHosts` replaces the loopback-only `AllowedHosts` **only** when
+   `DeploymentMode` is `LicensedCommercial`, applied in `Program.cs` before `Build()` — previously a
+   licensed deployment behind a domain answered `400` to everything, and the SPA answered `401` to every
+   write.
+4. **The expensive endpoints are bounded.** `DeskWorkGate` (singleton semaphore, `WebApi/Services`) makes
+   `run-now`/`train`/`train-all` mutually exclusive (`409`), and `AddRateLimiter` gives those three plus
+   `backtest` a fixed one-hour window (`Compliance:ExpensiveRequestsPerHour`, default 30, clamped 1–1000)
+   answering `429` + `Retry-After` through an `OnRejected` ProblemDetails writer. `UseRateLimiter()` sits
+   **after** `ComplianceGuardMiddleware`, so a refused caller never consumes the operator's budget.
+   `DeskRateLimitPolicies.Expensive` is one constant shared by `Program.cs` and the attributes.
+
+**Deliberately not done** (the audit's P0/P1 perimeter work, still open under *Remaining* in
+`progress.md`): authentication on every endpoint (F-01), the origin/`Sec-Fetch-Site` guard (F-02), prompt
+fencing for uploaded text (F-03), security headers + TLS enforcement (F-08), the `lookbackDays`/price
+clamps (F-04/F-05), `0600` on the SQLite file (F-11). None of them is needed to keep the personal posture
+honest; all of them are pre-hosting gates.
+
+
+## Session note (2026-11-26) — responsive pass, 320px → 2560px
+
+Prompted by "make the terminal fully responsive from 320px phones to ultra-wide monitors". Frontend only:
+`index.css` + 19 components (`App.tsx`, `ui/Button`, `ui/Dialog`, `ui/Tabs`, `ui/TechnicalDisclosure`,
+`TerminalHeader`, `SignalTable`, `AdviceCardList`, `DropPanel`, `RegimeStrip`, `MarketDirectionHero`,
+`BacktestPanel`, `ModelTrainerPanel`, `RiskSizerBar`, `PortfolioDialog`, `ResearchDialog`,
+`TickerDetailDialog`, `ScorecardDialog`, `BeginnerGuideDialog`). **No backend file, no API contract, no new
+dependency, no new architectural layer** — every rule is addendum CSS or a class list.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 60 · ℹ pass 60 · ℹ fail 0` (0.15–0.19 s, exit 0) — run before, during and after |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 131 modules transformed`, `✓ built in ~190ms`, exit 0 — re-run after the `App.tsx` grid/Suspense restructure, after the sheet edits and after the final `xs:` sweep |
+| built-CSS breakpoint audit | `@media (width>=30/40/48/64/80/96/120/160rem)` all emitted → `xs`, `3xl`, `4xl` are real |
+| built-CSS utility audit | `.tap{` inside `@media (pointer: coarse)`, `.scroll-x{`, `.shell{`, `.text-fluid-hero`, `pb-safe`, `2.75rem`, `container-type` all present |
+| container audit | `@container` root + `(width>=24/28/32/36/42/56/64/80rem)` rules for `@sm/@md/@lg/@xl/@2xl/@4xl/@5xl/@7xl` |
+| `git status --porcelain` | the 20 intended modified paths; nothing deleted, no new file |
+
+Not run: a real-browser capture at 320px or 2560px (headless Chrome still hangs on the seeded `dist/` page
+here — see `techContext.md`), so the two extremes are reasoned from the emitted CSS, not observed pixels.
+`dotnet test` was not re-run because no backend file changed.
+
+**What it built.** Three new stops in `@theme` (`xs` 30rem, `3xl` 120rem, `4xl` 160rem); `.shell` as the
+single `clamp()` gutter (replacing `px-3 py-4 sm:px-5 sm:py-6`) plus `env(safe-area-inset-left/right)` on
+`body`; `.text-fluid-hero` / `.text-fluid-metric` for the two sizes that were wrong at both ends; `.scroll-x`
+(momentum, `overscroll-behavior-x: contain`, 6px bar, `:not(.no-scrollbar)` so the two utilities cannot fight
+over `scrollbar-width`); `.tap` (44px floor, `pointer: coarse` only) on `Button`'s base and the compact row
+actions; `@container` roots on `DialogContent`, the advice card and `DropPanel`, with the inner grids moved
+from viewport prefixes to `@sm:`/`@md:`/`@lg:`/`@xl:`/`@4xl:`/`@5xl:`/`@7xl:`; `dvh` sheet heights, the
+`3xl` width steps, a prose-measure override for the guide sheet, `xs:grid-cols-3` on every 2→6 tile ladder,
+and a `3xl:grid-cols-9` tape / `3xl` Pro-sidebar (`22rem`, `26rem` at `4xl`) whose panels then reflow by
+container rather than by window.
+
+**Two traps found and recorded** (`systemPatterns.md` conventions + `techContext.md` gotchas): `cn()` cannot
+arbitrate `hidden` against a breakpoint display utility (the later media query wins, so a control meant to
+stay hidden until `md` reappears at `sm` — put the visibility on a wrapper), and a container variant silently
+falls back to its base column count when no ancestor is a container root.
+
+Next: the visual capture at 320 and 2560 plus the VoiceOver/NVDA pass (both still open under *Remaining* in
+`progress.md`); nothing is committed — the operator asked for no commits unless explicitly requested.
 
 ## Session note (2026-11-26) — `address already in use` on :5236
 

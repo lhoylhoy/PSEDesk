@@ -412,7 +412,7 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="mx-auto flex min-h-dvh w-full max-w-[112rem] flex-col gap-4 px-3 py-4 sm:px-5 sm:py-6">
+      <div className="shell mx-auto flex min-h-dvh w-full max-w-[112rem] flex-col gap-4 3xl:max-w-[128rem] 3xl:gap-5">
         {/* Mounted from the first render so the region is live before anything changes. */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {liveStatus}
@@ -481,7 +481,7 @@ export default function App() {
 
         {viewingHistory ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-2.5 text-[11px] text-amber-400">
-            <span>{describeHistoryBanner(selectedDate, viewMode === 'simple')}</span>
+            <span className="simple-copy">{describeHistoryBanner(selectedDate, viewMode === 'simple')}</span>
             <Button variant="secondary" onClick={returnToLatest} className="h-8 px-3">
               {viewMode === 'simple' ? 'Back to latest' : 'Latest session'}
             </Button>
@@ -502,14 +502,14 @@ export default function App() {
         />
 
         {notice ? (
-          <div className="rounded-xl border border-mint-400/30 bg-mint-400/5 px-4 py-2.5 text-[11px] text-mint-400">
+          <div className="rounded-xl border border-mint-400/30 bg-mint-400/5 px-4 py-2.5 text-[11px] text-mint-400 simple-copy">
             {notice}
           </div>
         ) : null}
 
         {portfolio && portfolio.alerts.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-2.5 text-[11px] text-amber-400">
-            <span>
+            <span className="simple-copy">
               {viewMode === 'simple' ? describePortfolioAlert(portfolio.alerts[0]) : portfolio.alerts[0]}
               {portfolio.alerts.length > 1 ? ` (+${portfolio.alerts.length - 1} more)` : ''}
             </span>
@@ -528,14 +528,14 @@ export default function App() {
         {error ? (
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-400/5 px-4 py-2.5 text-[11px] text-rose-400">
             <div className="max-w-3xl">
-              <p className="font-semibold">{error.title}</p>
-              <p className="mt-0.5 leading-relaxed text-slate-300">{error.message}</p>
+              <p className="font-semibold simple-copy">{error.title}</p>
+              <p className="mt-0.5 leading-relaxed text-slate-300 simple-copy">{error.message}</p>
               {error.technical ? (
                 <details className="mt-1.5">
-                  <summary className="cursor-pointer text-[10px] text-slate-500">
+                  <summary className="cursor-pointer text-[10px] text-slate-500 simple-note">
                     Technical details
                   </summary>
-                  <p className="mt-1 wrap-break-word font-mono text-[10px] leading-relaxed text-slate-500">
+                  <p className="mt-1 wrap-break-word font-mono text-[10px] leading-relaxed text-slate-500 simple-note">
                     {error.technical}
                   </p>
                 </details>
@@ -548,7 +548,10 @@ export default function App() {
         ) : null}
 
         {loadState === 'loading' && !data ? (
-          <div className="panel h-40 animate-pulse" aria-label="Loading signal desk" />
+          <div
+            className="panel h-[clamp(8rem,18vh,12rem)] animate-pulse"
+            aria-label="Loading signal desk"
+          />
         ) : null}
 
         {data ? (
@@ -604,23 +607,25 @@ export default function App() {
                     </div>
                   </div>
 
-                  <Suspense
-                    fallback={
-                      <div
-                        className="panel h-96 animate-pulse"
-                        aria-label="Loading the ranked table"
+                  <div className="grid gap-4 3xl:grid-cols-[minmax(0,1fr)_22rem] 3xl:items-start 3xl:gap-5 4xl:grid-cols-[minmax(0,1fr)_26rem]">
+                    <Suspense
+                      fallback={
+                        <div
+                          className="panel h-96 animate-pulse"
+                          aria-label="Loading the ranked table"
+                        />
+                      }
+                    >
+                      <SignalTable
+                        items={items}
+                        horizon={horizon}
+                        onSelect={setActiveTicker}
+                        onTakeTrade={handleTakeSignal}
+                        recommendedCashPct={run.recommendedCashPct}
                       />
-                    }
-                  >
-                    <SignalTable
-                      items={items}
-                      horizon={horizon}
-                      onSelect={setActiveTicker}
-                      onTakeTrade={handleTakeSignal}
-                      recommendedCashPct={run.recommendedCashPct}
-                    />
-                  </Suspense>
-                  <DropPanel drops={drops} />
+                    </Suspense>
+                    <DropPanel drops={drops} />
+                  </div>
                 </>
               )
             ) : (

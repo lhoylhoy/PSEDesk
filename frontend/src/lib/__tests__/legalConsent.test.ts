@@ -82,9 +82,18 @@ test('the notice leads with a non-advice section and covers simulated results an
 
   const titles = LEGAL_SECTIONS.map((section) => section.title);
   assert.equal(titles[0], 'Not investment advice');
+  assert.ok(titles.includes('Written for one reader'));
   assert.ok(titles.includes('Hypothetical and simulated results'));
   assert.ok(titles.includes('What leaves this machine'));
   assert.ok(titles.includes('Your data'));
+
+  // The reader must be told the instruction-shaped copy is single-user, not a recommendation, and
+  // that running someone else's money is the line that matters legally.
+  const singleReader = LEGAL_SECTIONS.find((section) => section.title === 'Written for one reader');
+  assert.ok(singleReader);
+  assert.match(singleReader.body, /not a recommendation/i);
+  assert.match(singleReader.body, /anyone else’s money/i);
+  assert.match(singleReader.body, /Securities Regulation Code/i);
 
   for (const section of LEGAL_SECTIONS) {
     assert.ok(section.body.trim().length > 0, section.title);

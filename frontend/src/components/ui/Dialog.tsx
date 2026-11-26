@@ -8,13 +8,17 @@ export const DialogClose = DialogPrimitive.Close;
 export const DialogTitle = DialogPrimitive.Title;
 export const DialogDescription = DialogPrimitive.Description;
 
-/** Content width once there is room for a centred modal; phones always get the full sheet. */
+/**
+ * Content width once there is room for a centred modal; phones always get the full sheet.
+ * The `3xl` step is the ultra-wide monitor: the same sheet gets a little more room rather
+ * than floating as a small card in a 2560px window.
+ */
 type DialogSize = 'md' | 'lg' | 'xl';
 
 const sizeClasses: Record<DialogSize, string> = {
-  md: 'sm:w-[min(58rem,94vw)]',
-  lg: 'sm:w-[min(66rem,94vw)]',
-  xl: 'sm:w-[min(78rem,94vw)]',
+  md: 'sm:w-[min(58rem,94vw)] 3xl:w-[min(64rem,88vw)]',
+  lg: 'sm:w-[min(66rem,94vw)] 3xl:w-[min(76rem,86vw)]',
+  xl: 'sm:w-[min(78rem,94vw)] 3xl:w-[min(92rem,86vw)]',
 };
 
 interface DialogContentProps {
@@ -27,6 +31,12 @@ interface DialogContentProps {
  * One dialog surface, two shapes. On a phone it is a bottom sheet — thumb-reachable, flush
  * with the screen edges and padded for the home indicator. From `sm` up it is the centred
  * modal the terminal has always used. The content itself never knows the difference.
+ *
+ * The sheet is also a **container-query root** (`@container`), so the tile grids inside it
+ * respond to the sheet's own width instead of the viewport: a 94vw sheet on a 640px phone
+ * lays out like a narrow card, and the same markup spreads to six columns on a 1056px
+ * desktop sheet. That is why the dialogs reflow correctly on a landscape phone, a split
+ * screen and a 2560px monitor from one class list.
  */
 export function DialogContent({ children, className, size = 'md' }: DialogContentProps) {
   return (
@@ -34,11 +44,12 @@ export function DialogContent({ children, className, size = 'md' }: DialogConten
       <DialogPrimitive.Overlay className="dialog-overlay fixed inset-0 z-40 bg-black/75 backdrop-blur-sm" />
       <DialogPrimitive.Content
         className={cn(
-          'dialog-sheet fixed z-50 overflow-y-auto border-line bg-ink-900 shadow-2xl shadow-black/70 outline-none',
-          // Phone: bottom sheet.
+          'dialog-sheet @container fixed z-50 overflow-y-auto overscroll-contain border-line bg-ink-900 shadow-2xl shadow-black/70 outline-none',
+          // Phone: bottom sheet. `dvh` tracks the collapsing browser chrome instead of the
+          // largest possible viewport, so the sheet's last row is never behind the URL bar.
           'inset-x-0 bottom-0 max-h-[92dvh] w-full rounded-t-2xl border-t px-4 pb-safe pt-3',
           // Tablet and up: centred modal.
-          'sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[88vh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:p-6',
+          'sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[88dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:p-6',
           sizeClasses[size],
           className,
         )}

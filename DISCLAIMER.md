@@ -84,14 +84,39 @@ sent to the configured cloud model. Do not upload a book, report, research note 
 merely have access to — copyright, database rights and confidentiality obligations all still apply
 inside a personal tool. Material non-public information must never enter this system.
 
-## 7. No warranty, and the limits of liability
+## 7. Instruction-shaped copy is for one self-user only
+
+The plain-language surface is deliberately written as an instruction: the cards say "buy in this
+band", "cut here", "lock break-even at +1R" and "ride the wave or trail to the target", and the
+market call says "ride it", "be selective" or "stay in cash". That wording exists so a single
+informed reader does not have to translate a table into a decision. It is **not** a
+recommendation, and it is not written for anybody else.
+
+Two consequences follow, and both are conditions of using this software:
+
+- **Do not pass the output to another person as advice**, and do not present it as research you
+  produced for them. Read it yourself, then make your own decision.
+- **Do not use it to manage anyone else's money** — not a relative's, not a friend's, not a
+  client's, not a fund's. Doing so can make you an unregistered investment adviser or an
+  unlicensed fund manager under Republic Act No. 8799 (the Securities Regulation Code) and the
+  rules of the Securities and Exchange Commission, and it brings the Data Privacy Act duties in
+  `PRIVACY.md` §3 into play for the data you then hold.
+
+The same rule applies to the paper blotter: it is a simulation of *your* book, not an account
+you may run for someone else. The codebase carries portfolio-management controls (sector caps, a
+drawdown ladder, a heat budget, Kelly-fraction sizing); they make the simulation realistic, and
+they do not make this a portfolio-management system.
+
+If you are not the only reader of this screen, stop and take counsel first.
+
+## 8. No warranty, and the limits of liability
 
 The software is provided "as is", without warranty of any kind, express or implied, including
 fitness for a particular purpose. The authors are not liable for any loss or damage arising from its
 use, including trading losses, data loss or service interruption. Nothing in this document limits
 any liability that Philippine law does not allow to be limited.
 
-## 8. Not legal, tax or accounting advice
+## 9. Not legal, tax or accounting advice
 
 This document explains how the project is built and what it does not do. It is not legal, tax or
 accounting advice. If you intend to operate the desk for anyone other than yourself, take Philippine

@@ -12,6 +12,19 @@
       content="PSE Signal Desk - a personal Philippine equity research notebook: model-screened PSE candidates, day-over-day drift and drop explanations, and paper-portfolio tracking. Research tooling only, not investment advice."
     />
     <!--
+      The typeface is bundled, not linked from a font CDN (see the @font-face block in
+      src/index.css and PRIVACY.md §5). Preloading the latin subset — the one that carries
+      almost every character on screen — lets the first paint use it instead of the swap
+      fallback; `crossorigin` is required on a font preload even same-origin.
+    -->
+    <link
+      rel="preload"
+      href="/fonts/google-sans-flex-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <!--
       The tab icon, the iOS home-screen icon and the header badge are one drawing (see
       src/lib/deskMarkGeometry.ts, generated into public/ by `npm run icons`). The .ico stays
       because Safari before 26 and iOS Safari ignore SVG favicons; browsers that support SVG pick it.

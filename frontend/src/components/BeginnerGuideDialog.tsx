@@ -64,7 +64,9 @@ const GLOSSARY = [
 export function BeginnerGuideDialog({ open, onOpenChange }: BeginnerGuideDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:w-[min(46rem,94vw)]">
+      {/* Prose sheet: it stays a single readable measure even on a 2560px monitor, so it
+          opts out of the ultra-wide width step the tile-heavy dialogs get. */}
+      <DialogContent className="sm:w-[min(46rem,94vw)] 3xl:w-[min(54rem,88vw)]">
         <DialogStickyHeader>
           <div className="min-w-0">
             <DialogTitle className="text-lg font-semibold text-white">

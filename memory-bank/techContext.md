@@ -12,7 +12,7 @@
 | React | `^19.3.1` | `react-dom` same minor |
 | TypeScript | `^7.0.2` | `strict`, `noEmit`, `noUnusedLocals/Parameters` |
 | Vite | `^8.3.8` | `@vitejs/plugin-react` 6.3.0; bundles with **rolldown**, so `build.rollupOptions.output.manualChunks` must be a **function** (the Rollup object/array form fails with `TS2769: Object literal may only specify known properties`) |
-| Tailwind CSS | `^4.3.5` | CSS-first via `@tailwindcss/vite`; no `tailwind.config` |
+| Tailwind CSS | `^4.3.5` | CSS-first via `@tailwindcss/vite`; no `tailwind.config`. Breakpoint tokens live in `@theme` in `index.css` (`--breakpoint-xs: 30rem`, `--breakpoint-3xl: 120rem`, `--breakpoint-4xl: 160rem`, on top of the defaults); container queries (`@container`, `@md:` …) come built in |
 | Radix UI | dialog 1.3.1, select 2.4.1, tabs 1.2.1, tooltip 1.4.1 | Wrapped in `src/components/ui` |
 | PdfPig | `0.1.16` | `UglyToad.PdfPig`; offline PDF text extraction for knowledge uploads |
 
@@ -46,6 +46,8 @@ npm run dev                                          # http://localhost:5173 (st
 npm run build                                        # tsc --noEmit && vite build
 npm test                                             # node --test "src/lib/__tests__/*.test.ts" (60 passing)
 npm run icons                                        # regenerate public/favicon.{svg,ico} + apple-touch-icon.png
+npm run fonts                                        # re-download the bundled Google Sans Flex woff2 + OFL.txt
+node scripts/fetch-fonts.mjs --check                 # print the upstream subset URLs without writing (offline → error)
 ./node_modules/.bin/tsc --noEmit                     # type gate alone (npx tsc only prints npm notices here)
 npm run preview
 
@@ -118,6 +120,8 @@ curl -X DELETE http://localhost:5236/api/knowledge/7        # upload → 204, bu
 | `Compliance:DeploymentMode` | `PersonalLocal` | `PersonalLocal` refuses non-loopback callers with `403`; `LicensedCommercial` opens that check and requires the operator key on writes. Unrecognised values fall back to personal |
 | `Compliance:EnforceLoopbackInPersonalMode` | `true` | The loopback refusal switch; only a deliberate `false` disables it |
 | `Compliance:OperatorApiKey` | empty | Shared key required on `POST`/`PUT`/`PATCH`/`DELETE` when set; blank is fine in personal mode and a `503` fail-closed in licensed mode |
+| `Compliance:AllowedHosts` | empty | Licensed mode only: replaces the loopback `AllowedHosts` so a deployment under a real host name is reachable; ignored in `PersonalLocal`, so it can never widen the personal desk |
+| `Compliance:ExpensiveRequestsPerHour` | `30` | One fixed one-hour window over `run-now` / `backtest` / `train` / `train-all`; `429` + `Retry-After` beyond it. Clamped 1–1000 |
 | `MarketData:UserAgent` | `PseSignalDesk-PersonalResearch/0.1 (local-noncommercial)` | Outbound identity for Yahoo and PSE Edge — never a spoofed browser string |
 | `PSEDESK_OPERATOR_API_KEY` | — | Environment override for `Compliance:OperatorApiKey`, so the key never sits in `appsettings.json` |
 | `OLLAMA_API_KEY` / `OLLAMA_BASE_URL` / `OLLAMA_MODEL` / `OLLAMA_FAST_MODEL` / `OLLAMA_EMBEDDING_MODEL` | — | Environment variables override settings |
@@ -128,6 +132,7 @@ curl -X DELETE http://localhost:5236/api/knowledge/7        # upload → 204, bu
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | `http://localhost:5236` | API base URL (trailing slashes stripped) |
+| `VITE_OPERATOR_API_KEY` | empty | Shared `X-PseDesk-Key` for a `LicensedCommercial` API, sent on `POST`/`PUT`/`PATCH`/`DELETE` only (`lib/operatorKey.ts`). Blank in personal mode, where writes need no key. Not per-user identity — a bundle-shipped key is readable by anyone who loads the page |
 
 See `frontend/.env.example`.
 
@@ -167,20 +172,23 @@ Environment variables (`OllamaCloud__ApiKey`, `OLLAMA_API_KEY`) still win, so CI
 
 ## Legal notices
 
-`DISCLAIMER.md`, `PRIVACY.md` and `THIRD_PARTY_NOTICES.md` live at the repository root (and are linked from `README.md`). `frontend/src/lib/legalConsent.ts` mirrors their reader-facing summary; bumping `CURRENT_LEGAL_VERSION` there re-prompts every browser through `LegalDisclaimerGate`. Keep the three documents, that summary and the README's compliance paragraph in sync when any of them changes.
+`LICENSE`, `DISCLAIMER.md`, `PRIVACY.md` and `THIRD_PARTY_NOTICES.md` live at the repository root (and are linked from `README.md`). `frontend/src/lib/legalConsent.ts` mirrors their reader-facing summary; bumping `CURRENT_LEGAL_VERSION` there re-prompts every browser through `LegalDisclaimerGate`. Keep the four documents, that summary and the README's compliance paragraph in sync when any of them changes.
+
+`LICENSE` is deliberately **not** open source: one personal, non-commercial copy on a machine you control, no redistribution or third-party hosting, "as is" with a liability cap. It is the only place the warranty/liability terms bind someone who merely copies the code, so do not replace it with an SPDX identifier (MIT/Apache) without also reworking `DISCLAIMER.md` §8 and the README.
 
 ## Documentation map
 
 | Document | Audience / purpose |
 | --- | --- |
 | `README.md` | The user-facing manual: what the desk does, how to run it, the API table, tests and limitations |
+| `LICENSE` | The grant: one personal non-commercial copy, no redistribution or third-party hosting, "as is" + liability cap. Not open source |
 | `DISCLAIMER.md` / `PRIVACY.md` / `THIRD_PARTY_NOTICES.md` | Legal posture, data handling and licences (linked from the README and mirrored by the first-run gate) |
 | `security_audit_report.md` | The 2026-11-26 read-only audit (OWASP ASVS / API Top 10 / LLM Top 10) with the still-open remediation list |
 | `memory-bank/*.md` | Durable engineering context: brief, product, patterns, toolchain, active state, progress |
 | `.clinerules/memory-bank.md` | The protocol that keeps the memory bank current |
 | `backend/knowledge-base/` | The grounding library the model is allowed to cite (also documented product content) |
 
-Sync rules: a behaviour change lands in `README.md` and the memory bank; a compliance or copy change lands in the three legal documents **and** `legalConsent.ts` (bump the version) **and** the README; a fee/rule change lands in `PseBoardLotService`, `backend/knowledge-base/`, the README and the memory bank.
+Sync rules: a behaviour change lands in `README.md` and the memory bank; a compliance or copy change lands in `LICENSE` + the three notices **and** `legalConsent.ts` (bump the version) **and** the README; a fee/rule change lands in `PseBoardLotService`, `backend/knowledge-base/`, the README and the memory bank.
 
 ## Debugging (VS Code)
 
@@ -239,7 +247,13 @@ the API at all.
 - **Re-running a day replaces that day's run** for the same horizon. Previous-run lookup uses strictly earlier `RunDate` values.
 - **Ticker matching is case-insensitive** everywhere (`OrdinalIgnoreCase`).
 - **The scheduler is calendar-weekday based**, not a PSE holiday calendar.
-- **No auth, no rate limiting, no HTTPS enforcement** in the MVP.
+- **No multi-user auth, no HTTPS enforcement.** There is no per-user login and no origin check on
+  unsafe methods; the loopback refusal (`PersonalLocal`) and the shared operator key
+  (`LicensedCommercial`) are the whole access story. The expensive endpoints *are* bounded:
+  `DeskWorkGate` answers `409` to a second concurrent run, and the `desk-expensive` policy answers
+  `429` + `Retry-After` past `Compliance:ExpensiveRequestsPerHour` per hour. Keep the desk on
+  `127.0.0.1`; a real multi-user deployment needs OIDC, TLS and security headers first
+  (`security_audit_report.md` F-01/F-02/F-08).
 - **A leftover API host steals port 5236 and kills the debug session.** Launching
   `API: PseSignalDesk.WebApi` while a previous host is still up fails with `System.IO.IOException:
   Failed to bind to address http://127.0.0.1:5236: address already in use.` (inner
@@ -273,11 +287,24 @@ the API at all.
   itself and reports `CssSyntaxError: Missing opening {` (no line number) when the `@layer utilities`
   block is unbalanced — the fix is to check brace balance rather than hunt the reported file. Global
   `@keyframes` belong **outside** `@layer utilities`; the sheet animations live at the end of the file.
+- **Tailwind v4 emits range syntax, and container queries need a named ancestor.** A built stylesheet
+  contains `@media (width>=30rem)`, not `min-width: 30rem`, so grepping the dist CSS for the old form
+  reports a false negative. Container variants (`@md:grid-cols-2`) resolve against the nearest
+  `@container` ancestor: `DialogContent` and the advice card / drop panel are deliberately declared as
+  container roots, so a tile grid inside them measures the sheet, not the window. A grid using an `@`
+  variant with no container ancestor silently falls back to its base column count.
+- **A `hidden` utility loses to a breakpoint display utility on the same element.** `cn()` is a plain
+  joiner, so `'flex … sm:inline-flex'` + `'hidden md:flex'` is three competing display rules and the
+  later media query wins — which is how a control that must stay hidden below `md` reappears at `sm`.
+  Put the visibility class on a wrapper (`<div className="hidden md:block">`) instead.
 - **Server owns the odds and the verdict.** `WinProbability`, `BreakEvenWinRate`, `ExpectedValueR`, `QuarterKellyFraction`, `EdgeVerdict` and the fallback `BearCase` are computed in `ProbabilisticEdgeService`/`PseBoardLotService`; the frontend only formats them and converts Kelly to a peso budget. Do not recompute fees in TypeScript — `lib/riskSizing.ts` deliberately avoids duplicating `RoundTripFeeRate`.
 - **Legacy runs look empty by design.** Rows written before `AddProbabilisticEdgeAndScorecard` carry zero odds, `WATCH_ONLY` and an empty bear case. They still resolve once their forward window fills (and are visible in the scorecard's realized stats + recent list) but are excluded from Brier and the calibration buckets. Re-run the pipeline (or a past date) to populate them.
 - **Frontend `npm test` is `node:test` over pure modules, not a DOM suite.** It runs `node --test "src/lib/__tests__/*.test.ts"` on Node's native type stripping, so nothing there may import React or touch the DOM; `lib/queryCache.ts` is deliberately React-free for this reason. There is still no component/browser harness (`tsc --noEmit` + `npm run build` are the gate for UI).
 - **The icon files are generated, never hand-edited.** `npm run icons` runs `frontend/scripts/generate-icons.mjs`, which imports `src/lib/deskMarkGeometry.ts` directly (Node 24 strips the types; no build step, no ts-node), supersamples the same rounded rects into RGBA, deflates the scanlines with `node:zlib` and writes the PNG, the ICO container and the SVG by hand — **no image library, no new dependency**. Editing `public/favicon.*` by hand is a bug: the next `npm run icons` overwrites it. `--preview <path>` dumps a 512px PNG for eyeballing. ICO entries are PNG-compressed (fine for Vista+), and the 180px touch icon is deliberately a full-bleed opaque square because iOS applies its own squircle mask and paints transparent corners black.
-- **Headless Chrome in this environment cannot screenshot the running app** (it hangs on the seeded `dist/` page and only ever produced a file for trivial/static pages; `--disable-gpu` still selects Metal). Static HTML previews in `/tmp` (`file://…`, `--allow-file-access-from-files`) work and were used for the badge/icon comparison; the app itself was not captured this pass.
+- **The bundled typeface is vendored, and its coverage was measured.** `frontend/public/fonts/google-sans-flex-latin.woff2` (variable `100 900`, 49,988 bytes) is referenced by one `@font-face` in `src/index.css` and preloaded by `index.html`; `npm run fonts` re-downloads it plus `OFL.txt` from the Google Fonts API (it verifies the `wOF2` signature, so an HTML error page can never overwrite the binary). **No `fonts.googleapis.com` link may be added** — the desk must load with nothing but the API on loopback, and a CDN request would leak the reader's address (`PRIVACY.md` §5). Measured 2026-11-26 in headless Chrome: the app's Latin copy, digits and punctuation come from the bundled face (advance width 26.81 px for `A` at 40 px vs 24.09 for the Menlo fallback), while `₱` (U+20B1), `▲`/`▼` (U+25B2/U+25BC) and `→` resolve through the **system** font — the API's `latin-ext` and `symbols` subsets do not contain those glyphs, and the official Google Fonts `<link>` behaves identically (pixel-identical to the fallback). That is why only `latin` ships; do not "fix" the peso sign by bundling more subsets without re-running that measurement.
+- **Headless Chrome can capture the built app — over `http://`, with the legal gate seeded.** The reliable recipe (used 2026-11-26 to check the typeface at 1280px and 500px): `cp -R dist/. /tmp/preview/`, insert an inline script in the copied `index.html` that sets `localStorage['psedesk.legalAcceptedVersion']` (the current `CURRENT_LEGAL_VERSION`), `psedesk.welcomeDismissed`, `psedesk.theme` and `psedesk.viewMode`, serve it with `python3 -m http.server <port> --bind 127.0.0.1`, then
+  `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --no-sandbox --hide-scrollbars --window-size=1280,940 --virtual-time-budget=9000 --screenshot=/tmp/app.png http://127.0.0.1:<port>/`.
+  It exits `0` in ~3 s and writes the PNG; the `--virtual-time-budget` is what stops it waiting forever, and a `subprocess.run(..., timeout=90)` wrapper keeps a hung run from blocking the session. Loading the same page over `file://` (or pointing Chrome at the seeded `dist/index.html` directly) is what used to hang — the SPA needs an origin. The API being offline is fine: the shell, header, dialogs and the offline card all render and are exactly what a font/layout check needs.
 - **Git is initialized on branch `main` and currently has three commits** (2026-11-25 initial, a portfolio/book-sizing refactor and a readability pass on 2026-11-26; HEAD `3e2aea4`), so everything under `backend/`, `frontend/`, `memory-bank/`, `docs`-level notices and `.clinerules/` is tracked.
 - `.gitignore` covers build output (`**/bin/`, `**/obj/`, `.vs/`, `*.user`, `*.suo`,
   `*.sln.docstates` / `*.slnx.docstates`), test/coverage artefacts (`**/TestResults/`,

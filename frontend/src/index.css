@@ -1,7 +1,37 @@
 @import 'tailwindcss';
 
+/*
+ * Typeface: Google Sans Flex (variable 100–900), bundled with the app — never fetched from a
+ * font CDN. A `fonts.googleapis.com` link would tell a third party who is reading the desk and
+ * would break the "the terminal works with the API on loopback and nothing else" guarantee
+ * (PRIVACY.md §5), so the woff2 lives in `public/fonts/` and `npm run fonts` refreshes it from
+ * the Google Fonts API (OFL licence shipped next to the file).
+ *
+ * One subset, deliberately. The `latin` file carries the ASCII range plus the punctuation the
+ * copy leans on (— · … – ’ × ÷ ±). The API's `latin-ext` and `symbols` subsets were measured on
+ * 2026-11-26 and do **not** contain the glyphs this desk actually needs — the peso sign (U+20B1),
+ * the direction triangles (U+25B2/U+25BC) and → all still resolved through the system font, byte
+ * for byte, exactly as they do behind the official Google Fonts `<link>`. Bundling them would
+ * have cost ~51 kB and changed nothing, so they are left out; `₱` and `▲▼` render from the
+ * reader's system font beside Google Sans Flex digits.
+ *
+ * `font-display: swap` paints system text immediately, and index.html preloads this one file,
+ * which carries almost every character on screen.
+ */
+@font-face {
+  font-family: 'Google Sans Flex';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/google-sans-flex-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* The bundled face wins; `Inter` stays for a machine that has it installed, then the system. */
+  --font-sans: 'Google Sans Flex', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-ink-950: #05080d;
@@ -17,11 +47,27 @@
   --color-rose-400: #ff6f8b;
   --color-amber-400: #f4c15a;
   --color-sky-400: #5cc0ff;
+
+  /*
+   * Two extra stops beyond Tailwind's default shelf.
+   *
+   * `xs` (30rem) is the 320–479px phone band, which otherwise shares one layout with
+   * everything up to 639px — the difference between a 320px phone and a 479px one is a
+   * third of the screen. `3xl` / `4xl` open the ultra-wide compositions (one-row tape,
+   * sidebar drop panel, three advice columns) that a 1920px or 2560px monitor can use.
+   */
+  --breakpoint-xs: 30rem;
+  --breakpoint-3xl: 120rem;
+  --breakpoint-4xl: 160rem;
 }
 
 @layer base {
   html {
     color-scheme: dark;
+    /* iOS refuses to re-flow text it has already sized unless this is stated; without it a
+       landscape rotation can leave the terminal zoomed. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   /*
@@ -73,6 +119,10 @@
        collapses, so the sticky header never jumps behind the address bar. */
     min-height: 100vh;
     min-height: 100dvh;
+    /* iOS landscape puts the notch over the left or right edge; the shell pads inside it
+       instead of letting the first column hide under the sensor housing. */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   /*
@@ -178,6 +228,74 @@
   /* Bottom sheets leave room for the iOS home indicator. */
   .pb-safe {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /*
+   * The one page gutter. A ladder of `px-3 sm:px-5 2xl:px-8` disagrees with itself at every
+   * new breakpoint; a clamp grows smoothly from a 12px phone gutter to a 48px monitor one and
+   * keeps the shell's own vertical rhythm proportional to it.
+   */
+  .shell {
+    padding-inline: clamp(0.75rem, 0.45rem + 1.4vw, 3rem);
+    padding-block: clamp(0.75rem, 0.55rem + 0.9vw, 2rem);
+  }
+
+  /*
+   * Fluid type for the two places where a fixed size is wrong at both ends: the market call
+   * headline (18px is too loud at 320px, 20px is too small at 2560px) and the big metric
+   * values inside tiles.
+   */
+  .text-fluid-hero {
+    font-size: clamp(1.0625rem, 0.98rem + 0.5vw, 1.5rem);
+    line-height: 1.2;
+  }
+
+  .text-fluid-metric {
+    font-size: clamp(1rem, 0.93rem + 0.32vw, 1.375rem);
+    line-height: 1.15;
+  }
+
+  /*
+   * Every horizontally scrollable surface (the wide Pro tables, the ledger, the replay, the
+   * horizon rail). iOS gets momentum scrolling, a sideways swipe can no longer bounce the
+   * page behind it, and the scrollbar is thin instead of a desktop-sized gutter. Rails that
+   * also carry `.no-scrollbar` keep their bar hidden — the `:not()` keeps the two utilities
+   * from fighting over `scrollbar-width`.
+   */
+  .scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scroll-x:not(.no-scrollbar) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
+
+  .scroll-x:not(.no-scrollbar)::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .scroll-x:not(.no-scrollbar)::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-x:not(.no-scrollbar)::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background-color: var(--color-line);
+  }
+
+  /*
+   * A 44px floor for the compact row actions that are 24–32px with a mouse (table Take/info
+   * buttons, ledger actions, chip rails). Applied class-by-class on purpose: the segmented
+   * controls and the dense tables keep their deliberate 36–40px geometry.
+   */
+  @media (pointer: coarse) {
+    .tap {
+      min-height: 2.75rem;
+      min-width: 2.75rem;
+    }
   }
 
   .dialog-sheet {
@@ -314,5 +432,33 @@
     width: 100%;
     opacity: 0.35;
     animation: none;
+  }
+}
+
+/*
+ * A phone held sideways has ~320–400px of height. A centred modal would be a postage stamp
+ * with a scrollbar, so the sheet takes the whole viewport and its side insets — the same
+ * content, just full-bleed. Declared outside `@layer utilities` so it wins over the
+ * `sm:left-1/2 sm:top-1/2` centring utilities without raising specificity.
+ */
+@media (orientation: landscape) and (max-height: 32rem) {
+  .dialog-sheet {
+    inset: 0;
+    width: 100%;
+    max-height: 100dvh;
+    border-width: 0;
+    border-radius: 0;
+    transform: none;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Phones (not tablets) keep their gutters clear of the notch in either orientation. */
+@media (max-width: 39.999rem) {
+  .dialog-sheet {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
   }
 }

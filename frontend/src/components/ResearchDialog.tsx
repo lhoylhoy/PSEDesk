@@ -123,7 +123,7 @@ function HoldingVerdictCard({ research }: { research: TickerResearch }) {
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{verdict.detail}</p>
 
-      <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <dl className="mt-2 grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-6">
         <Tile label="Your average" value={formatPrice(advice.averageCost)} />
         <Tile
           label="Price now"
@@ -250,7 +250,7 @@ function ResearchBody({
       ) : null}
 
       <OptionalDisclosure enabled={simple} title="Sizing, odds & technical indicators" className="mt-3">
-      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <dl className="mt-3 grid grid-cols-2 gap-2 xs:grid-cols-3 lg:grid-cols-6">
         <Tile label="Entry" value={formatPrice(research.plan.entryPrice)} />
         <Tile label="Stop" value={formatPrice(research.plan.stopLoss)} tone="text-rose-400" />
         <Tile label="Target" value={formatPrice(research.plan.targetPrice)} tone="text-mint-400" />

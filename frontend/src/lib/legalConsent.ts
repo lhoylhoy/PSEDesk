@@ -16,7 +16,7 @@ export const LEGAL_CONSENT_KEY = 'psedesk.legalAcceptedVersion';
  * Bump this string whenever `LEGAL_SECTIONS`, `DISCLAIMER.md` or `PRIVACY.md` change in a way a
  * reader should re-read; every browser then sees the gate once more.
  */
-export const CURRENT_LEGAL_VERSION = '2026-11-v1';
+export const CURRENT_LEGAL_VERSION = '2026-11-v2';
 
 export interface LegalSection {
   /** Card heading. */
@@ -40,6 +40,15 @@ export const LEGAL_SECTIONS: LegalSection[] = [
       'You are the only one who knows your income, debts, taxes and risk tolerance. Verify every price, ' +
       'board lot and filing against your broker and the PSE before acting, and never trade money you cannot ' +
       'afford to lose. Trading PSE-listed shares can lose more than the fees the desk models.',
+  },
+  {
+    title: 'Written for one reader',
+    body:
+      'The plain-language cards read like instructions — buy in this band, cut here, lock break-even at +1R, ' +
+      'ride the wave. That wording is deliberate for a single informed self-user, and it is not a ' +
+      'recommendation. Do not pass this output to another person as advice, and do not use it to manage ' +
+      'anyone else’s money: doing that can make you an unregistered investment adviser under the Securities ' +
+      'Regulation Code.',
   },
   {
     title: 'Hypothetical and simulated results',

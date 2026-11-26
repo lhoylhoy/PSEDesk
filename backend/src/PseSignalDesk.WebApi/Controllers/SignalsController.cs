@@ -1,11 +1,13 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PseSignalDesk.Application.Interfaces;
 using PseSignalDesk.Application.Models;
 using PseSignalDesk.Application.Services;
 using PseSignalDesk.Domain.Entities;
 using PseSignalDesk.Domain.Enums;
 using PseSignalDesk.Infrastructure.Scheduling;
+using PseSignalDesk.WebApi.Services;
 
 namespace PseSignalDesk.WebApi.Controllers;
 
@@ -29,6 +31,7 @@ public sealed class SignalsController : ControllerBase
     private readonly DailyQuotationImportService _quotationImports;
     private readonly MoneyManagerTrainingService _training;
     private readonly IMarketDataProvider _marketData;
+    private readonly DeskWorkGate _workGate;
     private readonly ILogger<SignalsController> _logger;
 
     public SignalsController(
@@ -40,6 +43,7 @@ public sealed class SignalsController : ControllerBase
         DailyQuotationImportService quotationImports,
         MoneyManagerTrainingService training,
         IMarketDataProvider marketData,
+        DeskWorkGate workGate,
         ILogger<SignalsController> logger)
     {
         _repository = repository;
@@ -50,6 +54,7 @@ public sealed class SignalsController : ControllerBase
         _quotationImports = quotationImports;
         _training = training;
         _marketData = marketData;
+        _workGate = workGate;
         _logger = logger;
     }
 
@@ -145,6 +150,7 @@ public sealed class SignalsController : ControllerBase
     /// Returns 503 when the live feed has no history, never a synthetic curve.
     /// </summary>
     [HttpGet("backtest")]
+    [EnableRateLimiting(DeskRateLimitPolicies.Expensive)]
     public async Task<ActionResult<BacktestResultDto>> RunBacktest(
         [FromQuery] SignalHorizon horizon = SignalHorizon.WEEK,
         [FromQuery] int? lookbackDays = null,
@@ -210,12 +216,18 @@ public sealed class SignalsController : ControllerBase
     /// charge. Answers 503 when the feed has no history — the desk never trains on synthetic data.
     /// </summary>
     [HttpPost("train")]
+    [EnableRateLimiting(DeskRateLimitPolicies.Expensive)]
     public async Task<ActionResult<TrainedModelSummaryDto>> Train(
         [FromQuery] SignalHorizon horizon = SignalHorizon.WEEK,
         [FromQuery] int? lookbackDays = null,
         CancellationToken cancellationToken = default)
     {
         horizon = NormalizeHorizon(horizon);
+
+        if (!_workGate.TryEnter())
+        {
+            return WorkAlreadyRunning();
+        }
 
         try
         {
@@ -243,6 +255,10 @@ public sealed class SignalsController : ControllerBase
                 title: "Training data unavailable",
                 detail: ex.Message);
         }
+        finally
+        {
+            _workGate.Exit();
+        }
     }
 
     /// <summary>
@@ -250,10 +266,16 @@ public sealed class SignalsController : ControllerBase
     /// as the single-horizon endpoint.
     /// </summary>
     [HttpPost("train-all")]
+    [EnableRateLimiting(DeskRateLimitPolicies.Expensive)]
     public async Task<ActionResult<IReadOnlyList<TrainedModelSummaryDto>>> TrainAll(
         [FromQuery] int? lookbackDays = null,
         CancellationToken cancellationToken = default)
     {
+        if (!_workGate.TryEnter())
+        {
+            return WorkAlreadyRunning();
+        }
+
         try
         {
             var summaries = await _training.TrainAllAsync(
@@ -271,6 +293,10 @@ public sealed class SignalsController : ControllerBase
                 statusCode: StatusCodes.Status503ServiceUnavailable,
                 title: "Training data unavailable",
                 detail: ex.Message);
+        }
+        finally
+        {
+            _workGate.Exit();
         }
     }
 
@@ -381,6 +407,7 @@ public sealed class SignalsController : ControllerBase
     /// bar a few minutes of staleness does not change, and reuse is what makes them fast.
     /// </remarks>
     [HttpPost("run-now")]
+    [EnableRateLimiting(DeskRateLimitPolicies.Expensive)]
     public async Task<ActionResult<SignalRunDto>> RunNow(
         [FromQuery] string? date = null,
         [FromQuery] SignalHorizon horizon = SignalHorizon.WEEK,
@@ -411,6 +438,14 @@ public sealed class SignalsController : ControllerBase
             runDate = ManilaTimeZone.TodayPht();
         }
 
+        // A second concurrent run would drop the download cache, re-fetch the whole session and
+        // could overwrite this one's rows for the same (date, horizon). The first caller owns the
+        // gate; the second is told so immediately instead of queueing behind minutes of work.
+        if (!_workGate.TryEnter())
+        {
+            return WorkAlreadyRunning();
+        }
+
         try
         {
             _marketData.InvalidateCache();
@@ -439,6 +474,10 @@ public sealed class SignalsController : ControllerBase
                 statusCode: StatusCodes.Status502BadGateway,
                 title: "Signal generation failed",
                 detail: ex.Message);
+        }
+        finally
+        {
+            _workGate.Exit();
         }
     }
 
@@ -536,6 +575,18 @@ public sealed class SignalsController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// The one-busy-job answer for the endpoints that fan out to the exchange and the model.
+    /// A bare 409 in a trading terminal reads like a bug, so the problem says what is running and
+    /// what to do about it.
+    /// </summary>
+    private ActionResult WorkAlreadyRunning() => Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: "The desk is already running a job",
+        detail: "Another live run or training job is in progress. Only one expensive job runs at a " +
+                "time, so the desk cannot double its PSE Edge traffic or its model spend. Wait for " +
+                "it to finish, then try again.");
 
     private async Task<IReadOnlyList<DateOptionDto>> BuildDateOptionsAsync(
         SignalHorizon horizon,

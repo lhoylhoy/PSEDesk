@@ -67,7 +67,7 @@ export function PlanSteps({
   ];
 
   return (
-    <ol className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+    <ol className="grid grid-cols-1 gap-2 @sm:grid-cols-3">
       {steps.map((step) => (
         <li key={step.label} className="rounded-lg border border-line/70 bg-ink-900/70 px-2.5 py-2">
           <p className="flex items-center gap-1 text-[9px] uppercase tracking-[0.14em] text-slate-500 simple-label">
@@ -136,7 +136,7 @@ export function WavePlanGrid({ plan }: { plan: WaveTradePlan }) {
         <span className="text-[10px] leading-relaxed text-slate-500 simple-note">{timing.detail}</span>
       </div>
 
-      <ol className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+      <ol className="grid grid-cols-2 gap-2 @xl:grid-cols-4">
         {steps.map((step) => (
           <li key={step.label} className="rounded-lg border border-line/70 bg-ink-900/70 px-2.5 py-2">
             <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500 simple-label">{step.label}</p>
@@ -274,7 +274,7 @@ function TechnicalRows({ item, guide }: { item: SignalItem; guide: PlainOrderGui
   const metrics = item.metrics;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-4 @lg:grid-cols-2">
       <div>
         <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">Plan &amp; size</p>
         <dl className="mt-1">
@@ -377,7 +377,9 @@ function AdviceCard({ item, horizon, onSelect, onTakeTrade }: AdviceCardProps) {
   const beatsBreakEven = item.winProbability >= item.breakEvenWinRate;
 
   return (
-    <article className="flex flex-col gap-3 rounded-xl border border-line/70 bg-ink-900/60 p-3.5">
+    /* `@container`: every grid inside a card measures the card, not the window — a card in
+       the 3-column ultra-wide layout reflows to the space it actually has. */
+    <article className="@container flex flex-col gap-3 rounded-xl border border-line/70 bg-ink-900/60 p-3.5">
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -514,7 +516,7 @@ function WatchList({ items, onSelect }: { items: SignalItem[]; onSelect: (ticker
       </button>
 
       {open ? (
-        <ul className="grid gap-2 border-t border-line/60 px-3 py-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-2 border-t border-line/60 px-3 py-3 @md:grid-cols-2 @5xl:grid-cols-3">
           {items.map((item) => (
             <li key={item.ticker} className="rounded-lg border border-line/70 bg-ink-900/70 px-2.5 py-2">
               <div className="flex items-baseline justify-between gap-2">
@@ -557,7 +559,7 @@ export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: Advice
   const hiddenCount = Math.max(0, buyable.length - visible.length);
 
   return (
-    <section className="panel p-4 sm:p-5">
+    <section className="panel @container p-4 sm:p-5">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-100">{meta.friendlyTitle}</h2>
@@ -584,9 +586,10 @@ export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: Advice
         <div
           className={cn(
             'mt-3 grid gap-3',
-            visible.length >= 3
-              ? 'lg:grid-cols-2 min-[1760px]:grid-cols-3'
-              : 'xl:grid-cols-2',
+            // Card count first, width second: three buyable names get a 2-up grid as soon as
+            // the panel is wide enough, and a third column only when each card still has room
+            // for its own four-step plan (the card's internal grids are container queries too).
+            visible.length >= 3 ? '@4xl:grid-cols-2 @7xl:grid-cols-3' : '@4xl:grid-cols-2',
           )}
         >
           {visible.map((item) => (
@@ -600,7 +603,7 @@ export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: Advice
           type="button"
           aria-expanded={showAll}
           onClick={() => setShowAll((current) => !current)}
-          className="mt-3 w-full rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-ink-800/60 simple-label"
+          className="tap mt-3 w-full rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-ink-800/60 simple-label"
         >
           {showAll
             ? 'Show just the top three'

@@ -111,8 +111,8 @@ export function MarketDirectionHero({
         The call · {formatWeekday(regime.tradeDate)}
       </p>
 
-      <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-2xl">
+      <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+        <div className="min-w-0 max-w-2xl">
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={cn(
@@ -125,7 +125,9 @@ export function MarketDirectionHero({
             </span>
             <span className="text-[10px] font-semibold text-slate-400">{call.instruction}</span>
           </div>
-          <h2 className="mt-2 text-lg font-semibold leading-tight text-slate-100 sm:text-xl">{headline}</h2>
+          {/* Fluid: a 320px phone cannot hold a 24px headline in this column, and a 2560px
+              monitor makes a 20px one look like body copy. */}
+          <h2 className="text-fluid-hero mt-2 font-semibold text-slate-100">{headline}</h2>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">{summary}</p>
         </div>
 
@@ -168,7 +170,7 @@ export function MarketDirectionHero({
             <button
               type="button"
               onClick={onOpenScorecard}
-              className="text-[10px] font-semibold text-slate-300 underline decoration-line underline-offset-2 transition hover:text-mint-400"
+              className="tap px-1 text-[10px] font-semibold text-slate-300 underline decoration-line underline-offset-2 transition hover:text-mint-400"
             >
               See the full record
             </button>
