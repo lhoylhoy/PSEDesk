@@ -1,8 +1,98 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (header visual-organization pass — two desktop rows, one 40px control height, filled `cta` primary, grouped `More`; **451 backend tests green + 1 skipped benchmark / 55 frontend tests green**)
-**Last feature pass:** 2026-11-26 (header visual organization, then the UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and feed-diagnostics pass — same day)
-**Current task:** none in flight. The header pass, the UI/UX legibility pass, the fast-model fix and the Yahoo-delisting pass are landed and verified but **not committed** — the operator asked for no commits unless explicitly requested.
+**Last updated:** 2026-11-26 (port-5236 recovery — a hung orphaned API host freed, `backend: free port 5236` hardened with SIGKILL escalation, API relaunch on :5236 verified `200`; **451 backend tests + 1 skipped benchmark / 60 frontend tests unchanged**)
+**Last feature pass:** 2026-11-26 (brand mark + icon set, on top of the header visual organization, the UI/UX legibility pass, the fast-model fix, the Yahoo-delisting pass, the accuracy pass, live-drift wiring, the performance pass and the feed-diagnostics pass — same day)
+**Current task:** none in flight. Every pass above is landed and verified but **not committed** — the operator asked for no commits unless explicitly requested.
+
+## Session note (2026-11-26) — `address already in use` on :5236
+
+Prompted by the debugger aborting with `System.IO.IOException: Failed to bind to address
+http://127.0.0.1:5236: address already in use.` (inner `SocketException`). One `.vscode` task edited
+plus the memory bank — **no application code, no API contract, no dependency**.
+
+| Command | Result |
+| --- | --- |
+| `lsof -nP -iTCP:5236 -sTCP:LISTEN` | PID `59738` on **both** `127.0.0.1:5236` and `[::1]:5236` |
+| `ps -o pid,ppid,stat,lstart,command -p 59738` | `PPID 1`, `STAT S`, started 11:58:37, `bin/Debug/net10.0/PseSignalDesk.WebApi` — a **debuggee apphost** orphaned 3h55m earlier (no `dotnet run` parent) |
+| `curl -sv --max-time 3 http://127.0.0.1:5236/health` | connected, request sent, **0 bytes received**, timed out — the host was hung, not serving |
+| `kill -TERM 59738` | **still alive after 3 s and still holding both sockets** — graceful shutdown could not complete |
+| `kill -9 59738` | process gone, `lsof` empty, `curl` exit **7** (connection refused), real `socket.bind(('127.0.0.1', 5236))` **OK** |
+| `ASPNETCORE_URLS=http://localhost:5236 … dotnet run --no-launch-profile --no-build` | `Now listening on: http://localhost:5236`, `Application started`; `GET /health` → **`200`**; test instance then stopped, port left free for F5 |
+| hardened task, path 1 (port free) | `:5236 is already free` · `:5236 refuses connections — ready for F5`, exit 0 |
+| hardened task, path 2 (SIGTERM-ignoring listener on :5236) | `freeing :5236 — SIGTERM to 42311` → `:5236 still held by 42311 after 6s (hung host ignores SIGTERM) — SIGKILL` → `:5236 is free now`, exit 0 |
+| `python3 -c "json.load(open('.vscode/tasks.json'))"` | parses, command 764 chars |
+
+**What changed**
+
+1. **`.vscode/tasks.json` → `backend: free port 5236`.** The old command sent one SIGTERM, slept 2 s
+   and printed `lsof` output — which, on the hung host above, would have reported a *failure* with no
+   remedy. It now: returns early when nothing listens; SIGTERMs and polls `lsof` for up to 6 s;
+   **falls back to `kill -9`** and re-checks; exits `1` only if the port is still held (that means a
+   second *live* debug session, which the operator must stop); and closes with a `curl /health`
+   probe so the task's last line states whether the port is bindable.
+2. **`techContext.md`** — the leftover-host gotcha now names both culprits (`dotnet run` *and* an
+   orphaned debuggee apphost), records the observed SIGTERM-ignoring hang, and gains the
+   `--no-launch-profile` trap (`ASPNETCORE_URLS` unset → the host lands on **`http://localhost:5000`**,
+   which is how the first verification attempt silently "failed" to listen on 5236).
+
+Verified and left free: nothing is listening on `:5236` now, so F5 binds immediately. The port is not
+owned by this session — the app is not running.
+
+
+## Session note (2026-11-26) — brand mark and icon set
+
+Prompted by "implement a fitting favicon + logo". Five frontend files plus `index.html` and `package.json`;
+**no backend file, no API contract, no new dependency** (the generator writes PNG/ICO through `node:zlib`).
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm run icons` | `favicon.svg 704 bytes` · `favicon.ico 1466 bytes (16/32/48 px)` · `apple-touch-icon.png 1319 bytes (180 px)` · exit 0 |
+| `file public/favicon.ico` | `MS Windows icon resource - 3 icons, 16x16 … 32x32 … with PNG image data, 32 bits/pixel` |
+| ICO entry extraction (`node` + the header directory) | 3 entries, each a valid `PNG` blob at offset 6/…; `sips` reads the 180px touch icon as `180 x 180` |
+| `cd frontend && npm test` | `ℹ tests 60 · ℹ pass 60 · ℹ fail 0` (≈0.2 s, exit 0) — 55 → 60 with `deskMark.test.ts` |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 304ms`, exit 0; `dist/` carries `favicon.ico`, `favicon.svg`, `apple-touch-icon.png` |
+| `vite preview --port 5199 --host 127.0.0.1` + `curl` | `index 200 text/html` · `favicon.svg 200 image/svg+xml` · `favicon.ico 200 image/x-icon` · `apple-touch-icon.png 200 image/png` |
+| headless Chrome screenshot of a static `/tmp` preview | 36px and 44px badges in **both** palettes next to the wordmark, plus the real 16/32px bitmaps in a light and a dark tab strip |
+
+Not run: a screenshot of the **running app**. Headless Chrome hangs on the seeded `dist/` page in this
+environment (it produced files only for static `file://` pages), so the header was checked through a static
+preview of the same markup and palette rather than the live React tree. `dotnet test` was not re-run because
+no backend file changed.
+
+**What it built**
+
+1. **`src/lib/deskMarkGeometry.ts` (new, zero imports).** The one description of the mark — "the desk tick":
+   three ascending PSE candlesticks, oldest on the left — as data: 32-unit viewBox, per-candle `center` /
+   body / wick / `opacity`, body 6 units, wick 1.6 units overhanging 3.5, tile radius 7, and the three baked
+   colours (`#3ce6a8` mint, `#0a1e1c` = mint-400 at 10% over ink-950, i.e. the header badge's own tint).
+2. **`src/components/DeskLogo.tsx` (new).** `DeskMark` renders the candles in `currentColor` over a
+   `mint-400/10` tile with a `mint-400/30` ring — the exact badge classes from the old `PS` div — at `sm`
+   (`size-9 rounded-lg`, phone) and `md` (`size-11 rounded-xl`, desktop). `aria-hidden` and no props beyond
+   `size`, because the `<h1>` already names the desk.
+3. **`scripts/generate-icons.mjs` (new, zero dependencies).** Imports the geometry straight from the `.ts`
+   file (Node 24 type stripping), supersamples the rounded rects 8×8 (≤48px) / 4×4, composites the mint over
+   the opaque tile, deflates the scanlines with `node:zlib`, and writes the PNG, a hand-built ICO container
+   (16/32/48, PNG entries) and the SVG. `--preview <path>` dumps a 512px PNG.
+4. **`public/favicon.svg`, `public/favicon.ico`, `public/apple-touch-icon.png` (new, committed).** One drawing,
+   three files. The 180px touch icon is a **full-bleed opaque square** because iOS masks it itself and paints
+   transparent corners black.
+5. **`index.html`.** `link rel=icon` (ico → svg) + `apple-touch-icon` + `application-name` /
+   `apple-mobile-web-app-title`; the `.ico` stays because Safari before 26 and iOS Safari ignore SVG favicons.
+6. **`TerminalHeader.tsx`.** Both `PS` divs (`:329` phone, `:383` desktop) are now `<DeskLogo size="sm" />`
+   and `<DeskLogo />`; nothing else in the header moved, so the two-row layout is untouched.
+7. **`lib/__tests__/deskMark.test.ts` (new, 5 cases).** Three candles, strictly ascending bodies/wicks, every
+   shape inside the tile and the trio centred, neighbouring bodies never closer than 2 units (at 16px a merge
+   reads as one blob), and exactly one full-strength candle.
+
+**Design decisions worth keeping.** Body radius is deliberately small (a pill body reads as a map pin); the wick
+is thin with a long overhang (a thick nub turns the trio into three batteries at 512px); emphasis is group
+`opacity`, never `fill-opacity`, so a wick crossing its own body does not double-darken; and the tile is baked
+dark rather than `prefers-color-scheme`-adaptive, so the tab, the home screen and the header badge are the same
+object in both palettes.
+
+Out of scope (not built): a wordmark lockup, `site.webmanifest` + 192/512 install icons, `og:image`, an
+adaptive favicon, and the mark on the legal gate or the guide sheet.
+
 
 ## Session note (2026-11-26) — header visual organization
 

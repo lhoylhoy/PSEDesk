@@ -44,7 +44,8 @@ cd frontend
 npm install
 npm run dev                                          # http://localhost:5173 (strict port)
 npm run build                                        # tsc --noEmit && vite build
-npm test                                             # node --test "src/lib/__tests__/*.test.ts" (49 passing)
+npm test                                             # node --test "src/lib/__tests__/*.test.ts" (60 passing)
+npm run icons                                        # regenerate public/favicon.{svg,ico} + apple-touch-icon.png
 ./node_modules/.bin/tsc --noEmit                     # type gate alone (npx tsc only prints npm notices here)
 npm run preview
 
@@ -188,7 +189,7 @@ Committed in `.vscode/` (not gitignored):
 | File | Contents |
 | --- | --- |
 | `launch.json` | `API: PseSignalDesk.WebApi` (`coreclr`, `preLaunchTask: backend: build`, `ASPNETCORE_URLS=http://localhost:5236`, `justMyCode: false`), `API: attach to running process`, `Terminal: Chrome (run npm run dev first)` (`type: chrome`, `webRoot` = `frontend/`), compound `Full stack (API + Chrome, Vite already running)` |
-| `tasks.json` | `backend: build` (default build task), `backend: test`, **`backend: free port 5236`** (SIGTERM any listener on 5236 and re-check — the one-click version of the stale-`dotnet run` remedy below), `frontend: build`, `frontend: dev` (background, Vite problem matcher waiting for `Local: http://localhost:5173`) |
+| `tasks.json` | `backend: build` (default build task), `backend: test`, **`backend: free port 5236`** (SIGTERM any listener on 5236, poll up to 6s, then **SIGKILL** and re-check, ending with a `curl /health` proof — the one-click version of the stale-`dotnet run` remedy below), `frontend: build`, `frontend: dev` (background, Vite problem matcher waiting for `Local: http://localhost:5173`) |
 
 `justMyCode` is **false** on purpose. A client abort is normal control flow here: React
 StrictMode remounts every screen once in development, switching horizon/date cancels the previous
@@ -239,19 +240,29 @@ the API at all.
 - **Ticker matching is case-insensitive** everywhere (`OrdinalIgnoreCase`).
 - **The scheduler is calendar-weekday based**, not a PSE holiday calendar.
 - **No auth, no rate limiting, no HTTPS enforcement** in the MVP.
-- **A leftover `dotnet run` steals port 5236 and kills the debug session.** Launching
-  `API: PseSignalDesk.WebApi` while a terminal `dotnet run --project src/PseSignalDesk.WebApi
-  --no-build` is still up fails with `System.IO.IOException: Failed to bind to address
-  http://127.0.0.1:5236: address already in use.` (inner `SocketException`). The debugger
-  instance is the victim, not the culprit — the stale terminal server (orphaned to PPID 1 after
-  a window reload) keeps the port. Confirm with
-  `ps -o pid,ppid,lstart,command -p <pid>` (PPID 1 + `dotnet run --launch-profile http --no-build`
-  is the tell), then free it with `lsof -nP -iTCP:5236 -sTCP:LISTEN` and `kill <pid>` (SIGTERM to
-  the app host; it exits within a few seconds after the hosted-service shutdown) — or run the
-  `backend: free port 5236` task. `lsof` can list the dead socket for a few seconds after the
-  process is gone, so confirm with `curl http://127.0.0.1:5236/health` (connection refused = free)
-  or a real `bind()` before relaunching. The paused debuggee cannot recover from the bind failure:
-  stop that debug session (Shift+F5), then press F5 again.
+- **A leftover API host steals port 5236 and kills the debug session.** Launching
+  `API: PseSignalDesk.WebApi` while a previous host is still up fails with `System.IO.IOException:
+  Failed to bind to address http://127.0.0.1:5236: address already in use.` (inner
+  `SocketException`). The debugger instance is the victim, not the culprit — the leftover is either a
+  terminal `dotnet run --project src/PseSignalDesk.WebApi --no-build` or a **debuggee apphost**
+  (`bin/Debug/net10.0/PseSignalDesk.WebApi`, no `dotnet run` parent) orphaned to PPID 1 after a
+  window reload or a killed debug session. Confirm with `ps -o pid,ppid,stat,lstart,command -p <pid>`
+  (PPID 1 is the tell), then free it with
+  `lsof -nP -iTCP:5236 -sTCP:LISTEN` + `kill -TERM <pid>` — or just run the `backend: free port 5236`
+  task. **A hung host may ignore SIGTERM**: observed 2026-11-26 with a 3h55m-old orphan that accepted
+  TCP connections but never answered `GET /health` (curl timed out with 0 bytes) and was still
+  holding both `127.0.0.1:5236` and `[::1]:5236` three seconds after SIGTERM, so graceful shutdown
+  could not complete. Escalate to `kill -9` and re-check; the task now does that automatically.
+  `lsof` can list the dead socket for a few seconds after the process is gone, so confirm with
+  `curl http://127.0.0.1:5236/health` (connection refused = free) or a real `bind()` before
+  relaunching. The paused debuggee cannot recover from the bind failure: stop that debug session
+  (Shift+F5), free the port, then press F5 again.
+- **`--no-launch-profile` does not mean "use port 5236".** `launch.json` supplies the address through
+  `ASPNETCORE_URLS`; without the launch profile *and* without that variable the host falls back to
+  `http://localhost:5000`. Reproducing a debug launch from a terminal means
+  `ASPNETCORE_URLS=http://localhost:5236 ASPNETCORE_ENVIRONMENT=Development dotnet run --project
+  src/PseSignalDesk.WebApi --no-launch-profile --no-build` (verified 2026-11-26: `Now listening on:
+  http://localhost:5236`, `GET /health` → `200`).
 - **Client aborts are routine, not failures.** React StrictMode remounts (dev) and date/horizon
   switches cancel in-flight fetches; the API answers `499 ClientClosedRequest` through
   `RequestCancellationMiddleware`. The terminal defers its fetch by one macrotask so StrictMode
@@ -265,6 +276,8 @@ the API at all.
 - **Server owns the odds and the verdict.** `WinProbability`, `BreakEvenWinRate`, `ExpectedValueR`, `QuarterKellyFraction`, `EdgeVerdict` and the fallback `BearCase` are computed in `ProbabilisticEdgeService`/`PseBoardLotService`; the frontend only formats them and converts Kelly to a peso budget. Do not recompute fees in TypeScript — `lib/riskSizing.ts` deliberately avoids duplicating `RoundTripFeeRate`.
 - **Legacy runs look empty by design.** Rows written before `AddProbabilisticEdgeAndScorecard` carry zero odds, `WATCH_ONLY` and an empty bear case. They still resolve once their forward window fills (and are visible in the scorecard's realized stats + recent list) but are excluded from Brier and the calibration buckets. Re-run the pipeline (or a past date) to populate them.
 - **Frontend `npm test` is `node:test` over pure modules, not a DOM suite.** It runs `node --test "src/lib/__tests__/*.test.ts"` on Node's native type stripping, so nothing there may import React or touch the DOM; `lib/queryCache.ts` is deliberately React-free for this reason. There is still no component/browser harness (`tsc --noEmit` + `npm run build` are the gate for UI).
+- **The icon files are generated, never hand-edited.** `npm run icons` runs `frontend/scripts/generate-icons.mjs`, which imports `src/lib/deskMarkGeometry.ts` directly (Node 24 strips the types; no build step, no ts-node), supersamples the same rounded rects into RGBA, deflates the scanlines with `node:zlib` and writes the PNG, the ICO container and the SVG by hand — **no image library, no new dependency**. Editing `public/favicon.*` by hand is a bug: the next `npm run icons` overwrites it. `--preview <path>` dumps a 512px PNG for eyeballing. ICO entries are PNG-compressed (fine for Vista+), and the 180px touch icon is deliberately a full-bleed opaque square because iOS applies its own squircle mask and paints transparent corners black.
+- **Headless Chrome in this environment cannot screenshot the running app** (it hangs on the seeded `dist/` page and only ever produced a file for trivial/static pages; `--disable-gpu` still selects Metal). Static HTML previews in `/tmp` (`file://…`, `--allow-file-access-from-files`) work and were used for the badge/icon comparison; the app itself was not captured this pass.
 - **Git is initialized on branch `main` and currently has three commits** (2026-11-25 initial, a portfolio/book-sizing refactor and a readability pass on 2026-11-26; HEAD `3e2aea4`), so everything under `backend/`, `frontend/`, `memory-bank/`, `docs`-level notices and `.clinerules/` is tracked.
 - `.gitignore` covers build output (`**/bin/`, `**/obj/`, `.vs/`, `*.user`, `*.suo`,
   `*.sln.docstates` / `*.slnx.docstates`), test/coverage artefacts (`**/TestResults/`,

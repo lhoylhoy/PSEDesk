@@ -21,9 +21,9 @@
     },
     {
       "label": "backend: free port 5236",
-      "detail": "SIGTERM whatever still listens on :5236 — usually a `dotnet run` orphaned to PPID 1 when a terminal closed — so the API launch configuration can bind.",
+      "detail": "Free :5236 for the API launch configuration: SIGTERM the leftover listener (usually a `dotnet run` or debuggee orphaned to PPID 1 when a terminal closed), wait up to 6s, then SIGKILL — a hung host accepts TCP but never answers /health and ignores graceful shutdown, so SIGTERM alone is not enough.",
       "type": "shell",
-      "command": "pids=$(lsof -nP -iTCP:5236 -sTCP:LISTEN -t); if [ -n \"$pids\" ]; then echo \"freeing :5236 — SIGTERM to $pids\"; kill -TERM $pids; sleep 2; lsof -nP -iTCP:5236 -sTCP:LISTEN || echo ':5236 is free now'; else echo ':5236 is already free'; fi",
+      "command": "pids=$(lsof -nP -iTCP:5236 -sTCP:LISTEN -t); if [ -z \"$pids\" ]; then echo ':5236 is already free'; else echo \"freeing :5236 — SIGTERM to $pids\"; kill -TERM $pids; for i in 1 2 3 4 5 6; do sleep 1; pids=$(lsof -nP -iTCP:5236 -sTCP:LISTEN -t); [ -z \"$pids\" ] && break; done; if [ -n \"$pids\" ]; then echo \":5236 still held by $pids after 6s (hung host ignores SIGTERM) — SIGKILL\"; kill -9 $pids; sleep 2; pids=$(lsof -nP -iTCP:5236 -sTCP:LISTEN -t); fi; if [ -n \"$pids\" ]; then echo \":5236 is STILL held by $pids — stop the other debug session first\"; exit 1; else echo ':5236 is free now'; fi; fi; curl -s -o /dev/null --max-time 2 http://127.0.0.1:5236/health && echo ':5236 answers /health, something re-bound it' || echo ':5236 refuses connections — ready for F5'",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },

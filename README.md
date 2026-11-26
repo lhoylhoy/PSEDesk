@@ -62,17 +62,22 @@ backend/
                                    # drift policy, market direction/wave, classifier, parser, pipeline, knowledge,
                                    # provider + download cache, prompt, compliance, cancellation middleware
 frontend/
+  public/          # favicon.svg / favicon.ico (16+32+48) / apple-touch-icon.png — generated, see `npm run icons`
+  scripts/         # generate-icons.mjs: zero-dependency SVG/PNG/ICO writer driven by src/lib/deskMarkGeometry.ts
   src/
     api/       # typed fetch client (ApiError + ProblemDetails handling, JSON + FormData bodies)
-    components/# TerminalHeader, RegimeStrip, MarketDirectionHero, RidingNowStrip, AdviceCardList, SignalTable,
+    components/# TerminalHeader, DeskLogo (the desk mark + its header badge), RegimeStrip, MarketDirectionHero,
+               # RidingNowStrip, AdviceCardList, SignalTable,
                # DropPanel, TickerDetailDialog, RiskSizerBar, ScorecardDialog, BacktestPanel, ModelTrainerPanel,
                # ResearchDialog, PortfolioDialog, KnowledgeBaseDialog, QuotationReportImportButton, VerdictBadge,
                # DriftBadge, WelcomeSetupBanner, BeginnerGuideDialog, LegalDisclaimerGate
     components/ui/ # Radix wrappers: Tabs, Dialog (+ phone bottom sheet / sticky header), Tooltip, Select, Button,
                    # InfoTip, TechnicalDisclosure
     lib/       # formatters, horizons, viewMode, theme, legalConsent, plainAdvice, pseNicknames, sessionSelection,
-               # riskSizing, queryCache (SWR client cache), preloaders, cn
-    lib/__tests__/ # node:test suites (plainAdvice, legalConsent, queryCache); excluded from the browser build
+               # riskSizing, queryCache (SWR client cache), preloaders, cn,
+               # deskMarkGeometry (the one candlestick drawing the badge and both icons are rendered from)
+    lib/__tests__/ # node:test suites (plainAdvice, legalConsent, queryCache, formatters, deskMark);
+                   # excluded from the browser build
     types/     # API contract types
 ```
 
@@ -141,7 +146,9 @@ npm run dev     # http://localhost:5173
 
 `VITE_API_BASE_URL` overrides the API base (see `.env.example`); CORS is pre-configured for `http://localhost:5173`.
 
-The terminal opens behind a first-run **legal gate**, then in **Simple** mode. `Simple | Pro` (`psedesk.viewMode`) and **light / dark** (`psedesk.theme`) persist per browser, dialogs become bottom sheets below `sm`, and the same run reflows from a 320px phone to a 2560px desktop without a second endpoint or component tree. `npm test` runs the dependency-free `node:test` suites over the React-free `lib/` layer (advice/labels, legal consent and the SWR cache); `npm run build` is the UI gate.
+The terminal opens behind a first-run **legal gate**, then in **Simple** mode. `Simple | Pro` (`psedesk.viewMode`) and **light / dark** (`psedesk.theme`) persist per browser, dialogs become bottom sheets below `sm`, and the same run reflows from a 320px phone to a 2560px desktop without a second endpoint or component tree. `npm test` runs the dependency-free `node:test` suites over the React-free `lib/` layer (advice/labels, legal consent, the SWR cache, formatters and the desk mark); `npm run build` is the UI gate.
+
+The tab icon is not a hand-drawn asset: `src/lib/deskMarkGeometry.ts` describes the mark once (three ascending candlesticks on a 32-unit grid), `DeskLogo` renders it in the header in `currentColor`, and `npm run icons` rasterises the same geometry into `public/favicon.svg`, `public/favicon.ico` (16/32/48, PNG-compressed entries) and `public/apple-touch-icon.png` (180px, full-bleed because iOS masks it and paints transparent corners black). Re-run `npm run icons` after touching the geometry — the command needs no dependency, it writes PNGs through `node:zlib` and the ICO container by hand.
 
 ### 3. First live run
 
@@ -258,7 +265,7 @@ Failures use RFC 7807 `ProblemDetails`: `400` missing Ollama key, bad input, emp
 
 ```bash
 cd backend && dotnet test PseSignalDesk.slnx    # 439 passing + 1 skipped (manual replay benchmark)
-cd frontend && npm test                       # 49 passing (node:test, no DOM)
+cd frontend && npm test                       # 60 passing (node:test, no DOM)
 cd frontend && npm run build                  # tsc --noEmit + vite build
 ```
 

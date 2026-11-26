@@ -2,7 +2,39 @@
 
 **Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **55 frontend tests green / 451 backend tests green + 1 skipped manual benchmark (452 total)** (2026-11-26, header visual-organization pass on top of the UI/UX legibility pass, the fast-model fix, which sits on the Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes). The header pass gives the desktop bar two deliberate rows at one 40px control height, moves the `Simple | Pro` and light/dark segments down to the horizon row, groups `More` into *Learn*/*Tools* and adds an opt-in filled `cta` variant used only by the primary Run; `npm test` (55/55) and `npm run build` (129 modules, 231 ms) both pass. The legibility pass added a Simple-mode type floor, one shell-wide polite live region, a narrated clock plus indeterminate bar for `run-now`, a full-width win-chance meter with conviction folded to one line, direction glyphs on every toned delta, and six `formatters.test.ts` cases (49 → 55). The fast-model fix replaced the shipped `FastExtractionModel` (`qwen3.5:4b`, a name Ollama Cloud never served → `404` on every run) with `glm-5.3-flash`, validated against the live catalogue, and made an unknown fast model latch the optional pass off instead of throwing once per horizon. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell (the key itself sits in user-secrets and was used for read-only `curl` probes); the open security remediation is listed under *Remaining*.
+**Latest verification:** **60 frontend tests green / 451 backend tests green + 1 skipped manual benchmark (452 total)** (2026-11-26, brand-mark + icon-set pass on top of the header visual-organization pass, the UI/UX legibility pass and the fast-model fix, which sit on the Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes). The brand pass replaced the placeholder `PS` badge with a generated candlestick mark: one geometry file feeds `DeskLogo` in the header and a zero-dependency generator that writes `favicon.svg`, `favicon.ico` (16/32/48) and a 180px `apple-touch-icon.png`; `npm test` (60/60) and `npm run build` (304 ms) both pass and `npm run preview` serves all three assets with the right content types. The header pass gives the desktop bar two deliberate rows at one 40px control height, moves the `Simple | Pro` and light/dark segments down to the horizon row, groups `More` into *Learn*/*Tools* and adds an opt-in filled `cta` variant used only by the primary Run; `npm test` (55/55) and `npm run build` (129 modules, 231 ms) both pass. The legibility pass added a Simple-mode type floor, one shell-wide polite live region, a narrated clock plus indeterminate bar for `run-now`, a full-width win-chance meter with conviction folded to one line, direction glyphs on every toned delta, and six `formatters.test.ts` cases (49 → 55). The fast-model fix replaced the shipped `FastExtractionModel` (`qwen3.5:4b`, a name Ollama Cloud never served → `404` on every run) with `glm-5.3-flash`, validated against the live catalogue, and made an unknown fast model latch the optional pass off instead of throwing once per horizon. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell (the key itself sits in user-secrets and was used for read-only `curl` probes); the open security remediation is listed under *Remaining*. **2026-11-26 tooling follow-up:** a debugger abort with `address already in use` on `:5236` traced to a hung, orphaned debuggee apphost (PPID 1, 3h55m old) that ignored SIGTERM — killed with SIGKILL, `backend: free port 5236` hardened with a 6 s SIGTERM→SIGKILL escalation plus a `curl /health` proof, and the API re-verified listening on `:5236` (`GET /health` → `200`) before being stopped and the port left free. No application code or test count moved.
+
+## Latest verification (2026-11-26 — `:5236` port recovery)
+
+| Command | Result |
+| --- | --- |
+| `lsof -nP -iTCP:5236 -sTCP:LISTEN` | PID `59738` on `127.0.0.1:5236` **and** `[::1]:5236` |
+| `ps -o pid,ppid,stat,lstart,command -p 59738` | `PPID 1`, `STAT S`, 3h55m old, `bin/Debug/net10.0/PseSignalDesk.WebApi` (orphaned debuggee apphost, no `dotnet run` parent) |
+| `curl -sv --max-time 3 http://127.0.0.1:5236/health` | TCP connected, request sent, **0 bytes received**, timed out — hung host |
+| `kill -TERM 59738` | still alive after 3 s, still holding both sockets (graceful shutdown could not complete) |
+| `kill -9 59738` | process gone; `lsof` empty; `curl` exit `7`; real `bind(('127.0.0.1', 5236))` OK |
+| `ASPNETCORE_URLS=http://localhost:5236 dotnet run --no-launch-profile --no-build` | `Now listening on: http://localhost:5236`; `GET /health` → `200`; instance stopped, port left free |
+| hardened `backend: free port 5236`, free port | `:5236 is already free` · `:5236 refuses connections — ready for F5`, exit 0 |
+| hardened `backend: free port 5236`, SIGTERM-ignoring listener | SIGTERM → 6 s poll → `SIGKILL` → `:5236 is free now`, exit 0 |
+
+Not run: `dotnet test` / `npm test` — no application or test file changed. Tooling only; the app is
+left **stopped** with `:5236` bindable so the next F5 succeeds.
+
+## Latest verification (2026-11-26 — brand mark + icon set)
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm run icons` | `favicon.svg 704 bytes` · `favicon.ico 1466 bytes (16/32/48 px)` · `apple-touch-icon.png 1319 bytes (180 px)`; exit 0, no dependency installed |
+| `node scripts/generate-icons.mjs --preview /tmp/desk-mark-512.png` | 512px PNG written (6.3 kB) — the only way the mark was judged at large size |
+| `file public/favicon.ico` + entry extraction | `3 icons, 16x16 / 32x32 / 48x48 … PNG image data, 32 bits/pixel`; each entry a valid PNG blob (272 / 417 / 630 bytes) |
+| `sips -g pixelWidth -g pixelHeight` | `apple-touch-icon.png` `180 x 180`, `hasAlpha: yes` |
+| `cd frontend && npm test` | `ℹ tests 60 · ℹ pass 60 · ℹ fail 0` (≈0.2 s, exit 0) — 55 → 60 |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 304ms`, exit 0; `dist/` carries the three icon files and `index.html` references them |
+| `vite preview --port 5199` + `curl` | `index 200 text/html`, `favicon.svg 200 image/svg+xml`, `favicon.ico 200 image/x-icon`, `apple-touch-icon.png 200 image/png` |
+| headless Chrome, static `/tmp` preview | 36px and 44px badges on both palettes beside the wordmark, plus the real 16/32px bitmaps in a light and a dark tab strip |
+
+Not run: a screenshot of the running app (headless Chrome hangs on the seeded `dist/` page here and only
+produced files for static `file://` pages), and `dotnet test` (no backend file changed).
 
 ## Latest verification (2026-11-26 — header visual organization)
 
@@ -186,15 +218,17 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] Lazy dialog chunks and pinned vendor chunks through a `manualChunks` **function** (Vite 8 / rolldown rejects the object form).
 - [x] **Legibility and announcement layer.** Simple mode has a scoped type floor (`.simple-label` 12px, `.simple-note` 13px/1.55) applied across the advice card, order box, watch list and the plan-step grid; one `aria-live="polite"` region mounted from first render announces runs, results and failures; `Button` sets `aria-busy`; `run-now` renders an elapsed clock (`formatElapsedSeconds`) and a reduced-motion-aware indeterminate bar while it works.
 - [x] **Header organization.** Two desktop rows at one 40px control height (identity + trading day + `My Trades` + the filled `Run` + `More ▾`; then the four horizon tabs + `Simple | Pro` + light/dark), grouped overflow under *Learn*/*Tools*, a single-line tagline, and Simple-mode type on the segmented switches. The phone keeps its two thumb rows and the "Desk controls" sheet.
+- [x] **A real brand mark.** `DeskLogo` draws three ascending PSE candlesticks in `currentColor` on the same tinted badge (36px phone / 44px desktop) in place of the placeholder `PS` monogram, and the identical geometry — `lib/deskMarkGeometry.ts`, five pinned invariants — is rasterised by `npm run icons` into `favicon.svg`, `favicon.ico` (16/32/48) and a full-bleed 180px `apple-touch-icon.png`, all three declared in `index.html`.
+- [x] **Dependency-free icon generation.** `frontend/scripts/generate-icons.mjs` imports that geometry straight from the `.ts` module, supersamples the rounded rects, deflates the PNG scanlines with `node:zlib` and writes the ICO container by hand — three committed binaries that are reproducible byte-for-byte from one command, with no image library added.
 
 ### Tooling and documentation
 - [x] `npm test` harness: `node --test "src/lib/__tests__/*.test.ts"` over the React-free `lib/` layer (no DOM, no dependencies).
 - [x] **Golden snapshot harness (backend).** `SyntheticMarketFixture` (seeded synthetic tape, no network, no clock), `GoldenSnapshot` (approval-style compare against `tests/…/Application/Golden/*.json`, `PSEDESK_UPDATE_GOLDEN=1` records) and a `Skip`ped Release-only benchmark that prints elapsed time and allocations. It is the guard that let the performance pass touch every indicator without moving a desk number.
-- [x] `.vscode/launch.json` + `tasks.json` (API launch/attach, Chrome, full-stack compound, build/test tasks, `backend: free port 5236`) and `frontend/.env.example`.
+- [x] `.vscode/launch.json` + `tasks.json` (API launch/attach, Chrome, full-stack compound, build/test tasks, `backend: free port 5236` — SIGTERM, poll 6 s, SIGKILL escalation, `curl /health` proof) and `frontend/.env.example`.
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 452 backend (451 executed + 1 skipped benchmark) + 55 frontend
+## Test inventory — 452 backend (451 executed + 1 skipped benchmark) + 60 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
@@ -235,7 +269,7 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | WebApi | `RequestCancellationMiddlewareTests` — 499 on abort, no write after cancellation | 4 |
 | WebApi | `KnowledgeControllerTests` — upload attestation, protected-delete mapping | 2 |
 
-### Frontend — `frontend/src/lib/__tests__` (4 files, React-free)
+### Frontend — `frontend/src/lib/__tests__` (5 files, React-free)
 
 | File | Covers | Cases |
 | --- | --- | --- |
@@ -243,6 +277,7 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | `queryCache.test.ts` | cache read/write, ref-counted abort, in-flight dedupe, prefix invalidation, failed-refresh retention | 8 |
 | `legalConsent.test.ts` | first-run gate, versioned acceptance, stale notice, review clears flag, throwing storage, notice content | 6 |
 | `formatters.test.ts` | unit is never dropped (₱ / % / `: 1`), unreported renders `—` and never `0`, direction glyph for toned deltas, elapsed-clock formatting | 6 |
+| `deskMark.test.ts` | the brand mark as geometry: three candles, strictly ascending bodies and wicks, every shape inside the 32-unit tile with the trio centred, neighbouring bodies never closer than 2 units, exactly one full-strength candle | 5 |
 
 ## Remaining
 
@@ -261,6 +296,7 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] **Validate the up/down colour convention with 3–5 PH retail readers** before any further colour work (several Philippine broker apps use red-up/green-down). Record the outcome in `productContext.md`; the `▲/▼` glyph shipped as the interim redundancy.
 - [ ] Put the remaining Simple surfaces on the same type floor (`MarketDirectionHero` reason lines, `DropPanel` copy, `WelcomeSetupBanner`, `RidingNowStrip` chips); the advice-card path is done.
 - [ ] Optional: a `GET /api/signals/run-status` read so a mid-run reload attaches to the in-flight run instead of starting a second one — needs a `systemPatterns.md` decision first because it adds a run-state resource.
+- [ ] **Install surface is still missing** — no `site.webmanifest`, so there is no 192/512 install icon, no maskable icon and no `og:image` for link previews; the SVG + ICO + 180px touch trio covers browser tabs and iOS "Add to Home Screen" only.
 - [ ] **Remaining breakpoint + assistive pass** — 320px, 2560px and a VoiceOver/NVDA run. 390 (iframe), 768, 1024, 1280 and 1440-Pro are already captured from a seeded static `dist/` copy in headless Chrome (see *Latest verification*).
 - [ ] **Phase 2 — page-body hierarchy** (decision deferred until the header is seen in a browser): one shared section-header shape for `AdviceCardList` / `SignalTable` / `DropPanel` (they hand-write the same `h2` + `text-[11px]` block), a visual weight ladder so the market-call hero outranks the "Nothing changed" strip, and deleting the duplicated empty-state copy in `DropPanel`.
 
@@ -328,6 +364,8 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - **Replay/training cost.** Both refetch long lookbacks for the liquid universe per call; the chart cache now absorbs the *repeat* requests (the four horizons of a session, research, a second refit within ten minutes), but a cold `train-all` on a fresh process is still the slowest operation in the app. The indicator work is linear in bars now, so what remains is upstream latency, not arithmetic.
 - **The download cache is per process.** It lives in memory, so a restart is cold and two API processes would each download their own copies; there is no on-disk cache and no cross-process invalidation.
 - **A failed extra Edge page is now silent.** `FetchDisclosuresAsync` still fails the run when the announcements page itself fails, but a failed second/third page is logged and skipped (the old `throwOnFailure` flag is gone). The suite pins the split; a real Edge outage has never been observed here.
+
+- **An orphaned API host can hang while holding both loopback sockets.** A debuggee apphost whose debug session died can sit at PPID 1 accepting TCP but answering nothing (`GET /health` times out with 0 bytes), and it does **not** exit on SIGTERM — graceful shutdown waits on work that never completes. `kill -9` is the only reliable release; `backend: free port 5236` now does that automatically after a 6 s grace. The cause of the hang itself has never been captured (no dump taken), so treat it as "recover and relaunch", not "fixed".
 
 ## Verification log (newest first, observed output)
 

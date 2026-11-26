@@ -11,6 +11,16 @@
       name="description"
       content="PSE Signal Desk - a personal Philippine equity research notebook: model-screened PSE candidates, day-over-day drift and drop explanations, and paper-portfolio tracking. Research tooling only, not investment advice."
     />
+    <!--
+      The tab icon, the iOS home-screen icon and the header badge are one drawing (see
+      src/lib/deskMarkGeometry.ts, generated into public/ by `npm run icons`). The .ico stays
+      because Safari before 26 and iOS Safari ignore SVG favicons; browsers that support SVG pick it.
+    -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <meta name="application-name" content="PSE Signal Desk" />
+    <meta name="apple-mobile-web-app-title" content="PSE Desk" />
     <title>PSE Signal Desk · Personal PSE Research Notebook</title>
     <script>
       // Paint the stored theme before the first frame so a light-mode reader never sees a

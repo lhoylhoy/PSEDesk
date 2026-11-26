@@ -16,6 +16,7 @@ import {
 import type { ThemeMode } from '../lib/theme';
 import type { ViewMode } from '../lib/viewMode';
 import { Button } from './ui/Button';
+import { DeskLogo } from './DeskLogo';
 import {
   Dialog,
   DialogClose,
@@ -326,9 +327,7 @@ export function TerminalHeader({
       {/* Phone & small tablet: two thumb-sized rows instead of nine wrapped controls. */}
       <div className="flex flex-col gap-2 lg:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-mint-400/30 bg-mint-400/10 font-mono text-xs font-bold tracking-tight text-mint-400">
-            PS
-          </div>
+          <DeskLogo size="sm" />
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight text-white">
               PSE Signal Desk
@@ -380,9 +379,7 @@ export function TerminalHeader({
           appearance switches live on the row below so this line never has to wrap. */}
       <div className="hidden items-center justify-between gap-4 lg:flex">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-mint-400/30 bg-mint-400/10 font-mono text-sm font-bold tracking-tight text-mint-400">
-            PS
-          </div>
+          <DeskLogo />
           <div className="min-w-0 max-w-md">
             <h1 className="text-lg font-semibold tracking-tight text-white">PSE Signal Desk</h1>
             <p className="truncate text-[11px] text-slate-500" title={tagline}>
