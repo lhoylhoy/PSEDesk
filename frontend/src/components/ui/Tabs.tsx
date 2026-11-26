@@ -39,6 +39,8 @@ interface TabsTriggerProps {
   disabled?: boolean;
   title?: string;
   className?: string;
+  /** Keyboard accelerator documented on the control, e.g. `1`. */
+  keyShortcut?: string;
   /** Warm-up hooks: callers preload a tab's data on intent, never on mount. */
   onPointerEnter?: () => void;
   onFocus?: () => void;
@@ -50,6 +52,7 @@ export function TabsTrigger({
   disabled,
   title,
   className,
+  keyShortcut,
   onPointerEnter,
   onFocus,
 }: TabsTriggerProps) {
@@ -58,6 +61,7 @@ export function TabsTrigger({
       value={value}
       disabled={disabled}
       title={title}
+      aria-keyshortcuts={keyShortcut}
       onPointerEnter={onPointerEnter}
       onFocus={onFocus}
       className={cn(

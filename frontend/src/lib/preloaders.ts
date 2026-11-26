@@ -20,6 +20,7 @@ const chunkLoaders = {
   knowledge: () => import('../components/KnowledgeBaseDialog'),
   guide: () => import('../components/BeginnerGuideDialog'),
   signalTable: () => import('../components/SignalTable'),
+  shortcuts: () => import('../components/KeyboardShortcutsDialog'),
 } as const;
 
 type ChunkName = keyof typeof chunkLoaders;
@@ -102,6 +103,11 @@ export function preloadKnowledgeBaseDialog(): void {
 /** Guide sheet is static copy, so only its chunk is worth warming. */
 export function preloadBeginnerGuideDialog(): void {
   warmChunk('guide');
+}
+
+/** The shortcut sheet is static copy too; `?` should paint instantly. */
+export function preloadKeyboardShortcutsDialog(): void {
+  warmChunk('shortcuts');
 }
 
 /** Pro's Top 10 table is its own chunk; warm it when the user reaches for Pro. */

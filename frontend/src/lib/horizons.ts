@@ -33,7 +33,7 @@ export const horizonMeta: Record<Horizon, HorizonMeta> = {
     stance: 'Intraday momentum',
     holding: 'same session',
     friendlyTab: 'Quick (Today)',
-    friendlyTitle: 'Today’s screened names (intraday)',
+    friendlyTitle: 'Intraday names screened (same day)',
     friendlySummary:
       'Entries and exits land on the same trading day. This is the fastest and riskiest horizon — the model only ever sizes money you can afford to lose.',
   },

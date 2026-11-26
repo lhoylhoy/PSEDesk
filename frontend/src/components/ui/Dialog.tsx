@@ -13,9 +13,11 @@ export const DialogDescription = DialogPrimitive.Description;
  * The `3xl` step is the ultra-wide monitor: the same sheet gets a little more room rather
  * than floating as a small card in a 2560px window.
  */
-type DialogSize = 'md' | 'lg' | 'xl';
+type DialogSize = 'sm' | 'md' | 'lg' | 'xl';
 
 const sizeClasses: Record<DialogSize, string> = {
+  /** One column of reading: the shortcut map, a confirmation. */
+  sm: 'sm:w-[min(40rem,94vw)] 3xl:w-[min(44rem,88vw)]',
   md: 'sm:w-[min(58rem,94vw)] 3xl:w-[min(64rem,88vw)]',
   lg: 'sm:w-[min(66rem,94vw)] 3xl:w-[min(76rem,86vw)]',
   xl: 'sm:w-[min(78rem,94vw)] 3xl:w-[min(92rem,86vw)]',

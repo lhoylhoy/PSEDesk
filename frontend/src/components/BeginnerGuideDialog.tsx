@@ -1,3 +1,4 @@
+import { keysForAction } from '../lib/shortcuts';
 import { Button } from './ui/Button';
 import {
   Dialog,
@@ -24,7 +25,7 @@ const STEPS = [
   },
   {
     title: '3 · Practise before you risk real money',
-    body: 'Press Record This Trade to log the plan in your practice account. It tracks what you would have made or lost, fees included, without touching a real broker.',
+    body: 'Press Practise This Trade to log the plan in your practice account. It tracks what you would have made or lost, fees included, without touching a real broker.',
   },
 ];
 
@@ -91,6 +92,16 @@ export function BeginnerGuideDialog({ open, onOpenChange }: BeginnerGuideDialogP
             </li>
           ))}
         </ol>
+
+        {/* The guide teaches the map without duplicating it: the keys come from the same list the
+            shortcut sheet renders, so this sentence cannot drift out of date. */}
+        <p className="mt-3 type-body text-fg-muted">
+          On a keyboard, <kbd className="kbd">{keysForAction('horizon-day')[0]}</kbd>–
+          <kbd className="kbd">{keysForAction('horizon-year')[0]}</kbd> switch how long you want to
+          hold and <kbd className="kbd">{keysForAction('run')[0]}</kbd> runs the screen. Press{' '}
+          <kbd className="kbd">{keysForAction('help')[0]}</kbd> for the whole map — every shortcut also
+          has a button on screen, so nothing here requires a keyboard.
+        </p>
 
         <section className="mt-4 rounded-xl border border-line/70 bg-ink-900/60 p-3">
           <h3 className="type-body font-semibold text-fg">Words you will see</h3>

@@ -90,7 +90,7 @@ export function MarketDirectionHero({
 }: MarketDirectionHeroProps) {
   if (!regime) {
     return (
-      <section className="panel p-5">
+      <section id="market-call" tabIndex={-1} className="panel scroll-mt-4 p-5">
         <p className="type-eyebrow text-fg-subtle">The call</p>
         <p className="type-body measure mt-2 text-fg-muted">
           No market session saved yet. Run the latest screen to pull today’s PSE prices and company news.
@@ -115,7 +115,7 @@ export function MarketDirectionHero({
      * sentence. The gauge, the reasons, the sector money flows, the desk's record and the nine
      * institutional dials are all still here — one tap down, unchanged.
      */
-    <section className="panel px-4 py-3.5 sm:px-5 sm:py-4">
+    <section id="market-call" tabIndex={-1} className="panel scroll-mt-4 px-4 py-3.5 sm:px-5 sm:py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="type-eyebrow text-fg-subtle simple-label">
           The call · {formatWeekday(regime.tradeDate)}

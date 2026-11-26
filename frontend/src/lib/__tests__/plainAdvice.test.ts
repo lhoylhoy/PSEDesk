@@ -16,6 +16,7 @@ import {
   describeHoldingVerdict,
   describeMarketCall,
   describeMaxDrawdownPct,
+  describeNextStep,
   describeOutcomeStatus,
   describePayoffRatio,
   describePlainVerdict,
@@ -476,5 +477,33 @@ test('an unreported price renders a dash on the row, never a zero', () => {
 
   assert.match(row.headline, /^Buy —/);
   assert.doesNotMatch(row.headline, /₱0/);
+});
+
+test('the next step names the control a reader can actually press', () => {
+  const withIdeas = describeNextStep({ buyableCount: 3, watchOnlyCount: 4 });
+  assert.match(withIdeas, /open a name below/i);
+  assert.match(withIdeas, /My Trades/);
+  assert.match(withIdeas, /^Next:/);
+
+  const waiting = describeNextStep({ buyableCount: 0, watchOnlyCount: 2 });
+  assert.match(waiting, /nothing is buyable today/i);
+  assert.match(waiting, /watch list below/i);
+  // A waiting session must not tell the reader to open a row that does not exist.
+  assert.doesNotMatch(waiting, /open a name below/i);
+
+  const empty = describeNextStep({ buyableCount: 0, watchOnlyCount: 0 });
+  assert.match(empty, /nothing cleared the screen today/i);
+  assert.match(empty, /nothing to open/i);
+});
+
+test('the next step never promises a profit or orders a trade', () => {
+  const copies = [
+    describeNextStep({ buyableCount: 5, watchOnlyCount: 0 }),
+    describeNextStep({ buyableCount: 0, watchOnlyCount: 5 }),
+    describeNextStep({ buyableCount: 0, watchOnlyCount: 0 }),
+  ].join(' ');
+
+  assert.doesNotMatch(copies, /guarantee|sure profit|risk-free|you must buy/i);
+  assert.match(copies, /practise/);
 });
 

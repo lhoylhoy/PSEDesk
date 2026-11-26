@@ -6,9 +6,9 @@ using PseSignalDesk.WebApi.Services;
 namespace PseSignalDesk.Tests.WebApi;
 
 /// <summary>
-/// The four endpoints that fan out to Yahoo Finance / PSE Edge and spend Ollama Cloud credit must
-/// carry the hourly ceiling. The limiter is opt-in per action, so a refactor that drops the
-/// attribute removes the protection silently — this test is the tripwire.
+/// Every endpoint that fans out to an upstream feed or spends model credit must carry its hourly
+/// policy. The limiter is opt-in per action, so a refactor that drops the attribute removes the
+/// protection silently — these tests are the tripwire.
 /// </summary>
 public sealed class SignalsControllerRateLimitTests
 {
@@ -43,5 +43,35 @@ public sealed class SignalsControllerRateLimitTests
 
         Assert.NotNull(method);
         Assert.Null(method.GetCustomAttribute<EnableRateLimitingAttribute>());
+    }
+
+    [Fact]
+    public void Research_lookup_carries_the_upstream_policy()
+    {
+        var method = typeof(ResearchController).GetMethod(
+            nameof(ResearchController.GetResearch),
+            BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.NotNull(method);
+
+        var attribute = method.GetCustomAttribute<EnableRateLimitingAttribute>();
+
+        Assert.NotNull(attribute);
+        Assert.Equal(DeskRateLimitPolicies.Upstream, attribute.PolicyName);
+    }
+
+    [Theory]
+    [InlineData(nameof(KnowledgeController.Reindex))]
+    [InlineData(nameof(KnowledgeController.Upload))]
+    public void Knowledge_ingestion_carries_the_model_policy(string action)
+    {
+        var method = typeof(KnowledgeController).GetMethod(action, BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.NotNull(method);
+
+        var attribute = method.GetCustomAttribute<EnableRateLimitingAttribute>();
+
+        Assert.NotNull(attribute);
+        Assert.Equal(DeskRateLimitPolicies.Model, attribute.PolicyName);
     }
 }

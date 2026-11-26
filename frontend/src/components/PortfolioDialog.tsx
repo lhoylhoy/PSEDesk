@@ -1156,7 +1156,7 @@ function TakeTradeTab({
           disabled={pending !== null || !valid}
           onClick={onSubmit}
         >
-          {simple ? 'Record This Trade' : 'Record in blotter'}
+          {simple ? 'Practise This Trade' : 'Record in blotter'}
         </Button>
       </div>
     </div>
@@ -1373,7 +1373,7 @@ export function PortfolioDialog({
                 {simple ? 'My Trades' : 'Book'}
                 {summary ? ` · ${summary.openPositions}` : ''}
               </TabsTrigger>
-              <TabsTrigger value="take">Record a trade</TabsTrigger>
+              <TabsTrigger value="take">{simple ? 'Practise a trade' : 'Record a trade'}</TabsTrigger>
               <TabsTrigger value="closed">
                 {simple ? 'Closed Trades' : 'Ledger'}
                 {summary ? ` · ${summary.closedTrades}` : ''}

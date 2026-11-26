@@ -486,6 +486,26 @@
     }
   }
 
+  /**
+   * A small keycap. One rule, so the shortcut sheet, the `More` menu and the footer draw the
+   * same object — and it reads as a key rather than as a letter in a sentence.
+   */
+  .kbd {
+    display: inline-flex;
+    min-width: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    border: 1px solid var(--color-line);
+    background-color: var(--color-ink-850);
+    padding: 0 0.3rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    line-height: 1.7;
+    color: var(--color-fg-muted);
+  }
+
   .dialog-sheet {
     animation: dialog-sheet-in 160ms ease-out;
   }

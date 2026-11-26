@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PseSignalDesk.Application.Models;
 using PseSignalDesk.Application.Services;
 using PseSignalDesk.Domain.Enums;
+using PseSignalDesk.WebApi.Services;
 
 namespace PseSignalDesk.WebApi.Controllers;
 
@@ -32,6 +34,7 @@ public sealed class ResearchController : ControllerBase
         Ok(_research.GetCatalog());
 
     [HttpGet("{symbol}")]
+    [EnableRateLimiting(DeskRateLimitPolicies.Upstream)]
     public async Task<ActionResult<TickerResearchDto>> GetResearch(
         string symbol,
         [FromQuery] SignalHorizon horizon = SignalHorizon.WEEK,

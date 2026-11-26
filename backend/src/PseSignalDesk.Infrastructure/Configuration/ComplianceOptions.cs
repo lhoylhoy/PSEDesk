@@ -64,6 +64,23 @@ public sealed class ComplianceOptions
     /// </summary>
     public int ExpensiveRequestsPerHour { get; set; } = 30;
 
+    /// <summary>
+    /// Hourly ceiling on <c>GET /api/research/{symbol}</c>. Each lookup fans out to Yahoo Finance
+    /// and PSE Edge for one ticker and runs the quant engine, so walking the catalog in a loop
+    /// would hammer both feeds even though the hourly run/backtest/train budget stays untouched.
+    /// The default is generous for a human reading a handful of names and still finite.
+    /// Clamped to 1..10000.
+    /// </summary>
+    public int ResearchRequestsPerHour { get; set; } = 120;
+
+    /// <summary>
+    /// Hourly ceiling on the knowledge-base writes that spend Ollama Cloud credit
+    /// (<c>POST /api/knowledge/upload</c>, <c>POST /api/knowledge/reindex</c>). Each accepted upload
+    /// embeds its chunks in one batched call, so an unlimited loop is an unlimited model bill.
+    /// Clamped to 1..1000.
+    /// </summary>
+    public int KnowledgeRequestsPerHour { get; set; } = 10;
+
     /// <summary>True when the desk is running as the single-operator local research desk.</summary>
     public bool IsPersonalLocal =>
         !string.Equals(DeploymentMode, LicensedCommercialMode, StringComparison.OrdinalIgnoreCase);

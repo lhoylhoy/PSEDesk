@@ -1,8 +1,104 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (data-truth **slice 2** landed: every screened candidate gets its own PSE Edge company page keyed on the exchange's `cmpy_id`, so disclosure attribution is correct by construction and the trap pillar is enforced — **496 backend tests green + 1 skipped**, up from 484+1 — plus a tooling fix: `frontend: free port 5173` and a Vite launch config, because `strictPort: true` turned an orphaned dev server into a dead debug launch)
-**Last feature pass:** 2026-11-26 (per-company PSE Edge disclosures, on top of the feed health ledger, hand cursor, row-opens-modal, typography, signal list, typeface, compliance hardening, responsive pass, brand mark + icon set, header visual organization, UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and the feed-diagnostics pass — same day)
-**Current task:** slices 1 and 2 of 4 are done and verified. **Slices 3–4 are planned, not started** (see *Next* below). Everything is landed but **not committed** — the operator asked for no commits unless explicitly requested.
+**Last updated:** 2026-11-26 (wayfinding pass: keyboard shortcuts with one source of truth, a three-step "how to read this screen" strip, a skip link and honest list copy — **87 frontend tests green**, up from 71; backend untouched at **538 + 1 skipped**)
+**Last feature pass:** 2026-11-26 (frontend wayfinding pass, on top of abuse-protection hardening, per-company PSE Edge disclosures, feed health ledger, hand cursor, row-opens-modal, typography, signal list, typeface, compliance hardening, responsive pass, brand mark + icon set, header visual organization, UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and the feed-diagnostics pass — same day)
+**Current task:** slices 1–2 of 4 are done and verified, and the frontend wayfinding pass landed on top. **Slices 3–4 are planned, not started** (see *Next* below). Everything is landed but **not committed** — the operator asked for no commits unless explicitly requested.
+
+## Session note (2026-11-26) — wayfinding pass (frontend only)
+
+Prompted by "make the frontend the most intuitive, easy-to-understand UI/UX possible". Six defects were
+diagnosed from the code, not from taste: a first-time reader landed on a call bar and a list with no
+in-place explanation (the guide was buried in `More ▾` / the ☰ sheet); there was **no** keyboard
+navigation and no skip link; Simple mode said "Today's trade signals" over a *stored past* session;
+the guide said "Press **Record This Trade**" while the sheet said "Practise This Trade" (contradicting
+the rule that Simple mode always says *Practise* — the account is paper); rows ended in a bare `▸ Why?`
+that was **hidden below `sm`**, so a phone showed only a chevron; and the list-header eyebrow did three
+jobs in one 100-character line.
+
+Frontend only: **6 new files**, **13 edited**, plus `README.md` and this memory bank. **No backend file,
+no API contract, no new dependency, no new architectural layer**, and every server-owned number, verdict
+and label is unchanged.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` (≈0.30 s, exit 0) — 71 → 87, **+16** |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 135 modules transformed`, `✓ built in 232ms`, exit 0; `KeyboardShortcutsDialog` ships as its own **1.65 kB** chunk |
+| built-CSS audit | `.kbd{border,background,min-width:1.5rem,font-size:var(--text-2xs),…}` emitted once — the keycap is a real rule, not a utility pile at each call site |
+
+Not run: a real-browser capture (headless Chrome still hangs on the seeded app here) and `dotnet test`
+(nothing in `backend/` changed). Every shortcut is verified by the pure resolver's `node:test` cases
+rather than by pressing keys in a browser.
+
+**What it built**
+
+1. **`lib/shortcuts.ts` — one source of truth.** `SHORTCUT_GROUPS` (Move / Act / Change what you see /
+   Help) is rendered by the shortcut sheet, quoted by the guide and reflected into each control's
+   `aria-keyshortcuts` via `keysForAction(action)`, so a key cannot be documented-but-unbound or
+   bound-but-invisible. `resolveShortcut(input, context)` is pure and DOM-free with ordered rules:
+   any modifier → `null` (⌘R stays the browser's); a typing target → `null`; a sheet open → only `?`;
+   a non-printing key → `null`. `isTypingTarget` reads `tagName`/`isContentEditable`/`role` structurally
+   (an open picker `listbox` owns its letters; a *closed* combobox trigger does not), so all of it is
+   testable without a DOM. `Esc` is documented in the Help group **without** an action —
+   Radix already owns it, and wiring it would double-close.
+2. **`components/KeyboardShortcutsDialog.tsx`** renders that list as keycaps, reachable from `?`, the
+   `More ▾` menu and the phone ☰ sheet, and preloaded by `preloadKeyboardShortcutsDialog()`.
+3. **`lib/howToRead.ts` + `components/HowToReadStrip.tsx`** — three steps above the list whose buttons
+   *are* the actions (jump to the call, open the best-ranked name, open My Trades). Dismissal is one
+   remembered flag (`psedesk.howToReadDismissed`) with the `legalConsent` storage contract (injected
+   storage, silent on blocked quota/private mode), and the footer's "How to read this screen" restores it.
+4. **`App.tsx`** wires one global `keydown` listener through `resolveShortcut` + `isTypingTarget`, with a
+   computed `anyDialogOpen` (every sheet, plus the legal gate) so a keystroke never reaches the page
+   behind a sheet; `runShortcut` calls the same setter each visible button calls. Added a skip link and
+   a `<main id="main-content">` wrapper, and a footer row with `How it works G`, `Keyboard shortcuts ?`
+   and `How to read this screen`.
+5. **Honest copy.** The Simple list heading names the stored date (`Trade signals · Wed, Nov 25`) instead
+   of "Today's" whenever a past session is on screen; `DAY`'s friendly eyebrow lost its "Today's";
+   `Record` → **Practise** in the guide, the blotter button and the blotter's `take` tab in Simple mode;
+   rows now end in `View plan ▸` at every width with an `sr-only` "Opens the full plan in a detail sheet";
+   and `describeNextStep()` prints one sentence under the header naming the control a reader should press
+   (it never turns an empty session into a nudge to trade).
+
+**Decision.** Shortcuts accelerate a visible control; they never replace one. Every key in the map has a
+button on screen, the sheet is reachable by clicking, and the handler refuses to fire while the reader is
+typing or while a sheet is open — so nothing in the desk becomes keyboard-only knowledge.
+
+## Session note (2026-11-26) — abuse-protection hardening
+
+Triggered by *"does it have abuse protection?"* after the security audit: the desk had one hourly
+budget (the expensive run/train endpoints) and no origin check, so `GET /api/research/{symbol}`,
+knowledge ingestion and any CORS-simple cross-site write were uncapped. This pass closes that
+without adding a dependency or an architectural layer. **4 new source files, 3 new test files, 8
+edited source files, 2 edited tests; no API contract change outside the new `400`/`403`/`429`
+answers.** `dotnet build` → 0 warnings/0 errors; `dotnet test` → **538 passed + 1 skipped (539
+total, +42)**; `npm test` → **71 passed**. Live smoke on `:5421` proved the origin guard, the two new
+budgets and the lookback `400`; `:5422` proved `401 ×4 → 429 + Retry-After: 300 → correct key still
+429`.
+
+**What changed**
+
+1. `ComplianceOptions` gained `ResearchRequestsPerHour` (120, clamp 1–10 000) and
+   `KnowledgeRequestsPerHour` (10, clamp 1–1 000); `DeskRateLimitPolicies` gained `Upstream` and
+   `Model`; `Program.cs` registers all three fixed windows and one `OnRejected`. The research action
+   and the two knowledge writes opt in with `[EnableRateLimiting]`; `SignalsControllerRateLimitTests`
+   reflects over all three controllers.
+2. `DeskRequestLimits` caps `lookbackDays` at 1 825 days and answers `400` outside `1..1825` on
+   `backtest`, `train` and `train-all`; the helper is unit-tested independently of the controller.
+3. `KnowledgeUploadPolicy` allows only `.md`/`.markdown`/`.txt`/`.pdf`; the controller rejects anything
+   else with `400` before reading the body.
+4. `FrontendCorsOptions` is the single origin list shared by `AddCors` and
+   `ComplianceGuardMiddleware`; unsafe methods from an unknown `Origin` (or a browser
+   `Sec-Fetch-Site: cross-site` with no Origin) get `403`. Same-origin writes are recognised by
+   authority, so an API-served terminal still works.
+5. `OperatorKeyThrottle` (singleton, in memory, five failures / five minutes per source address)
+   makes the constant-time key comparison rate-limited; a correct key resets the record. The
+   middleware still sits before `UseRateLimiter`, so a refused `403` burns no hourly budget.
+6. Docs: README, THIRD_PARTY_NOTICES, `systemPatterns.md`, `techContext.md`, `progress.md` and this
+   file. The no-`ForwardedHeaders` caveat is now explicit: do not put a personal desk behind a
+   same-machine reverse proxy.
+
+**Next:** the remaining data-truth slices 3–4 are unchanged. If the desk is ever deployed as
+multi-user, the next abuse work is per-caller (not global) partitioning behind a trusted proxy and a
+real identity provider — neither is needed for the loopback personal posture.
 
 ## Session note (2026-11-26) — port 5173 held by an orphaned dev server
 
@@ -807,12 +903,12 @@ Still open from the wider plan: `FeatureKeysJson` per-horizon schema persistence
 `security_audit_report.md` (2026-11-26, read-only) records 15 findings. `ComplianceGuardMiddleware` now covers most of F-01/F-02 (loopback-only in `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`, `AllowedHosts` narrowed). Still open and confirmed in the code:
 
 - **F-03 — prompt fencing:** retrieved playbook text still reaches the prompt without untrusted-content delimiters (`OllamaPromptBuilder.AppendPlaybooks`).
-- **F-04 — lookback clamp:** `PseMarketDataProvider.NormalizeLookback` has a floor but no ceiling, so a huge `lookbackDays` still reaches the upstream fetch.
+- **F-04 — lookback clamp:** closed at the HTTP edge. `DeskRequestLimits` rejects `lookbackDays` outside `1..1825` on `backtest`, `train` and `train-all` with a `400`, so one request cannot ask for a century of bars; `PseMarketDataProvider.NormalizeLookback` itself still has a floor but no ceiling, so a non-HTTP caller could pass a huge value.
 - **F-05 — price bounds:** partially closed. `PseBoardLotService.IsTradablePrice` (`> 0`, `<= MaximumTradablePrice = 1_000_000`) now guards `ComputeLegFeePhp`, `ResolveStopFillPrice`, every net-risk/reward/P&L identity and `ProbabilisticEdgeService`; what is still missing is a guard inside `GetBracket`/`RoundToValidTick` themselves and a rejection path in the WebApi for an absurd `entry`/`stop`/`target` payload.
 - **F-06 — error detail:** `KnowledgeController` still returns `ex.Message` to the client.
 - **F-07 — chunk/embed bounds:** `KnowledgeDocumentParser.ChunkPlainText` still bypasses `SplitLong`, and `OllamaEmbeddingClient.EmbedAsync` still sends every chunk in one request.
-- **F-08 – F-15** — security headers/HSTS, unbounded free text (`title`, tags, notes, file name), regex timeouts/response caps, SQLite file mode, lock files + `NuGetAudit` + a `PdfPig` bump, rate limiting/run gate, `GET` mutating state, unbounded raw model response persistence.
-- **F-01/F-02 remainder** — there is still no user authentication, no origin check on unsafe methods and no rate limiter; keep the desk on `127.0.0.1` until those land.
+- **F-08 – F-15** — security headers/HSTS, unbounded free text (`title`, tags, notes, file name), regex timeouts/response caps, SQLite file mode, lock files + `NuGetAudit` + a `PdfPig` bump, `GET` mutating state, unbounded raw model response persistence.
+- **F-01/F-02 remainder** — there is still no user authentication and no per-user throttling; the cross-site write guard and the three hourly budgets now cover drive-by writes and loop abuse, so keep the desk on `127.0.0.1` until a real identity provider lands.
 
 ### 4. Live verification backlog (needs network + `OLLAMA_API_KEY`)
 

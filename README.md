@@ -119,6 +119,8 @@ export Compliance__DeploymentMode="PersonalLocal"   # default; refuses non-loopb
 export PSEDESK_OPERATOR_API_KEY="..."               # required for mutating calls in LicensedCommercial
 export Compliance__AllowedHosts="desk.example.ph"   # licensed mode only; overrides the loopback allowlist
 export Compliance__ExpensiveRequestsPerHour=30      # hourly ceiling on run-now / backtest / train
+export Compliance__ResearchRequestsPerHour=120      # hourly ceiling on single-ticker research lookups
+export Compliance__KnowledgeRequestsPerHour=10      # hourly ceiling on knowledge uploads / reindex (embeddings)
 ```
 
 **This is not open source.** `LICENSE` grants one personal, non-commercial copy on a machine you
@@ -139,13 +141,27 @@ deployment can answer to its own host name without a leftover value ever widenin
 `GET /health` bypasses all of it. The outbound `User-Agent` is `MarketData:UserAgent`, so the desk
 identifies itself honestly to Yahoo and PSE Edge instead of impersonating a browser.
 
-Two guards keep the "polite, personal, bounded" claim true rather than aspirational. Only **one**
+Three guards keep the "polite, personal, bounded" claim true rather than aspirational. Only **one**
 expensive job runs at a time — a second concurrent `run-now`, `train` or `train-all` is answered
 `409` immediately instead of queueing behind minutes of work and re-fetching the same session — and
 those four endpoints share an hourly ceiling (`Compliance:ExpensiveRequestsPerHour`, default `30`,
-clamped 1–1000) that answers `429` with `Retry-After` and a ProblemDetails body. A human driving four
-horizons never notices either; a loop cannot hammer the exchange or spend unlimited model credit.
-Every other route, including all the stored-session reads, stays uncapped.
+clamped 1–1000) that answers `429` with `Retry-After` and a ProblemDetails body. A single-ticker
+research lookup has its own ceiling (`Compliance:ResearchRequestsPerHour`, default `120`, clamped
+1–10000) because walking the catalog would otherwise hammer Yahoo Finance and PSE Edge without ever
+touching the run budget, and the knowledge-base writes that spend embedding credit share
+`Compliance:KnowledgeRequestsPerHour` (default `10`, clamped 1–1000). `lookbackDays` on `backtest`,
+`train` and `train-all` is capped at **1,825 calendar days** (five years) and answers `400` outside
+`1..1825`, so one request cannot ask for a century of bars. A human driving four horizons never
+notices any of it; a loop cannot hammer the exchange or spend unlimited model credit. Stored-session
+reads stay uncapped because they are free.
+
+Two more guards close the drive-by paths. Every mutating request must come from the desk's own
+browser origin (the `Cors:AllowedOrigins` list, or the API's own host): CORS only hides a response,
+so without this check a page on another site could still press the desk's buttons on loopback. And
+the operator key is rate-limited per caller — five wrong `X-PseDesk-Key` values in five minutes
+answer `429` with `Retry-After` for the rest of the window, so a constant-time comparison is not an
+unlimited guessing oracle. Knowledge uploads additionally accept only `.md`, `.markdown`, `.txt` and
+`.pdf`; anything else is a `400` instead of being decoded as text.
 
 One rule is not enforceable in code, so `DISCLAIMER.md` §7 states it plainly: the plain-language cards
 are written **as instructions for one self-user** ("buy in this band", "cut here", "lock break-even at
@@ -176,7 +192,7 @@ npm run dev     # http://localhost:5173
 
 `VITE_API_BASE_URL` overrides the API base (see `.env.example`); CORS is pre-configured for `http://localhost:5173`. `VITE_OPERATOR_API_KEY` adds the `X-PseDesk-Key` header on writes and is only needed against a `LicensedCommercial` API — the personal loopback desk needs no key, and reads never carry one.
 
-The terminal opens behind a first-run **legal gate**, then in **Simple** mode. `Simple | Pro` (`psedesk.viewMode`) and **light / dark** (`psedesk.theme`) persist per browser, dialogs become bottom sheets below `sm`, and the same run reflows from a 320px phone to a 2560px desktop without a second endpoint or component tree. `npm test` runs the dependency-free `node:test` suites over the React-free `lib/` layer (advice/labels, legal consent, the SWR cache, formatters and the desk mark); `npm run build` is the UI gate.
+The terminal opens behind a first-run **legal gate**, then in **Simple** mode. `Simple | Pro` (`psedesk.viewMode`) and **light / dark** (`psedesk.theme`) persist per browser, dialogs become bottom sheets below `sm`, and the same run reflows from a 320px phone to a 2560px desktop without a second endpoint or component tree. A first-visit *three steps to read this screen* strip sits above the list (dismissed once, remembered in `psedesk.howToReadDismissed`, and restorable from the footer), and every action has a keyboard accelerator — `1`–`4` horizons, `R` run, `K` research, `T` trades, `D` scorecard, `S`/`P` view, `L` theme, `G` guide, `?` the shortcut sheet — documented by `src/lib/shortcuts.ts`, which the help sheet, the guide and each control's `aria-keyshortcuts` all read, so a key can never be bound but undocumented. `npm test` runs the dependency-free `node:test` suites over the React-free `lib/` layer (advice/labels, shortcuts, the "how to read" preference, legal consent, the SWR cache, formatters and the desk mark); `npm run build` is the UI gate.
 
 The tab icon is not a hand-drawn asset: `src/lib/deskMarkGeometry.ts` describes the mark once (three ascending candlesticks on a 32-unit grid), `DeskLogo` renders it in the header in `currentColor`, and `npm run icons` rasterises the same geometry into `public/favicon.svg`, `public/favicon.ico` (16/32/48, PNG-compressed entries) and `public/apple-touch-icon.png` (180px, full-bleed because iOS masks it and paints transparent corners black). Re-run `npm run icons` after touching the geometry — the command needs no dependency, it writes PNGs through `node:zlib` and the ICO container by hand.
 

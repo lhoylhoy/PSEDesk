@@ -96,9 +96,17 @@ builder.Services
         }
     });
 
-var allowedOrigins = builder.Configuration
-    .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>() ?? new[] { "http://localhost:5173" };
+var frontendCors = builder.Configuration
+    .GetSection(FrontendCorsOptions.SectionName)
+    .Get<FrontendCorsOptions>() ?? new FrontendCorsOptions();
+
+var allowedOrigins = frontendCors.AllowedOrigins.Length > 0
+    ? frontendCors.AllowedOrigins
+    : new[] { FrontendCorsOptions.DefaultOrigin };
+
+// One origin list feeds both the CORS policy and ComplianceGuardMiddleware's cross-site check, so
+// the browser that may read a response is exactly the browser that may change state.
+builder.Services.AddSingleton(Options.Create(new FrontendCorsOptions { AllowedOrigins = allowedOrigins }));
 
 builder.Services.AddCors(options => options.AddPolicy("FrontendPolicy", policy =>
     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
@@ -123,12 +131,21 @@ if (string.Equals(
     }
 }
 
-// The expensive endpoints (the live run, the causal replay and the two training jobs) fan out to
-// PSE Edge and spend Ollama Cloud credit, so they get an hourly ceiling on top of the
-// single-job DeskWorkGate. Everything else stays uncapped: the terminal reads its stored session
-// as often as it likes.
+// The endpoints that fan out to Yahoo Finance / PSE Edge and spend Ollama Cloud credit get an
+// hourly ceiling on top of the single-job DeskWorkGate. Stored-session reads stay uncapped: the
+// terminal reads its stored session as often as it likes.
 var expensiveRequestsPerHour = Math.Clamp(
     complianceConfiguration.GetValue("ExpensiveRequestsPerHour", 30),
+    1,
+    1000);
+
+var researchRequestsPerHour = Math.Clamp(
+    complianceConfiguration.GetValue("ResearchRequestsPerHour", 120),
+    1,
+    10_000);
+
+var knowledgeRequestsPerHour = Math.Clamp(
+    complianceConfiguration.GetValue("KnowledgeRequestsPerHour", 10),
     1,
     1000);
 
@@ -136,16 +153,17 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.AddPolicy(DeskRateLimitPolicies.Expensive, _ =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: DeskRateLimitPolicies.Expensive,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = expensiveRequestsPerHour,
-                Window = TimeSpan.FromHours(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
+    options.AddPolicy(
+        DeskRateLimitPolicies.Expensive,
+        _ => FixedWindowPartition(DeskRateLimitPolicies.Expensive, expensiveRequestsPerHour));
+
+    options.AddPolicy(
+        DeskRateLimitPolicies.Upstream,
+        _ => FixedWindowPartition(DeskRateLimitPolicies.Upstream, researchRequestsPerHour));
+
+    options.AddPolicy(
+        DeskRateLimitPolicies.Model,
+        _ => FixedWindowPartition(DeskRateLimitPolicies.Model, knowledgeRequestsPerHour));
 
     options.OnRejected = async (context, cancellationToken) =>
     {
@@ -161,10 +179,12 @@ builder.Services.AddRateLimiter(options =>
             new ProblemDetails
             {
                 Status = StatusCodes.Status429TooManyRequests,
-                Title = "Too many expensive requests",
-                Detail = $"The desk allows {expensiveRequestsPerHour} live runs, replays and training " +
-                         "jobs per hour, so it never hammers PSE Edge or spends unbounded model credit. " +
-                         "Nothing was persisted; wait for the window to reset and try again."
+                Title = "Hourly request budget exhausted",
+                Detail = $"The desk bounds how often it fans out to Yahoo Finance / PSE Edge or " +
+                         $"spends Ollama Cloud credit: {expensiveRequestsPerHour} live runs/replays/" +
+                         $"training jobs, {researchRequestsPerHour} ticker lookups and " +
+                         $"{knowledgeRequestsPerHour} knowledge ingestions per hour. Nothing was " +
+                         "persisted; wait for the window to reset and try again."
             },
             options: (System.Text.Json.JsonSerializerOptions?)null,
             contentType: "application/problem+json",
@@ -175,6 +195,10 @@ builder.Services.AddRateLimiter(options =>
 // One expensive job at a time: a second concurrent run would double the upstream traffic and could
 // overwrite a newer run for the same (date, horizon).
 builder.Services.AddSingleton<DeskWorkGate>();
+
+// Wrong operator keys are remembered per caller, so a constant-time comparison cannot be turned
+// into an unlimited guessing oracle.
+builder.Services.AddSingleton<OperatorKeyThrottle>();
 
 builder.Services.AddSingleton<QuantitativeFilterService>();
 builder.Services.AddSingleton<SignalJsonParser>();
@@ -309,4 +333,17 @@ static string ResolveConnectionString(string? configured, string contentRootPath
     connectionBuilder.DataSource = Path.Combine(contentRootPath, connectionBuilder.DataSource);
     return connectionBuilder.ToString();
 }
+
+// A fixed one-hour window per policy, partitioned by policy name: every caller shares the same
+// desk budget, which is what a single-operator desk wants and what a licensed deployment documents.
+static RateLimitPartition<string> FixedWindowPartition(string policyName, int permitLimit) =>
+    RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: policyName,
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = permitLimit,
+            Window = TimeSpan.FromHours(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
 

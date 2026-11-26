@@ -119,13 +119,15 @@ curl -X DELETE http://localhost:5236/api/knowledge/7        # upload → 204, bu
 | `MarketData:LookbackCalendarDays` | `420` | Calendar lookback per chart request (~280 sessions) |
 | `MarketData:MaxConcurrency` | `8` | Parallel ticker requests |
 | `MarketData:RequestTimeoutSeconds` | `15` | Per-request timeout; a timeout is a 503 |
-| `Cors:AllowedOrigins` | `http://localhost:5173` | Frontend origin |
+| `Cors:AllowedOrigins` | `http://localhost:5173` | Frontend origin for CORS **and** the write-origin allowlist (`ComplianceGuardMiddleware` refuses a mutating request from any other origin with `403`) |
 | `AllowedHosts` | `localhost;127.0.0.1;[::1]` | Host-header allowlist (no wildcard, so a forged `Host:` cannot resolve) |
 | `Compliance:DeploymentMode` | `PersonalLocal` | `PersonalLocal` refuses non-loopback callers with `403`; `LicensedCommercial` opens that check and requires the operator key on writes. Unrecognised values fall back to personal |
 | `Compliance:EnforceLoopbackInPersonalMode` | `true` | The loopback refusal switch; only a deliberate `false` disables it |
 | `Compliance:OperatorApiKey` | empty | Shared key required on `POST`/`PUT`/`PATCH`/`DELETE` when set; blank is fine in personal mode and a `503` fail-closed in licensed mode |
 | `Compliance:AllowedHosts` | empty | Licensed mode only: replaces the loopback `AllowedHosts` so a deployment under a real host name is reachable; ignored in `PersonalLocal`, so it can never widen the personal desk |
 | `Compliance:ExpensiveRequestsPerHour` | `30` | One fixed one-hour window over `run-now` / `backtest` / `train` / `train-all`; `429` + `Retry-After` beyond it. Clamped 1–1000 |
+| `Compliance:ResearchRequestsPerHour` | `120` | One fixed one-hour window over `GET /api/research/{symbol}` (each call fans out to Yahoo / PSE Edge); `429` + `Retry-After` beyond it. Clamped 1–10000 |
+| `Compliance:KnowledgeRequestsPerHour` | `10` | One fixed one-hour window over `POST /api/knowledge/upload` and `/reindex` (each accepted upload spends Ollama embedding credit); `429` + `Retry-After` beyond it. Clamped 1–1000 |
 | `MarketData:UserAgent` | `PseSignalDesk-PersonalResearch/0.1 (local-noncommercial)` | Outbound identity for Yahoo and PSE Edge — never a spoofed browser string |
 | `PSEDESK_OPERATOR_API_KEY` | — | Environment override for `Compliance:OperatorApiKey`, so the key never sits in `appsettings.json` |
 | `OLLAMA_API_KEY` / `OLLAMA_BASE_URL` / `OLLAMA_MODEL` / `OLLAMA_FAST_MODEL` / `OLLAMA_EMBEDDING_MODEL` | — | Environment variables override settings |
@@ -256,13 +258,16 @@ the API at all.
 - **Re-running a day replaces that day's run** for the same horizon. Previous-run lookup uses strictly earlier `RunDate` values.
 - **Ticker matching is case-insensitive** everywhere (`OrdinalIgnoreCase`).
 - **The scheduler is calendar-weekday based**, not a PSE holiday calendar.
-- **No multi-user auth, no HTTPS enforcement.** There is no per-user login and no origin check on
-  unsafe methods; the loopback refusal (`PersonalLocal`) and the shared operator key
-  (`LicensedCommercial`) are the whole access story. The expensive endpoints *are* bounded:
-  `DeskWorkGate` answers `409` to a second concurrent run, and the `desk-expensive` policy answers
-  `429` + `Retry-After` past `Compliance:ExpensiveRequestsPerHour` per hour. Keep the desk on
-  `127.0.0.1`; a real multi-user deployment needs OIDC, TLS and security headers first
-  (`security_audit_report.md` F-01/F-02/F-08).
+- **No multi-user auth, and no HTTPS enforcement.** There is no per-user login; the loopback
+  refusal (`PersonalLocal`), the shared operator key (`LicensedCommercial`) and the write-origin
+  allowlist are the whole access story. A mutating request from an origin outside
+  `Cors:AllowedOrigins` (and the API's own host) is `403`; five wrong keys in five minutes lock a
+  caller out with `429` + `Retry-After`; and the costly routes carry three hourly budgets
+  (`Expensive`, `Upstream`, `Model`), with `lookbackDays` capped at 1,825 days and knowledge
+  uploads restricted to `.md`/`.markdown`/`.txt`/`.pdf`. Keep the desk on `127.0.0.1`: there is no
+  `ForwardedHeaders` trust, so fronting a `PersonalLocal` desk with a reverse proxy on the same
+  machine would make every request look loopback. A real multi-user deployment needs OIDC, TLS and
+  security headers first (`security_audit_report.md` F-01/F-02/F-08).
 - **A leftover Vite server steals port 5173 and kills the debug launch.** `vite.config.ts` sets
   `strictPort: true`, so a second `npm run dev` (or the `Frontend: Vite dev server` launch) does not move to
   5174 — it dies with `error when starting dev server: Error: Port 5173 is already in use` from

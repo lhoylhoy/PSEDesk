@@ -159,6 +159,11 @@ public sealed class SignalsController : ControllerBase
     {
         horizon = NormalizeHorizon(horizon);
 
+        if (!DeskRequestLimits.IsLookbackAllowed(lookbackDays))
+        {
+            return LookbackOutOfRange();
+        }
+
         try
         {
             var result = await _backtests.RunAsync(
@@ -224,6 +229,11 @@ public sealed class SignalsController : ControllerBase
     {
         horizon = NormalizeHorizon(horizon);
 
+        if (!DeskRequestLimits.IsLookbackAllowed(lookbackDays))
+        {
+            return LookbackOutOfRange();
+        }
+
         if (!_workGate.TryEnter())
         {
             return WorkAlreadyRunning();
@@ -271,6 +281,11 @@ public sealed class SignalsController : ControllerBase
         [FromQuery] int? lookbackDays = null,
         CancellationToken cancellationToken = default)
     {
+        if (!DeskRequestLimits.IsLookbackAllowed(lookbackDays))
+        {
+            return LookbackOutOfRange();
+        }
+
         if (!_workGate.TryEnter())
         {
             return WorkAlreadyRunning();
@@ -640,6 +655,14 @@ public sealed class SignalsController : ControllerBase
             runDto?.Drops ?? Array.Empty<SignalDropDto>(),
             trustPulse);
     }
+
+    private static BadRequestObjectResult LookbackOutOfRange() =>
+        new(new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Lookback out of range",
+            Detail = DeskRequestLimits.LookbackRequirement
+        });
 
     private static SignalHorizon NormalizeHorizon(SignalHorizon horizon) =>
         Enum.IsDefined(horizon) ? horizon : SignalHorizon.WEEK;

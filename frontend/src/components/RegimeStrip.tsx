@@ -303,7 +303,7 @@ export function RegimeStrip({ regime, horizon, run, viewMode = 'simple', trustPu
 
   if (!regime) {
     return (
-      <section className="panel p-4 sm:p-5">
+      <section id="market-call" tabIndex={-1} className="panel scroll-mt-4 p-4 sm:p-5">
         <p className="type-eyebrow text-fg-subtle">Tape · {horizon}</p>
         <p className="type-body measure mt-2 text-fg-muted">
           No live PSE session stored yet. Run the pipeline to pull Yahoo Finance candles and PSE Edge disclosures.
@@ -313,7 +313,7 @@ export function RegimeStrip({ regime, horizon, run, viewMode = 'simple', trustPu
   }
 
   return (
-    <section className="panel p-4 sm:p-5">
+    <section id="market-call" tabIndex={-1} className="panel scroll-mt-4 p-4 sm:p-5">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-2xl">
           <p className="type-eyebrow text-fg-subtle">

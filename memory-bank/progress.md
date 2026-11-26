@@ -2,7 +2,54 @@
 
 **Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **496 backend tests green + 1 skipped (497 total) / 71 frontend tests green** (2026-11-26; the newest pass is **per-company PSE Edge disclosures** — data-truth slice 2 — on top of the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below). It gives every screened candidate its own Edge company page (`companyDisclosures/search.ax?keyword={cmpy_id}`, ≤25 per run, 8-way) so disclosure attribution is correct by construction instead of guessed from a market-wide headline table: live, that fan-out returned 22–47 filings per name where the market-wide page attributed 3 filings across 60 names. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+**Latest verification:** **538 backend tests green + 1 skipped (539 total) / 87 frontend tests green** (2026-11-26; the newest pass is the frontend **wayfinding pass** — keyboard shortcuts, the three-step "how to read this screen" strip, a skip link and honest list copy — on top of abuse-protection hardening, per-company PSE Edge disclosures, the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below).
+ Backend behaviour is unchanged by that pass. The data-truth state is still per-company PSE Edge disclosures (`companyDisclosures/search.ax?keyword={cmpy_id}`, ≤25 per run, 8-way), which turned disclosure attribution from a name guess into a fact: live, that fan-out returned 22–47 filings per name where the market-wide page attributed 3 filings across 60 names. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+
+## Latest verification (2026-11-26 — frontend wayfinding pass)
+
+Frontend only: **6 new files** (`lib/shortcuts.ts`, `lib/howToRead.ts`,
+`components/KeyboardShortcutsDialog.tsx`, `components/HowToReadStrip.tsx`,
+`lib/__tests__/shortcuts.test.ts`, `lib/__tests__/howToRead.test.ts`), **13 edited** (`App.tsx`,
+`index.css`, `components/{TerminalHeader,AdviceCardList,RegimeStrip,MarketDirectionHero,BeginnerGuideDialog,PortfolioDialog}.tsx`,
+`components/ui/{Dialog,Tabs}.tsx`, `lib/{plainAdvice,preloaders,horizons}.ts`, `lib/__tests__/plainAdvice.test.ts`),
+plus `README.md` and the memory bank. **No backend file, no API contract, no new dependency, no new
+architectural layer**, and no server-owned number, verdict or label moved.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` (≈0.30 s, exit 0) — 71 → 87, **+16** (9 shortcuts, 5 how-to-read, 2 `describeNextStep`) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 135 modules transformed`, `✓ built in 232ms`, exit 0 (`index-*.js` 92.5 kB / 26.0 kB gzip, CSS 61.8 kB / 11.6 kB gzip) |
+| build output audit | `KeyboardShortcutsDialog-*.js` **1.65 kB / 0.76 kB gzip** — the new sheet is its own chunk, lazily imported and warmed by `preloadKeyboardShortcutsDialog()` |
+| built-CSS audit | `.kbd{…min-width:1.5rem;font-family:var(--font-mono);font-size:var(--text-2xs)…}` emitted once in `index.css`'s component layer; every `aria-keyshortcuts` value comes from `keysForAction()` |
+
+Not run: a real-browser capture (headless Chrome still hangs on the seeded `dist/` page here — see
+`techContext.md`) and `dotnet test` (no backend file changed), so the shortcut behaviour is pinned by
+the pure resolver's `node:test` cases rather than by pressing keys in a browser.
+
+**What changed**
+
+- **`lib/shortcuts.ts` is the single map.** `SHORTCUT_GROUPS` (Move / Act / Change what you see / Help)
+  feeds the shortcut sheet, the guide's one-line summary and every control's `aria-keyshortcuts`
+  (`keysForAction('run')` → `['R']`), so a key cannot be bound but undocumented. `resolveShortcut` is
+  pure: modifiers → `null`, a typing target → `null`, a sheet open → only `?`, non-printing keys →
+  `null`. `isTypingTarget` reads `tagName`/`isContentEditable` structurally so the whole mapping is
+  testable without a DOM. `Esc` is documented **without** an action because Radix owns it.
+- **The keys.** `1`–`4` horizons, `R` run, `K` research, `T` trades, `D` scorecard, `S`/`P` view mode,
+  `L` theme, `G` guide, `?` the sheet — wired once in `App.tsx` behind a computed `anyDialogOpen`
+  (every sheet **plus** the legal gate), each branch calling the same setter its visible button calls.
+- **Onboarding in place.** `HowToReadStrip` sits above the Simple list with three steps whose buttons
+  *are* the actions; `psedesk.howToReadDismissed` remembers the dismissal through the `legalConsent`
+  storage contract (silent on blocked quota / Safari private mode), and the footer's "How to read this
+  screen" clears it and scrolls back to the strip.
+- **Honest copy.** A stored session is titled `Trade signals · Wed, Nov 25` instead of "Today's"; `DAY`'s
+  eyebrow lost its "Today's"; `Record` → **Practise** in the guide, the blotter button and the blotter's
+  `take` tab in Simple mode; rows end in `View plan ▸` at every width with an `sr-only` "Opens the full
+  plan in a detail sheet"; and `describeNextStep()` prints one sentence naming the next control — it says
+  "nothing cleared the screen today", never "buy something".
+- **Wayfinding chrome.** A skip link (`sr-only` until focused) lands on `<main id="main-content">`, the
+  market call is focusable at `#market-call` for step 1, `#how-to-read` is the strip's anchor, and the
+  footer now carries `How it works G` · `Keyboard shortcuts ?` · `How to read this screen`.
+
 
 ## Verification (2026-11-26 — Vite dev server port recovery)
 
@@ -310,6 +357,59 @@ finding below is Chrome-measured, and the official Google Fonts CSS behaves iden
 - **Licence + notices.** OFL 1.1 ships beside the font (OFL §1 requires it); `THIRD_PARTY_NOTICES.md` §4
   gained a *Bundled assets* table, `PRIVACY.md` §5 and `README.md` document the font and the command. No
   reader-facing legal copy changed, so `CURRENT_LEGAL_VERSION` was not bumped.
+
+## Latest verification (2026-11-26 — abuse-protection hardening)
+
+Follow-up to the audit's F-02/F-03/F-13 gaps. **4 new source files**
+(`Infrastructure/Configuration/FrontendCorsOptions.cs`, `WebApi/Services/OperatorKeyThrottle.cs`,
+`WebApi/Services/DeskRequestLimits.cs`, `WebApi/Services/KnowledgeUploadPolicy.cs`), **3 new test
+files** (`OperatorKeyThrottleTests`, `DeskRequestLimitsTests`, `KnowledgeUploadPolicyTests`), **8
+edited source files** (`ComplianceOptions.cs`, `DeskRateLimitPolicies.cs`,
+`ComplianceGuardMiddleware.cs`, `Program.cs`, `ResearchController.cs`, `KnowledgeController.cs`,
+`SignalsController.cs`, `appsettings.json`), **2 edited test files**
+(`ComplianceGuardMiddlewareTests.cs`, `SignalsControllerRateLimitTests.cs`) and **3 edited docs**
+(`README.md`, `THIRD_PARTY_NOTICES.md`, this memory bank). No dependency, no architectural layer and
+no existing status code moved; the new answers are `403` for a cross-site write, `400` for an
+out-of-range lookback or an unsupported upload, and `429` for the two new budgets and the
+operator-key lockout.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx --nologo -v minimal` | `Build succeeded. 0 Warning(s) 0 Error(s)` (9.3 s) |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo --no-build -v minimal` | `Passed! - Failed: 0, Passed: 538, Skipped: 1, Total: 539` (9 s) — 497 → 539, **+42** |
+| `cd frontend && npm test` | `ℹ tests 71 · ℹ pass 71 · ℹ fail 0` (≈0.25 s) — unchanged |
+| live smoke `:5421`, throwaway DB, `ResearchRequestsPerHour=1`, `KnowledgeRequestsPerHour=1`, every upstream → `127.0.0.1:9` | cross-site and `Sec-Fetch-Site: cross-site` reindex → **403**; first allowed reindex → **200**; second → **429** + `Retry-After: 3600`; first research → **503**; second → **429** + `Retry-After: 3600`; `backtest?lookbackDays=36500` → **400** `{"title":"Lookback out of range", …}` |
+| live smoke `:5422`, `LicensedCommercial`, `PSEDESK_OPERATOR_API_KEY=secret` | six wrong-key `POST /api/knowledge/reindex` → **401, 401, 401, 401, 429, 429** (the fifth carries `Retry-After: 300`); a correct key while locked → **429** |
+
+Both smoke instances used throwaway SQLite files in `/tmp`, bound to `127.0.0.1`, and were stopped
+before the command returned; no process was left on `:5421` / `:5422`.
+
+### What the pass changed
+
+1. **Three rate-limit policies, not one.** `desk-upstream` (`Compliance:ResearchRequestsPerHour`,
+   default 120) covers `GET /api/research/{symbol}`, which fetches Yahoo + PSE Edge per call and was
+   previously uncapped; `desk-model` (`Compliance:KnowledgeRequestsPerHour`, default 10) covers
+   `knowledge/upload` and `knowledge/reindex`, which spend Ollama embedding credit. The existing
+   `desk-expensive` policy is unchanged. Each is a fixed one-hour window, `QueueLimit = 0`, `429` +
+   `Retry-After` + ProblemDetails; all three share the global desk budget on purpose.
+2. **One request cannot ask for a century.** `DeskRequestLimits` caps `lookbackDays` at 1,825
+   calendar days on `backtest`, `train` and `train-all` and answers `400` outside `1..1825`;
+   previously the lower bound was lifted silently and the upper bound did not exist.
+3. **Uploads are typed.** `KnowledgeUploadPolicy` allows `.md`, `.markdown`, `.txt` and `.pdf`; any
+   other extension is a `400` instead of being decoded as UTF-8 text and indexed.
+4. **Cross-site writes are refused.** `ComplianceGuardMiddleware` now checks the browser `Origin`
+   against `Cors:AllowedOrigins` plus the API's own host (and falls back to
+   `Sec-Fetch-Site: cross-site`) for `POST`/`PUT`/`PATCH`/`DELETE`; a mismatch is `403` before any
+   work. `FrontendCorsOptions` is the single list the CORS policy and the middleware share, so they
+   cannot drift.
+5. **The operator key has a lockout.** `OperatorKeyThrottle` remembers wrong keys per source address:
+   four failures answer `401`, the fifth answers `429` + `Retry-After`, and the window is five
+   minutes. A correct key clears the record. The limiter still runs after the compliance guard, so a
+   refused `403` never consumes an hourly budget.
+6. **Proxy caveat documented.** There is no `ForwardedHeaders` trust: behind a same-machine reverse
+   proxy every request would look loopback. The documented posture is loopback-only personal use or a
+   real `LicensedCommercial` deployment with OIDC/TLS/security headers, not a personal desk behind
+   nginx.
 
 ## Latest verification (2026-11-26 — compliance hardening)
 
@@ -634,7 +734,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] Full REST surface: signals (`latest`, `by-date`, `dates`, `ticker/{symbol}/history`, `scorecard`, `backtest`, `model`, `train`, `train-all`, `desk-memory`, `run-now`, `quotation-report`), research (`catalog`, `{symbol}` with horizon/`averageCost`/`shares`), portfolio (summary, settings, order-ticket, trades, stop, close, trim), knowledge (list, reindex, upload, delete), `/health` and `GET /api/health/feeds` (per-upstream feed ledger).
 - [x] RFC 7807 errors: `400` config/input/attestation/rule violation, `404` unknown session/document, `409` protected document, `409` a run or training job already in progress, `429` too many expensive requests (`Retry-After`), `499` client abort, `502` generation, `503` feed.
 - [x] `ComplianceGuardMiddleware` (loopback-only in `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`, `/health` bypass) and `AllowedHosts` narrowed to loopback names.
-- [x] **Bounded expensive work** — `DeskWorkGate` makes `run-now`/`train`/`train-all` mutually exclusive (`409`), and `DeskRateLimitPolicies.Expensive` (`Compliance:ExpensiveRequestsPerHour`, default 30, clamped 1–1000) applies one fixed one-hour window to those three plus `backtest` (`429` + `Retry-After`). `UseRateLimiter()` runs after the compliance guard so a refused caller never burns budget; stored reads are uncapped. Verified live on `:5411` (`503, 503, 429`) and `:5412` (concurrent `409`).
+- [x] **Bounded expensive work** — `DeskWorkGate` makes `run-now`/`train`/`train-all` mutually exclusive (`409`); three fixed one-hour policies answer `429` + `Retry-After`: `Expensive` (`Compliance:ExpensiveRequestsPerHour`, default 30, clamped 1–1000) on those three plus `backtest`, `Upstream` (`ResearchRequestsPerHour`, default 120, clamped 1–10000) on `research/{symbol}`, and `Model` (`KnowledgeRequestsPerHour`, default 10, clamped 1–1000) on `knowledge/upload|reindex`. `UseRateLimiter()` runs after the compliance guard so a refused caller never burns budget; stored reads are uncapped. Verified live on `:5411` (`503, 503, 429`), `:5412` (concurrent `409`), `:5421` (research `503 → 429`, knowledge `200 → 429`) and `:5422` (`401 ×4 → 429`).
 - [x] **`LicensedCommercial` reachable from the UI** — `lib/operatorKey.ts` + `VITE_OPERATOR_API_KEY` put `X-PseDesk-Key` on mutating requests only, and `Compliance:AllowedHosts` widens the host allowlist only when the licensed mode is declared.
 - [x] First-run legal gate (`lib/legalConsent.ts` v2, `LegalDisclaimerGate`) plus `LICENSE`, `DISCLAIMER.md` (§7 single-reader rule), `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`; non-solicitation copy across the prompt and the UI.
 - [x] `RequestCancellationMiddleware` (499), caller-cancellation rethrow in the provider, and a one-macrotask deferral in the terminal that removes the common StrictMode abort.
@@ -761,10 +861,10 @@ The audit behind slice 1 found seven data sources and one LLM, and the failure m
 ### Security remediation (`security_audit_report.md`, 2026-11-26 — 15 findings)
 
 - **Done** — F-01/F-02 partly: `ComplianceGuardMiddleware` (loopback-only `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`), loopback `AllowedHosts`, `/health` bypass.
-- **Done** — F-13: `DeskWorkGate` (`409` on a concurrent expensive job) plus `DeskRateLimitPolicies.Expensive` (`429` + `Retry-After` on `run-now`/`backtest`/`train`/`train-all`); `UseRateLimiter()` is placed after the compliance guard. Verified live (`503, 503, 429` and a concurrent `409`).
-- **P0/P1 open** — F-03 prompt fencing for retrieved text; F-04 lookback ceiling (`lookbackDays` still reaches the provider unbounded); F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings; F-05 mostly closed (`IsTradablePrice` bounds every peso identity, `GetBracket` itself still unguarded).
+- **Done** — F-13: `DeskWorkGate` (`409` on a concurrent expensive job) plus three fixed one-hour policies (`429` + `Retry-After`): `Expensive` on `run-now`/`backtest`/`train`/`train-all`, `Upstream` on `research/{symbol}`, and `Model` on `knowledge/upload|reindex`; `UseRateLimiter()` is placed after the compliance guard. The cross-site write guard (`403`) and the five-wrong-key `OperatorKeyThrottle` (`429` + `Retry-After`) are also landed. Verified live (`503, 503, 429`; concurrent `409`; `401 ×4 → 429`; cross-site `403`).
+- **P0/P1 open** — F-03 prompt fencing for retrieved text; F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings; F-05 mostly closed (`IsTradablePrice` bounds every peso identity, `GetBracket` itself still unguarded). F-04 is closed at the HTTP edge (`DeskRequestLimits`, `400` outside `1..1825`).
 - **P2 open** — F-08 security headers/HSTS, F-09 unbounded free text (`PortfolioTrades.Notes` is still unfiltered, which is the DPA/PII ingress), F-10 regex timeout/response caps, F-11 SQLite file mode still `0644`, F-12 committed lock files + `NuGetAudit` + `PdfPig` bump, F-14 `GET` mutating state, F-15 raw model response persistence.
-- **Auth** — still no user authentication and no origin check on unsafe methods; the operator key is a single-operator convenience (and a bundle-shipped key is readable by anyone who loads the page), so keep the desk on `127.0.0.1` and treat `LicensedCommercial` as "one trusted operator behind their own network boundary", not as multi-user identity.
+- **Auth** — still no user authentication; the origin allowlist and the per-caller operator-key lockout now cover drive-by writes and key guessing, but the operator key remains a single-operator convenience (a bundle-shipped key is readable by anyone who loads the page). Keep the desk on `127.0.0.1` and treat `LicensedCommercial` as "one trusted operator behind their own network boundary", not as multi-user identity.
 
 ### Live verification (needs network + `OLLAMA_API_KEY`)
 

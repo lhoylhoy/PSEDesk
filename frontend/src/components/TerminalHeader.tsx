@@ -7,12 +7,14 @@ import { describeRunLabel } from '../lib/plainAdvice';
 import {
   prefetchHorizon,
   preloadBeginnerGuideDialog,
+  preloadKeyboardShortcutsDialog,
   preloadKnowledgeBaseDialog,
   preloadPortfolioDialog,
   preloadResearchDialog,
   preloadScorecardDialog,
   preloadSignalTable,
 } from '../lib/preloaders';
+import { keysForAction } from '../lib/shortcuts';
 import type { ThemeMode } from '../lib/theme';
 import type { ViewMode } from '../lib/viewMode';
 import { Button } from './ui/Button';
@@ -46,6 +48,8 @@ interface TerminalHeaderProps {
   onOpenPortfolio: () => void;
   /** Plain-language "how this works" sheet. */
   onOpenGuide: () => void;
+  /** The keyboard map; reachable from the More menu and the phone sheet. */
+  onOpenShortcuts: () => void;
   /** Server-side exit alerts waiting in the blotter; surfaced as a count. */
   portfolioAlerts?: number;
   busy: 'run' | null;
@@ -64,6 +68,8 @@ type SegmentOption<T extends string> = {
   label: string;
   /** Decorative leading glyph (the sun/moon pair). */
   icon?: string;
+  /** Keyboard accelerator documented on the segment, e.g. `S`. */
+  shortcut?: string;
   /** Warm-up hook for a heavier mode; never fired on mount. */
   preload?: () => void;
 };
@@ -100,6 +106,7 @@ function SegmentedControl<T extends string>({
           key={option.value}
           type="button"
           aria-pressed={value === option.value}
+          aria-keyshortcuts={option.shortcut}
           onClick={() => onChange(option.value)}
           onPointerEnter={option.preload}
           onFocus={option.preload}
@@ -134,8 +141,8 @@ function ViewModeSwitch({ value, onChange }: { value: ViewMode; onChange: (mode:
       value={value}
       onChange={onChange}
       options={[
-        { value: 'simple', label: 'Simple' },
-        { value: 'pro', label: 'Pro', preload: preloadSignalTable },
+        { value: 'simple', label: 'Simple', shortcut: keysForAction('view-simple').join(' ') },
+        { value: 'pro', label: 'Pro', shortcut: keysForAction('view-pro').join(' '), preload: preloadSignalTable },
       ]}
     />
   );
@@ -161,6 +168,7 @@ function MoreMenu({
   simple,
   busy,
   onOpenGuide,
+  onOpenShortcuts,
   onOpenScorecard,
   onOpenResearch,
   onOpenKnowledge,
@@ -169,6 +177,7 @@ function MoreMenu({
   simple: boolean;
   busy: boolean;
   onOpenGuide: () => void;
+  onOpenShortcuts: () => void;
   onOpenScorecard: () => void;
   onOpenResearch: () => void;
   onOpenKnowledge: () => void;
@@ -205,6 +214,19 @@ function MoreMenu({
           onFocus={preloadBeginnerGuideDialog}
         >
           {simple ? 'How it works' : 'Guide'}
+        </button>
+        {/* Shortcuts sit next to the guide: both answer "how do I drive this?", and the sheet
+            teaches the map rather than making the reader guess at hidden keys. */}
+        <button
+          type="button"
+          className={itemClass}
+          disabled={busy}
+          onClick={closeThen(onOpenShortcuts)}
+          onPointerEnter={preloadKeyboardShortcutsDialog}
+          onFocus={preloadKeyboardShortcutsDialog}
+        >
+          <span>Keyboard shortcuts</span>
+          <kbd className="kbd">?</kbd>
         </button>
         {simple ? null : (
           <button
@@ -262,6 +284,7 @@ export function TerminalHeader({
   onOpenResearch,
   onOpenPortfolio,
   onOpenGuide,
+  onOpenShortcuts,
   portfolioAlerts = 0,
   busy,
   viewMode,
@@ -408,6 +431,7 @@ export function TerminalHeader({
           <Button
             variant="secondary"
             onClick={onOpenPortfolio}
+            aria-keyshortcuts={keysForAction('trades').join(' ')}
             onPointerEnter={preloadPortfolioDialog}
             onFocus={preloadPortfolioDialog}
             disabled={busy !== null}
@@ -415,13 +439,20 @@ export function TerminalHeader({
             {simple ? 'My Trades' : 'Book'}
             {alertBadge}
           </Button>
-          <Button variant="cta" busy={busy === 'run'} onClick={onRunNow} disabled={busy !== null}>
+          <Button
+            variant="cta"
+            busy={busy === 'run'}
+            onClick={onRunNow}
+            aria-keyshortcuts={keysForAction('run').join(' ')}
+            disabled={busy !== null}
+          >
             {busy === 'run' ? 'Running…' : runLabel}
           </Button>
           <MoreMenu
             simple={simple}
             busy={busy !== null}
             onOpenGuide={onOpenGuide}
+            onOpenShortcuts={onOpenShortcuts}
             onOpenScorecard={onOpenScorecard}
             onOpenResearch={onOpenResearch}
             onOpenKnowledge={onOpenKnowledge}
@@ -443,10 +474,11 @@ export function TerminalHeader({
             className="min-w-0 max-w-full"
           >
             <TabsList>
-              {horizonOrder.map((option) => (
+              {horizonOrder.map((option, index) => (
                 <TabsTrigger
                   key={option}
                   value={option}
+                  keyShortcut={String(index + 1)}
                   onPointerEnter={() => prefetchHorizon(option, null)}
                   onFocus={() => prefetchHorizon(option, null)}
                 >
@@ -507,6 +539,14 @@ export function TerminalHeader({
               </Button>
               <Button variant="secondary" onClick={sheetAction(onOpenGuide)} disabled={busy !== null}>
                 {simple ? 'How it works' : 'Guide'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={sheetAction(onOpenShortcuts)}
+                onPointerEnter={preloadKeyboardShortcutsDialog}
+                disabled={busy !== null}
+              >
+                Keyboard shortcuts
               </Button>
               {simple ? null : (
                 <Button

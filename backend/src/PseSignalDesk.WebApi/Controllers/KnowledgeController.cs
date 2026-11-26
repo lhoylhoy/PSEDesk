@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PseSignalDesk.Application.Interfaces;
 using PseSignalDesk.Application.Models;
+using PseSignalDesk.WebApi.Services;
 
 namespace PseSignalDesk.WebApi.Controllers;
 
@@ -42,6 +44,7 @@ public sealed class KnowledgeController : ControllerBase
     /// so a manual re-index does not re-embed the whole library.
     /// </summary>
     [HttpPost("reindex")]
+    [EnableRateLimiting(DeskRateLimitPolicies.Model)]
     public async Task<ActionResult<KnowledgeIngestionResult>> Reindex(CancellationToken cancellationToken)
     {
         var result = await _knowledge.IndexBuiltInAsync(cancellationToken);
@@ -57,6 +60,7 @@ public sealed class KnowledgeController : ControllerBase
     /// </summary>
     [HttpPost("upload")]
     [RequestSizeLimit(MaxUploadBytes)]
+    [EnableRateLimiting(DeskRateLimitPolicies.Model)]
     public async Task<ActionResult<KnowledgeDocumentDto>> Upload(
         [FromForm] IFormFile? file,
         [FromForm] string? title,
@@ -96,6 +100,21 @@ public sealed class KnowledgeController : ControllerBase
                 Status = StatusCodes.Status400BadRequest,
                 Title = "File too large",
                 Detail = "The knowledge-base upload limit is 20 MB."
+            });
+        }
+
+        if (!KnowledgeUploadPolicy.IsSupported(file.FileName))
+        {
+            var extension = Path.GetExtension(file.FileName);
+
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Unsupported file type",
+                Detail = (string.IsNullOrEmpty(extension)
+                        ? "The upload has no file extension."
+                        : $"'{extension}' is not an indexable document format.") +
+                    $" Upload {KnowledgeUploadPolicy.SupportedFormats}."
             });
         }
 

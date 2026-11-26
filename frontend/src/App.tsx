@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { portfolioApi, researchApi, signalsApi } from './api/signalsApi';
 import { AdviceCardList } from './components/AdviceCardList';
 import { DropPanel } from './components/DropPanel';
+import { HowToReadStrip } from './components/HowToReadStrip';
 import { LegalDisclaimerGate } from './components/LegalDisclaimerGate';
 import { QuotationReportImportButton } from './components/QuotationReportImportButton';
 import { RegimeStrip } from './components/RegimeStrip';
@@ -12,6 +13,7 @@ import { TechnicalDisclosure } from './components/ui/TechnicalDisclosure';
 import { TooltipProvider } from './components/ui/Tooltip';
 import { formatCompactPeso, formatElapsedSeconds, formatTimestamp, formatWeekday } from './lib/formatters';
 import { horizonMeta } from './lib/horizons';
+import { dismissHowToRead, isHowToReadDismissed, resetHowToRead } from './lib/howToRead';
 import {
   clearLegalAcceptance,
   hasAcceptedCurrentLegalVersion,
@@ -24,7 +26,8 @@ import {
   type FriendlyError,
 } from './lib/plainAdvice';
 import { isViewingHistory, newestSessionDate } from './lib/sessionSelection';
-import { preloadSignalTable } from './lib/preloaders';
+import { preloadKeyboardShortcutsDialog, preloadSignalTable } from './lib/preloaders';
+import { isTypingTarget, resolveShortcut, type ShortcutActionId } from './lib/shortcuts';
 import {
   fetchQuery,
   getSnapshot,
@@ -68,6 +71,9 @@ const KnowledgeBaseDialog = lazy(async () => ({
 const BeginnerGuideDialog = lazy(async () => ({
   default: (await import('./components/BeginnerGuideDialog')).BeginnerGuideDialog,
 }));
+const KeyboardShortcutsDialog = lazy(async () => ({
+  default: (await import('./components/KeyboardShortcutsDialog')).KeyboardShortcutsDialog,
+}));
 const SignalTable = lazy(async () => ({
   default: (await import('./components/SignalTable')).SignalTable,
 }));
@@ -98,6 +104,9 @@ export default function App() {
   const [tradeDraft, setTradeDraft] = useState<TradeDraft | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [portfolioToken, setPortfolioToken] = useState(0);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // The "three steps" strip is remembered once dismissed; the footer link can always bring it back.
+  const [howToReadHidden, setHowToReadHidden] = useState(() => isHowToReadDismissed());
 
   const refreshPortfolio = useCallback(() => {
     invalidateQueries(queryKeys.portfolioSummary);
@@ -327,6 +336,30 @@ export default function App() {
     setPortfolioOpen(true);
   }, []);
 
+  /** Step 1 of the strip: land on the market call, not merely scroll near it. */
+  const focusMarketCall = useCallback(() => {
+    const call = document.getElementById('market-call');
+    call?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    call?.focus({ preventScroll: true });
+  }, []);
+
+  /**
+   * The footer's permanent "How to read this screen" link. It restores the strip the reader
+   * dismissed, and falls back to the guide when the strip cannot exist (Pro mode, empty session).
+   */
+  const showHowToRead = useCallback(() => {
+    if (viewMode !== 'simple' || !run) {
+      setGuideOpen(true);
+      return;
+    }
+
+    resetHowToRead();
+    setHowToReadHidden(false);
+    window.requestAnimationFrame(() => {
+      document.getElementById('how-to-read')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [run, viewMode]);
+
   const handleTakeSignal = useCallback(
     (item: SignalItem) => {
       const shares = item.orderTicket?.shares ?? item.boardLotShares ?? 0;
@@ -398,6 +431,110 @@ export default function App() {
   }, []);
 
   /**
+   * True whenever a sheet owns the screen. Shortcuts read it so a keystroke can never reach the
+   * page behind a dialog — `?` is the single exception, because it belongs to the sheet itself.
+   */
+  const anyDialogOpen =
+    activeTicker !== null ||
+    knowledgeOpen ||
+    guideOpen ||
+    scorecardOpen ||
+    researchOpen ||
+    portfolioOpen ||
+    shortcutsOpen ||
+    !legalAccepted;
+
+  /**
+   * `resolveShortcut` decides *whether* a keystroke means something; this decides *what*. Every
+   * branch calls the same setter its visible button calls, so a shortcut can never do something
+   * the interface could not do with a tap.
+   */
+  const runShortcut = useCallback(
+    (action: ShortcutActionId) => {
+      switch (action) {
+        case 'horizon-day':
+          setNotice(null);
+          setSelectedDate(null);
+          setHorizon('DAY');
+          return;
+        case 'horizon-week':
+          setNotice(null);
+          setSelectedDate(null);
+          setHorizon('WEEK');
+          return;
+        case 'horizon-month':
+          setNotice(null);
+          setSelectedDate(null);
+          setHorizon('MONTH');
+          return;
+        case 'horizon-year':
+          setNotice(null);
+          setSelectedDate(null);
+          setHorizon('YEAR');
+          return;
+        case 'run':
+          if (busy === null) {
+            void handleRunNow();
+          }
+          return;
+        case 'research':
+          setResearchOpen(true);
+          return;
+        case 'trades':
+          setTradeDraft(null);
+          setPortfolioOpen(true);
+          return;
+        case 'scorecard':
+          setScorecardOpen(true);
+          return;
+        case 'view-simple':
+          setViewMode('simple');
+          return;
+        case 'view-pro':
+          setViewMode('pro');
+          return;
+        case 'toggle-theme':
+          setTheme(theme === 'dark' ? 'light' : 'dark');
+          return;
+        case 'guide':
+          setGuideOpen(true);
+          return;
+        case 'help':
+          // `?` closes its own sheet and refuses to stack on top of a different one.
+          if (anyDialogOpen && !shortcutsOpen) {
+            return;
+          }
+          setShortcutsOpen((open) => !open);
+          return;
+      }
+    },
+    [anyDialogOpen, busy, handleRunNow, setTheme, setViewMode, shortcutsOpen, theme],
+  );
+
+  useEffect(() => {
+    if (!legalAccepted) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = resolveShortcut(
+        { key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey },
+        { typing: isTypingTarget(event.target), dialogOpen: anyDialogOpen },
+      );
+
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+      runShortcut(action);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [anyDialogOpen, legalAccepted, runShortcut]);
+
+  /**
    * One polite live region for the whole shell. Without it a screen-reader user never hears
    * that a run started, that it finished, or why a refresh failed — the page just changes.
    * Elapsed seconds stay out of it on purpose: a live region that ticks every second is noise.
@@ -411,6 +548,13 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={150}>
+      {/* First thing in the tab order: the header is a control bar, the signals are the point. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:border focus:border-line focus:bg-ink-850 focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-fg"
+      >
+        Skip to the signals
+      </a>
       <div className="shell mx-auto flex min-h-dvh w-full max-w-[112rem] flex-col gap-4 3xl:max-w-[128rem] lg:gap-5">
         {/* Mounted from the first render so the region is live before anything changes. */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
@@ -440,6 +584,7 @@ export default function App() {
             setPortfolioOpen(true);
           }}
           onOpenGuide={() => setGuideOpen(true)}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
           portfolioAlerts={portfolioAlerts}
           busy={busy}
           viewMode={viewMode}
@@ -458,245 +603,302 @@ export default function App() {
           }
         />
 
-        {busy === 'run' ? (
-          <div className="rounded-xl border border-sky-400/30 bg-sky-400/5 px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <p className="type-body font-semibold text-fg simple-label">
-                {viewMode === 'simple' ? 'Running the screen…' : `Running the ${horizon} screen…`}
+        {/* Everything below the control bar. The skip link lands here. */}
+        <main id="main-content" tabIndex={-1} className="flex flex-col gap-4 outline-none lg:gap-5">
+          {busy === 'run' ? (
+            <div className="rounded-xl border border-sky-400/30 bg-sky-400/5 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="type-body font-semibold text-fg simple-label">
+                  {viewMode === 'simple' ? 'Running the screen…' : `Running the ${horizon} screen…`}
+                </p>
+                <p className="tabular type-caption text-fg-muted simple-note">
+                  {formatElapsedSeconds(runElapsedSeconds)} elapsed
+                </p>
+              </div>
+              <p className="mt-1 type-caption text-fg-muted simple-note">
+                Downloading today’s prices and filings, then ranking the liquid names. This usually takes
+                under two minutes — the session on screen stays there until the new one lands.
               </p>
-              <p className="tabular type-caption text-fg-muted simple-note">
-                {formatElapsedSeconds(runElapsedSeconds)} elapsed
-              </p>
+              <div aria-hidden className="mt-2 h-1 overflow-hidden rounded-full bg-ink-700">
+                <div className="run-progress h-full rounded-full bg-sky-400" />
+              </div>
             </div>
-            <p className="mt-1 type-caption text-fg-muted simple-note">
-              Downloading today’s prices and filings, then ranking the liquid names. This usually takes
-              under two minutes — the session on screen stays there until the new one lands.
-            </p>
-            <div aria-hidden className="mt-2 h-1 overflow-hidden rounded-full bg-ink-700">
-              <div className="run-progress h-full rounded-full bg-sky-400" />
+          ) : null}
+
+          {viewingHistory ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-amber-400">
+              <span className="type-caption simple-copy">{describeHistoryBanner(selectedDate, viewMode === 'simple')}</span>
+              <Button variant="secondary" onClick={returnToLatest} className="h-8 px-3">
+                {viewMode === 'simple' ? 'Back to latest' : 'Latest session'}
+              </Button>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {viewingHistory ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-amber-400">
-            <span className="type-caption simple-copy">{describeHistoryBanner(selectedDate, viewMode === 'simple')}</span>
-            <Button variant="secondary" onClick={returnToLatest} className="h-8 px-3">
-              {viewMode === 'simple' ? 'Back to latest' : 'Latest session'}
-            </Button>
-          </div>
-        ) : null}
-
-        <WelcomeSetupBanner
-          account={portfolio?.account ?? null}
-          onOpenGuide={() => setGuideOpen(true)}
-          onOpenTrades={() => {
-            setTradeDraft(null);
-            setPortfolioOpen(true);
-          }}
-          onSaved={() => {
-            refreshPortfolio();
-            refresh();
-          }}
-        />
-
-        {notice ? (
-          <div className="rounded-xl border border-mint-400/30 bg-mint-400/5 px-4 py-3 text-mint-400">
-            <p className="type-caption simple-copy">{notice}</p>
-          </div>
-        ) : null}
-
-        {portfolio && portfolio.alerts.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-3 text-amber-400">
-            <span className="type-caption simple-copy">
-              {viewMode === 'simple' ? describePortfolioAlert(portfolio.alerts[0]) : portfolio.alerts[0]}
-              {portfolio.alerts.length > 1 ? ` (+${portfolio.alerts.length - 1} more)` : ''}
-            </span>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setTradeDraft(null);
-                setPortfolioOpen(true);
-              }}
-            >
-              {viewMode === 'simple' ? 'Open My Trades' : 'Open blotter'}
-            </Button>
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-400/5 px-4 py-3 text-rose-400">
-            <div className="measure-wide min-w-0">
-              <p className="type-body font-semibold simple-copy">{error.title}</p>
-              <p className="mt-1 type-caption text-fg-muted simple-copy">{error.message}</p>
-              {error.technical ? (
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-2xs text-fg-subtle simple-note">
-                    Technical details
-                  </summary>
-                  <p className="mt-1 type-caption wrap-break-word font-mono text-fg-subtle simple-note">
-                    {error.technical}
-                  </p>
-                </details>
-              ) : null}
-            </div>
-            <Button variant="secondary" onClick={refresh}>
-              Try again
-            </Button>
-          </div>
-        ) : null}
-
-        {loadState === 'loading' && !data ? (
-          <div
-            className="panel h-[clamp(8rem,18vh,12rem)] animate-pulse"
-            aria-label="Loading signal desk"
+          <WelcomeSetupBanner
+            account={portfolio?.account ?? null}
+            onOpenGuide={() => setGuideOpen(true)}
+            onOpenTrades={() => {
+              setTradeDraft(null);
+              setPortfolioOpen(true);
+            }}
+            onSaved={() => {
+              refreshPortfolio();
+              refresh();
+            }}
           />
-        ) : null}
 
-        {data ? (
-          <>
-            <RegimeStrip
-              regime={data.regime}
-              horizon={horizon}
-              run={run}
-              viewMode={viewMode}
-              trustPulse={data.trustPulse}
-              onOpenScorecard={() => setScorecardOpen(true)}
+          {notice ? (
+            <div className="rounded-xl border border-mint-400/30 bg-mint-400/5 px-4 py-3 text-mint-400">
+              <p className="type-caption simple-copy">{notice}</p>
+            </div>
+          ) : null}
+
+          {portfolio && portfolio.alerts.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-3 text-amber-400">
+              <span className="type-caption simple-copy">
+                {viewMode === 'simple' ? describePortfolioAlert(portfolio.alerts[0]) : portfolio.alerts[0]}
+                {portfolio.alerts.length > 1 ? ` (+${portfolio.alerts.length - 1} more)` : ''}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setTradeDraft(null);
+                  setPortfolioOpen(true);
+                }}
+              >
+                {viewMode === 'simple' ? 'Open My Trades' : 'Open blotter'}
+              </Button>
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-400/5 px-4 py-3 text-rose-400">
+              <div className="measure-wide min-w-0">
+                <p className="type-body font-semibold simple-copy">{error.title}</p>
+                <p className="mt-1 type-caption text-fg-muted simple-copy">{error.message}</p>
+                {error.technical ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-2xs text-fg-subtle simple-note">
+                      Technical details
+                    </summary>
+                    <p className="mt-1 type-caption wrap-break-word font-mono text-fg-subtle simple-note">
+                      {error.technical}
+                    </p>
+                  </details>
+                ) : null}
+              </div>
+              <Button variant="secondary" onClick={refresh}>
+                Try again
+              </Button>
+            </div>
+          ) : null}
+
+          {loadState === 'loading' && !data ? (
+            <div
+              className="panel h-[clamp(8rem,18vh,12rem)] animate-pulse"
+              aria-label="Loading signal desk"
             />
+          ) : null}
 
-            {run ? (
-              viewMode === 'simple' ? (
-                <>
-                  <AdviceCardList items={items} horizon={horizon} onSelect={setActiveTicker} />
-                  <DropPanel drops={drops} friendly />
-                </>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-end justify-between gap-2 px-1">
-                    <div>
-                      <h2 className="type-title text-fg">
-                        {formatWeekday(run.runDate)} · {horizonMeta[horizon].label} book · {items.length} ranked
-                        names
-                      </h2>
-                      <p className="mt-1 type-caption measure-wide text-fg-subtle">
-                        Generated {formatTimestamp(run.createdAtUtc)} · drift recomputed server-side ·{' '}
-                        {run.tradeCount} trade / {run.smallSizeCount} small / {run.watchOnlyCount} watch ·{' '}
-                        {run.recommendedCashPct.toFixed(0)}% cash ·{' '}
-                        {drops.length} exit{drops.length === 1 ? '' : 's'} versus the prior session
-                      </p>
+          {data ? (
+            <>
+              <RegimeStrip
+                regime={data.regime}
+                horizon={horizon}
+                run={run}
+                viewMode={viewMode}
+                trustPulse={data.trustPulse}
+                onOpenScorecard={() => setScorecardOpen(true)}
+              />
+
+              {run ? (
+                viewMode === 'simple' ? (
+                  <>
+                    {howToReadHidden ? null : (
+                      <HowToReadStrip
+                        onReadCall={focusMarketCall}
+                        onOpenSignal={() => {
+                          if (items.length > 0) {
+                            setActiveTicker(items[0].ticker);
+                          } else {
+                            setResearchOpen(true);
+                          }
+                        }}
+                        onPractise={() => {
+                          setTradeDraft(null);
+                          setPortfolioOpen(true);
+                        }}
+                        onDismiss={() => {
+                          dismissHowToRead();
+                          setHowToReadHidden(true);
+                        }}
+                      />
+                    )}
+                    <AdviceCardList
+                      items={items}
+                      horizon={horizon}
+                      runDate={run.runDate}
+                      historical={viewingHistory}
+                      onSelect={setActiveTicker}
+                    />
+                    <DropPanel drops={drops} friendly />
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+                      <div>
+                        <h2 className="type-title text-fg">
+                          {formatWeekday(run.runDate)} · {horizonMeta[horizon].label} book · {items.length} ranked
+                          names
+                        </h2>
+                        <p className="mt-1 type-caption measure-wide text-fg-subtle">
+                          Generated {formatTimestamp(run.createdAtUtc)} · drift recomputed server-side ·{' '}
+                          {run.tradeCount} trade / {run.smallSizeCount} small / {run.watchOnlyCount} watch ·{' '}
+                          {run.recommendedCashPct.toFixed(0)}% cash ·{' '}
+                          {drops.length} exit{drops.length === 1 ? '' : 's'} versus the prior session
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {refreshing && data ? (
+                          <span role="status" className="type-eyebrow text-fg-faint">
+                            Refreshing…
+                          </span>
+                        ) : null}
+                        <QuotationReportImportButton
+                          date={displayDate}
+                          disabled={busy !== null}
+                          onImported={handleQuotationImported}
+                          onError={handleQuotationError}
+                        />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {refreshing && data ? (
-                        <span role="status" className="type-eyebrow text-fg-faint">
-                          Refreshing…
-                        </span>
-                      ) : null}
+
+                    <div className="grid gap-4 3xl:grid-cols-[minmax(0,1fr)_22rem] 3xl:items-start 3xl:gap-5 4xl:grid-cols-[minmax(0,1fr)_26rem]">
+                      <Suspense
+                        fallback={
+                          <div
+                            className="panel h-96 animate-pulse"
+                            aria-label="Loading the ranked table"
+                          />
+                        }
+                      >
+                        <SignalTable
+                          items={items}
+                          horizon={horizon}
+                          onSelect={setActiveTicker}
+                          onTakeTrade={handleTakeSignal}
+                          recommendedCashPct={run.recommendedCashPct}
+                        />
+                      </Suspense>
+                      <DropPanel drops={drops} />
+                    </div>
+                  </>
+                )
+              ) : (
+                <section className="panel flex flex-col items-start gap-4 p-5 sm:p-6">
+                  <h2 className="type-title text-fg">
+                    {viewMode === 'simple'
+                      ? data.dates.length === 0
+                        ? 'No prices yet — run the first screen'
+                        : 'Prices are loaded, but no advice has been computed yet'
+                      : data.dates.length === 0
+                        ? 'No live session stored yet'
+                        : 'Market data loaded, no signal run yet'}
+                  </h2>
+                  {viewMode === 'simple' ? (
+                    <p className="measure type-body text-fg-muted">
+                      Press <span className="font-semibold text-fg">Run Latest Screen</span> and the desk
+                      downloads today’s PSE prices and company filings, then reports which stocks clear its
+                      fee-adjusted test, the Peso levels the model used, and where its cut-loss sits. The first run
+                      needs an internet connection.
+                    </p>
+                  ) : (
+                    <p className="measure type-body text-fg-muted">
+                      {data.dates.length === 0
+                        ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
+                        : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="primary" busy={busy === 'run'} onClick={handleRunNow} disabled={busy !== null}>
+                      {viewMode === 'simple' ? 'Run Latest Screen' : 'Run screen'}
+                    </Button>
+                    {viewMode === 'simple' ? null : (
+                      <Button variant="secondary" onClick={() => setKnowledgeOpen(true)}>
+                        Knowledge base
+                      </Button>
+                    )}
+                    {viewMode === 'simple' ? null : (
                       <QuotationReportImportButton
                         date={displayDate}
                         disabled={busy !== null}
                         onImported={handleQuotationImported}
                         onError={handleQuotationError}
                       />
-                    </div>
+                    )}
                   </div>
+                  {viewMode === 'simple' ? (
+                    <TechnicalDisclosure title="Setup & technical information" className="w-full measure-wide">
+                      <p className="type-body text-fg-muted">
+                        {data.dates.length === 0
+                          ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
+                          : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
+                      </p>
+                    </TechnicalDisclosure>
+                  ) : null}
+                </section>
+              )}
+            </>
+          ) : null}
+        </main>
 
-                  <div className="grid gap-4 3xl:grid-cols-[minmax(0,1fr)_22rem] 3xl:items-start 3xl:gap-5 4xl:grid-cols-[minmax(0,1fr)_26rem]">
-                    <Suspense
-                      fallback={
-                        <div
-                          className="panel h-96 animate-pulse"
-                          aria-label="Loading the ranked table"
-                        />
-                      }
-                    >
-                      <SignalTable
-                        items={items}
-                        horizon={horizon}
-                        onSelect={setActiveTicker}
-                        onTakeTrade={handleTakeSignal}
-                        recommendedCashPct={run.recommendedCashPct}
-                      />
-                    </Suspense>
-                    <DropPanel drops={drops} />
-                  </div>
-                </>
-              )
-            ) : (
-              <section className="panel flex flex-col items-start gap-4 p-5 sm:p-6">
-                <h2 className="type-title text-fg">
-                  {viewMode === 'simple'
-                    ? data.dates.length === 0
-                      ? 'No prices yet — run the first screen'
-                      : 'Prices are loaded, but no advice has been computed yet'
-                    : data.dates.length === 0
-                      ? 'No live session stored yet'
-                      : 'Market data loaded, no signal run yet'}
-                </h2>
-                {viewMode === 'simple' ? (
-                  <p className="measure type-body text-fg-muted">
-                    Press <span className="font-semibold text-fg">Run Latest Screen</span> and the desk
-                    downloads today’s PSE prices and company filings, then reports which stocks clear its
-                    fee-adjusted test, the Peso levels the model used, and where its cut-loss sits. The first run
-                    needs an internet connection.
-                  </p>
-                ) : (
-                  <p className="measure type-body text-fg-muted">
-                    {data.dates.length === 0
-                      ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
-                      : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="primary" busy={busy === 'run'} onClick={handleRunNow} disabled={busy !== null}>
-                    {viewMode === 'simple' ? 'Run Latest Screen' : 'Run screen'}
-                  </Button>
-                  {viewMode === 'simple' ? null : (
-                    <Button variant="secondary" onClick={() => setKnowledgeOpen(true)}>
-                      Knowledge base
-                    </Button>
-                  )}
-                  {viewMode === 'simple' ? null : (
-                    <QuotationReportImportButton
-                      date={displayDate}
-                      disabled={busy !== null}
-                      onImported={handleQuotationImported}
-                      onError={handleQuotationError}
-                    />
-                  )}
-                </div>
-                {viewMode === 'simple' ? (
-                  <TechnicalDisclosure title="Setup & technical information" className="w-full measure-wide">
-                    <p className="type-body text-fg-muted">
-                      {data.dates.length === 0
-                        ? 'This desk is live-only: candles come from Yahoo Finance (PSEI.PS, PHP=X, {TICKER}.PS), disclosures from PSE Edge, playbooks from the SQLite knowledge base and ranking from Ollama Cloud. Nothing is seeded or simulated, so the first run needs network access plus OLLAMA_API_KEY. If any feed is down the API answers 503 instead of inventing data.'
-                        : 'This session has a live market snapshot but no ranked list for this horizon. Run the screen to score the liquid universe, retrieve the matching playbooks, call the desk model and store the ranked list.'}
-                    </p>
-                  </TechnicalDisclosure>
-                ) : null}
-              </section>
-            )}
-          </>
-        ) : null}
-
-
-        <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line/60 px-1 pt-4 type-caption text-fg-faint">
-          <span>
-            {viewMode === 'simple'
-              ? 'PSE Signal Desk · four holding periods · prices already include broker fees · Manila time (UTC+8)'
-              : 'PSE Signal Desk · four horizons · board-lot rounded plans · Manila time (UTC+8)'}
-          </span>
-          <span className="flex flex-wrap items-center gap-2">
-            <span>
-              Research tooling only, not investment advice. Prices from Yahoo Finance and PSE Edge under a
-              personal, non-commercial posture.
-            </span>
+        <footer className="mt-auto flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-t border-line/60 px-1 pt-4 type-caption text-fg-faint">
+          {/* Every shortcut is also a visible control, and the whole map is a click away here —
+              so nothing about this desk requires a keyboard to discover. */}
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <button
               type="button"
-              onClick={reviewLegalNotice}
-              className="underline decoration-dotted underline-offset-2 hover:text-fg-muted"
+              onClick={() => setGuideOpen(true)}
+              className="underline decoration-dotted underline-offset-2 transition hover:text-fg-muted"
             >
-              Review the notice
+              {viewMode === 'simple' ? 'How it works' : 'Guide'} <kbd className="kbd ml-0.5">G</kbd>
             </button>
+            <button
+              type="button"
+              onClick={() => setShortcutsOpen(true)}
+              onPointerEnter={preloadKeyboardShortcutsDialog}
+              onFocus={preloadKeyboardShortcutsDialog}
+              className="underline decoration-dotted underline-offset-2 transition hover:text-fg-muted"
+            >
+              Keyboard shortcuts <kbd className="kbd ml-0.5">?</kbd>
+            </button>
+            <button
+              type="button"
+              onClick={showHowToRead}
+              className="underline decoration-dotted underline-offset-2 transition hover:text-fg-muted"
+            >
+              How to read this screen
+            </button>
+          </span>
+          <span className="flex flex-col gap-1 sm:items-end">
+            <span>
+              {viewMode === 'simple'
+                ? 'PSE Signal Desk · four holding periods · prices already include broker fees · Manila time (UTC+8)'
+                : 'PSE Signal Desk · four horizons · board-lot rounded plans · Manila time (UTC+8)'}
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
+              <span>
+                Research tooling only, not investment advice. Prices from Yahoo Finance and PSE Edge
+                under a personal, non-commercial posture.
+              </span>
+              <button
+                type="button"
+                onClick={reviewLegalNotice}
+                className="underline decoration-dotted underline-offset-2 hover:text-fg-muted"
+              >
+                Review the notice
+              </button>
+            </span>
           </span>
         </footer>
 
@@ -770,6 +972,11 @@ export default function App() {
               onPortfolioMutated={handlePortfolioMutated}
               viewMode={viewMode}
             />
+          </Suspense>
+        ) : null}
+        {shortcutsOpen ? (
+          <Suspense fallback={null}>
+            <KeyboardShortcutsDialog open onOpenChange={setShortcutsOpen} />
           </Suspense>
         ) : null}
         {legalAccepted ? null : <LegalDisclaimerGate onAccept={acceptLegalNotice} />}

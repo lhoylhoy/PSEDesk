@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PseSignalDesk.Infrastructure.Configuration;
 using PseSignalDesk.WebApi.Middleware;
+using PseSignalDesk.WebApi.Services;
 
 namespace PseSignalDesk.Tests.WebApi;
 
@@ -189,6 +190,145 @@ public sealed class ComplianceGuardMiddlewareTests
         Assert.True(called);
     }
 
+    [Theory]
+    [InlineData("http://evil.example")]
+    [InlineData("https://desk.attacker.test:8443")]
+    [InlineData("null")]
+    public async Task InvokeAsync_refuses_a_write_from_an_unknown_browser_origin(string origin)
+    {
+        var called = false;
+        var context = CreateContext("POST", LoopbackV4);
+        context.Request.Headers["Origin"] = origin;
+        var middleware = CreateMiddleware(PersonalLocal(), _ => called = true);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.False(called);
+        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        Assert.Contains("Cross-site", await ReadBodyAsync(context), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_allows_a_write_from_the_configured_frontend_origin()
+    {
+        // The shipped terminal is served by Vite on :5173 while the API listens on :5411.
+        var called = false;
+        var context = CreateContext("POST", LoopbackV4);
+        context.Request.Headers["Origin"] = FrontendCorsOptions.DefaultOrigin;
+        context.Request.Headers["Sec-Fetch-Site"] = "same-site";
+        var middleware = CreateMiddleware(PersonalLocal(), _ => called = true);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(called);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_allows_a_write_from_the_apis_own_origin()
+    {
+        var called = false;
+        var context = CreateContext("POST", LoopbackV4);
+        context.Request.Host = new HostString("localhost", 5411);
+        context.Request.Headers["Origin"] = "http://localhost:5411";
+        var middleware = CreateMiddleware(PersonalLocal(), _ => called = true);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(called);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_refuses_a_write_that_browsers_mark_as_cross_site_without_an_origin()
+    {
+        var called = false;
+        var context = CreateContext("POST", LoopbackV4);
+        context.Request.Headers["Sec-Fetch-Site"] = "cross-site";
+        var middleware = CreateMiddleware(PersonalLocal(), _ => called = true);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.False(called);
+        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_does_not_apply_the_origin_rule_to_reads()
+    {
+        // A cross-origin <img> or fetch can still issue a GET, but a GET changes nothing; the
+        // response stays unreadable because the CORS policy does not allow the origin.
+        var called = false;
+        var context = CreateContext("GET", LoopbackV4);
+        context.Request.Headers["Origin"] = "http://evil.example";
+        var middleware = CreateMiddleware(PersonalLocal(), _ => called = true);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(called);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_locks_out_a_caller_after_repeated_invalid_operator_keys()
+    {
+        var throttle = new OperatorKeyThrottle();
+        var middleware = CreateMiddleware(LicensedWithKey("s3cret-key"), _ => { }, throttle: throttle);
+
+        for (var attempt = 1; attempt < OperatorKeyThrottle.MaxFailuresPerWindow; attempt++)
+        {
+            var context = CreateContext("POST", RemoteV4);
+            context.Request.Headers[ComplianceOptions.OperatorKeyHeaderName] = "wrong";
+
+            await middleware.InvokeAsync(context);
+
+            Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        }
+
+        var lockout = CreateContext("POST", RemoteV4);
+        lockout.Request.Headers[ComplianceOptions.OperatorKeyHeaderName] = "wrong";
+
+        await middleware.InvokeAsync(lockout);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, lockout.Response.StatusCode);
+        Assert.True(int.TryParse(lockout.Response.Headers.RetryAfter.ToString(), out var retryAfter));
+        Assert.InRange(retryAfter, 1, (int)OperatorKeyThrottle.FailureWindow.TotalSeconds);
+
+        var afterwards = CreateContext("POST", RemoteV4);
+        afterwards.Request.Headers[ComplianceOptions.OperatorKeyHeaderName] = "s3cret-key";
+
+        await middleware.InvokeAsync(afterwards);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, afterwards.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_forgets_failures_after_a_correct_operator_key()
+    {
+        var throttle = new OperatorKeyThrottle();
+        var called = false;
+        var middleware = CreateMiddleware(LicensedWithKey("s3cret-key"), _ => called = true, throttle: throttle);
+
+        for (var attempt = 1; attempt < OperatorKeyThrottle.MaxFailuresPerWindow; attempt++)
+        {
+            var wrong = CreateContext("POST", RemoteV4);
+            wrong.Request.Headers[ComplianceOptions.OperatorKeyHeaderName] = "wrong";
+
+            await middleware.InvokeAsync(wrong);
+        }
+
+        var correct = CreateContext("POST", RemoteV4);
+        correct.Request.Headers[ComplianceOptions.OperatorKeyHeaderName] = "s3cret-key";
+
+        await middleware.InvokeAsync(correct);
+
+        Assert.True(called);
+
+        var afterReset = CreateContext("POST", RemoteV4);
+        afterReset.Request.Headers[ComplianceOptions.OperatorKeyHeaderName] = "wrong";
+
+        await middleware.InvokeAsync(afterReset);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, afterReset.Response.StatusCode);
+    }
+
     private static ComplianceOptions PersonalLocal() => new()
     {
         DeploymentMode = ComplianceOptions.PersonalLocalMode,
@@ -203,7 +343,11 @@ public sealed class ComplianceGuardMiddlewareTests
         OperatorApiKey = key
     };
 
-    private static ComplianceGuardMiddleware CreateMiddleware(ComplianceOptions options, Action<HttpContext> next) =>
+    private static ComplianceGuardMiddleware CreateMiddleware(
+        ComplianceOptions options,
+        Action<HttpContext> next,
+        FrontendCorsOptions? cors = null,
+        OperatorKeyThrottle? throttle = null) =>
         new(
             context =>
             {
@@ -211,6 +355,8 @@ public sealed class ComplianceGuardMiddlewareTests
                 return Task.CompletedTask;
             },
             Options.Create(options),
+            Options.Create(cors ?? new FrontendCorsOptions()),
+            throttle ?? new OperatorKeyThrottle(),
             NullLogger<ComplianceGuardMiddleware>.Instance);
 
     private static DefaultHttpContext CreateContext(

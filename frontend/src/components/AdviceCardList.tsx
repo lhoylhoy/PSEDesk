@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { Horizon, SignalItem, WaveTradePlan } from '../types/signals';
 import { cn } from '../lib/cn';
-import { formatCompactPeso, formatInteger, formatPrice, formatRatio } from '../lib/formatters';
+import { formatCompactPeso, formatInteger, formatPrice, formatRatio, formatWeekday } from '../lib/formatters';
 import { horizonMeta } from '../lib/horizons';
 import {
   computePlanPercentages,
   describeEntryTiming,
+  describeNextStep,
   describePlainVerdict,
   describeSignalRow,
   plainVerdictBadgeClass,
@@ -20,6 +21,10 @@ import { InfoTip } from './ui/InfoTip';
 interface AdviceCardListProps {
   items: SignalItem[];
   horizon: Horizon;
+  /** The stored session being read; the heading names it instead of saying "today". */
+  runDate?: string | null;
+  /** True while a session other than the newest one is on screen. */
+  historical?: boolean;
   /** Opens the ticker's detail modal — the same sheet every row and the Pro table open. */
   onSelect: (ticker: string) => void;
 }
@@ -384,10 +389,14 @@ function SignalRow({ item, horizon, onSelect }: SignalRowProps) {
           <span className="type-caption mt-1 block text-fg-subtle simple-note">
             {row.subline}
           </span>
+          {/* The row is a button that opens a sheet; say so, because "Why?" left the action
+              ambiguous and the chevron alone is invisible to a screen reader. */}
+          <span className="sr-only">Opens the full plan in a detail sheet.</span>
         </span>
-        <span className="type-caption mt-0.5 flex shrink-0 items-center gap-1 font-semibold text-fg-muted simple-label">
+        <span className="type-caption mt-0.5 flex shrink-0 items-center gap-1 whitespace-nowrap font-semibold text-fg-muted simple-label">
+          {/* Always visible: a lone chevron was the only hint that a row was tappable. */}
+          <span>View plan</span>
           <span aria-hidden>▸</span>
-          <span className="hidden sm:inline">Why?</span>
         </span>
       </button>
     </li>
@@ -453,16 +462,20 @@ function WatchList({ items, onSelect }: { items: SignalItem[]; onSelect: (ticker
  * Nothing here is recomputed — a row only renames server fields, and the modal formats the
  * server order ticket.
  */
-export function AdviceCardList({ items, horizon, onSelect }: AdviceCardListProps) {
+export function AdviceCardList({ items, horizon, runDate, historical = false, onSelect }: AdviceCardListProps) {
   const meta = horizonMeta[horizon];
   const buyable = items.filter((item) => item.edgeVerdict !== 'WATCH_ONLY');
   const watchOnly = items.filter((item) => item.edgeVerdict === 'WATCH_ONLY');
+  const nextStep = describeNextStep({ buyableCount: buyable.length, watchOnlyCount: watchOnly.length });
 
   return (
     <section className="panel @container overflow-hidden">
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-4 py-4 sm:px-5">
         <div>
-          <h2 className="type-title text-fg">Today’s trade signals</h2>
+          {/* "Today’s" is only true for the newest session; a past session is named by its date. */}
+          <h2 className="type-title text-fg">
+            {historical ? `Trade signals · ${formatWeekday(runDate)}` : 'Today’s trade signals'}
+          </h2>
           <p className="type-caption measure mt-1.5 text-fg-subtle simple-copy">
             {meta.friendlySummary}
           </p>
@@ -472,8 +485,16 @@ export function AdviceCardList({ items, horizon, onSelect }: AdviceCardListProps
         </span>
       </header>
 
-      <p className="type-eyebrow px-4 pb-3 text-fg-faint simple-label sm:px-5">
-        {meta.friendlyTitle} · fees and board lots already priced in · tap a row to open its details
+      <p className="type-eyebrow px-4 pb-2 text-fg-faint simple-label sm:px-5">
+        {meta.friendlyTitle} · fees and board lots already priced in
+      </p>
+
+      {/* One sentence that answers "what now?" before the reader has to infer it from the rows. */}
+      <p className="flex items-start gap-1.5 px-4 pb-3 type-body text-sky-300 simple-copy sm:px-5">
+        <span aria-hidden className="pt-px text-fg-subtle">
+          →
+        </span>
+        <span className="measure">{nextStep}</span>
       </p>
 
       {buyable.length === 0 ? (

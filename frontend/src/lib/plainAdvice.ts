@@ -1104,6 +1104,32 @@ export type PlainSignalRowSource = Pick<
   wavePlan?: SignalItem['wavePlan'];
 };
 
+/** Counts the session produced, for the one-sentence next step. */
+export interface NextStepCounts {
+  /** Names the desk would actually size (TRADE / SMALL_SIZE). */
+  buyableCount: number;
+  /** Names ranked but funded at zero. */
+  watchOnlyCount: number;
+}
+
+/**
+ * One sentence under the list header answering "so what do I do now?".
+ *
+ * It only ever points at a control that is on the screen, and it never turns an empty session
+ * into a nudge to trade: "nothing cleared" is reported as a complete answer.
+ */
+export function describeNextStep({ buyableCount, watchOnlyCount }: NextStepCounts): string {
+  if (buyableCount > 0) {
+    return 'Next: open a name below to read its whole plan, then log it in My Trades to practise it.';
+  }
+
+  if (watchOnlyCount > 0) {
+    return 'Next: nothing is buyable today. The watch list below shows what the desk is tracking, and why it is waiting.';
+  }
+
+  return 'Next: nothing cleared the screen today, so there is nothing to open. The screen runs again after the next close.';
+}
+
 export function describeSignalRow(item: PlainSignalRowSource): PlainSignalRow {
   const verdict = describePlainVerdict(item.edgeVerdict);
   const timing = item.wavePlan

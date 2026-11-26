@@ -14,4 +14,17 @@ public static class DeskRateLimitPolicies
     /// polite-scraping and no-unbounded-spend promises in <c>THIRD_PARTY_NOTICES.md</c> preclude.
     /// </summary>
     public const string Expensive = "desk-expensive";
+
+    /// <summary>
+    /// The single-ticker research lookup. It does not spend model credit, but each call still asks
+    /// Yahoo Finance and PSE Edge for a chart, so a catalog walk is exactly the "loop that hammers
+    /// the exchange" the polite-scraping posture precludes.
+    /// </summary>
+    public const string Upstream = "desk-upstream";
+
+    /// <summary>
+    /// The knowledge-base writes that call Ollama Cloud embeddings. They are not expensive in
+    /// upstream traffic, but every accepted upload is paid model work.
+    /// </summary>
+    public const string Model = "desk-model";
 }
