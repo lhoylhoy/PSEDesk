@@ -88,7 +88,11 @@ public sealed class QuantitativeFilterService
         bool computeEmpiricalBaseRate = true,
         bool includeLiveForeignFlow = true)
     {
-        var bars = stock.Bars.OrderBy(b => b.Date).ToList();
+        // The replay feeds this a prefix that is already in date order, a few thousand times; a
+        // defensive sort there was one of the largest allocations in the filter.
+        var bars = IsAscendingByDate(stock.Bars)
+            ? stock.Bars
+            : stock.Bars.OrderBy(b => b.Date).ToList();
         if (bars.Count < MinBarsRequired)
         {
             return null;
@@ -166,19 +170,55 @@ public sealed class QuantitativeFilterService
         var sma200Value = sma200.Value;
         var atrValue = atr.Value;
 
-        var window = bars.TakeLast(20).ToList();
-        var avgVolume = window.Average(b => (double)b.Volume);
-        var avgTurnover = window.Average(b => b.Close * b.Volume);
+        // One walk over the trailing twenty sessions yields every window statistic the metric needs
+        // — the volume and turnover means, the active-session count, the range and the turnover set
+        // for the median. Four separate LINQ passes plus a copied list per evaluated session was the
+        // hot spot in a bar-by-bar replay; the arithmetic and its order are unchanged.
+        var windowStart = Math.Max(0, bars.Count - 20);
+        var windowCount = bars.Count - windowStart;
+        var volumeSum = 0d;
+        var turnoverSum = 0m;
+        var activeTradingDays = 0;
+        var lowest = bars[windowStart].Low;
+        var highest = bars[windowStart].High;
+        var turnovers = new decimal[windowCount];
+
+        for (var index = windowStart; index < bars.Count; index++)
+        {
+            var bar = bars[index];
+            volumeSum += (double)bar.Volume;
+
+            var turnover = bar.Close * bar.Volume;
+            turnoverSum += turnover;
+            turnovers[index - windowStart] = turnover;
+
+            if (bar.Volume > 0)
+            {
+                activeTradingDays++;
+            }
+
+            if (bar.Low < lowest)
+            {
+                lowest = bar.Low;
+            }
+
+            if (bar.High > highest)
+            {
+                highest = bar.High;
+            }
+        }
+
+        var avgVolume = volumeSum / windowCount;
+        var avgTurnover = turnoverSum / windowCount;
         var volumeRatio = avgVolume <= 0d ? 0m : (decimal)(last.Volume / avgVolume);
 
         // Robust liquidity: the mean turnover of twenty sessions is one block trade away from
         // passing a floor that most sessions never reach. The median and the count of sessions
         // that actually printed volume are the numbers a desk can rely on.
-        var medianTurnover = ComputeMedianTurnover20d(window);
-        var activeTradingDays = window.Count(bar => bar.Volume > 0);
+        var medianTurnover = ComputeMedianTurnover(turnovers);
 
-        var support = PseBoardLotService.RoundToValidTick(window.Min(b => b.Low));
-        var resistance = PseBoardLotService.RoundToValidTick(window.Max(b => b.High));
+        var support = PseBoardLotService.RoundToValidTick(lowest);
+        var resistance = PseBoardLotService.RoundToValidTick(highest);
 
         var previousClose = bars[^2].Close;
         var changePct = previousClose <= 0m
@@ -769,15 +809,34 @@ public sealed class QuantitativeFilterService
             return 0m;
         }
 
-        var turnovers = window
-            .Select(bar => bar.Close * bar.Volume)
-            .OrderBy(value => value)
-            .ToList();
+        var turnovers = new decimal[window.Count];
 
-        var middle = turnovers.Count / 2;
-        var median = turnovers.Count % 2 == 0
-            ? (turnovers[middle - 1] + turnovers[middle]) / 2m
-            : turnovers[middle];
+        for (var index = 0; index < window.Count; index++)
+        {
+            turnovers[index] = window[index].Close * window[index].Volume;
+        }
+
+        return ComputeMedianTurnover(turnovers);
+    }
+
+    /// <summary>
+    /// Median of a turnover window, rounded to the centavo. The array is copied before sorting so the
+    /// caller's window keeps its order; the copy is the size of the window, not of the history.
+    /// </summary>
+    private static decimal ComputeMedianTurnover(decimal[] turnovers)
+    {
+        if (turnovers.Length == 0)
+        {
+            return 0m;
+        }
+
+        var sorted = (decimal[])turnovers.Clone();
+        Array.Sort(sorted);
+
+        var middle = sorted.Length / 2;
+        var median = sorted.Length % 2 == 0
+            ? (sorted[middle - 1] + sorted[middle]) / 2m
+            : sorted[middle];
 
         return decimal.Round(median, 2, MidpointRounding.AwayFromZero);
     }
@@ -900,6 +959,64 @@ public sealed class QuantitativeFilterService
     }
 
     /// <summary>
+    /// The EMA at every bar of the series, seeded with the initial <paramref name="period"/>-bar
+    /// SMA. Index <c>i</c> holds the value a chart would have printed on that bar, and everything
+    /// before the seed is null.
+    /// <para>
+    /// This is the same recurrence as <see cref="ComputeEma"/> applied to the prefix ending at that
+    /// index — the seed adds the first <c>period</c> closes in order and each step multiplies by the
+    /// same <c>2 / (period + 1)</c> — but it walks the series once instead of once per bar. A replay
+    /// that needs the trail at every session was paying O(n²) for the identical numbers.
+    /// </para>
+    /// </summary>
+    public static decimal?[] ComputeEmaSeries(IReadOnlyList<decimal> values, int period = EmaPeriod)
+    {
+        var series = new decimal?[values.Count];
+
+        if (period <= 0 || values.Count < period)
+        {
+            return series;
+        }
+
+        var seed = 0m;
+        for (var index = 0; index < period; index++)
+        {
+            seed += values[index];
+        }
+
+        var ema = seed / period;
+        var multiplier = 2m / (period + 1m);
+
+        series[period - 1] = ema;
+
+        for (var index = period; index < values.Count; index++)
+        {
+            ema = (values[index] * multiplier) + (ema * (1m - multiplier));
+            series[index] = ema;
+        }
+
+        return series;
+    }
+
+    /// <summary>
+    /// True when the bars are already in ascending date order, so a caller can skip the defensive
+    /// sort. A replay hands the filter the same growing prefix thousands of times, and re-sorting an
+    /// already-sorted list was one of the largest allocations in the filter.
+    /// </summary>
+    public static bool IsAscendingByDate(IReadOnlyList<OhlcvBar> bars)
+    {
+        for (var index = 1; index < bars.Count; index++)
+        {
+            if (bars[index].Date < bars[index - 1].Date)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Simple moving average over the most recent <paramref name="period"/> values.
     /// </summary>
     public static decimal? ComputeSma(IReadOnlyList<decimal> values, int period)
@@ -992,16 +1109,31 @@ public sealed class QuantitativeFilterService
             return null;
         }
 
-        var shortAtr = ComputeAtr(bars.TakeLast(6).ToList(), 5);
+        // The short leg is the ATR of the last six bars with a five-bar period, which reduces to the
+        // mean of those five true ranges. Summing them by index avoids copying the slice for a list
+        // allocation on every evaluated session; the true ranges and their order are identical.
+        var shortStart = bars.Count - 5;
+        var shortSum = 0m;
+
+        for (var index = shortStart; index < bars.Count; index++)
+        {
+            var bar = bars[index];
+            var previousClose = bars[index - 1].Close;
+
+            shortSum += Math.Max(
+                bar.High - bar.Low,
+                Math.Max(Math.Abs(bar.High - previousClose), Math.Abs(bar.Low - previousClose)));
+        }
+
+        var shortAtr = shortSum / 5m;
         var longAtr = ComputeAtr(bars);
 
-        if (shortAtr is not decimal shortValue || longAtr is not decimal longValue ||
-            shortValue <= 0m || longValue <= 0m)
+        if (shortAtr <= 0m || longAtr is not decimal longValue || longValue <= 0m)
         {
             return null;
         }
 
-        return decimal.Round(shortValue / longValue, 2, MidpointRounding.AwayFromZero);
+        return decimal.Round(shortAtr / longValue, 2, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>
@@ -1135,12 +1267,14 @@ public sealed class QuantitativeFilterService
             return null;
         }
 
-        var window = bars.Skip(bars.Count - (period + 1)).ToList();
+        // Net move over the path length, summed by index over the same window: the replay calls this
+        // on every bar, so the window is walked in place instead of copied into a list first.
+        var windowStart = bars.Count - (period + 1);
         var path = 0m;
 
-        for (var index = 1; index < window.Count; index++)
+        for (var index = windowStart + 1; index < bars.Count; index++)
         {
-            path += Math.Abs(window[index].Close - window[index - 1].Close);
+            path += Math.Abs(bars[index].Close - bars[index - 1].Close);
         }
 
         if (path <= 0m)
@@ -1148,7 +1282,7 @@ public sealed class QuantitativeFilterService
             return null;
         }
 
-        var netMove = Math.Abs(window[^1].Close - window[0].Close);
+        var netMove = Math.Abs(bars[^1].Close - bars[windowStart].Close);
 
         return decimal.Round(Math.Clamp(netMove / path, 0m, 1m), 4, MidpointRounding.AwayFromZero);
     }
@@ -1401,7 +1535,20 @@ public sealed class QuantitativeFilterService
         }
 
         var currentAverage = ComputeSma(closes, WeinsteinPeriod);
-        var priorAverage = ComputeSma(closes.Take(closes.Count - WeinsteinSlopeLookback).ToList(), WeinsteinPeriod);
+
+        // The slope compares today's 150-day average with the one from twenty sessions ago. Summing
+        // that window by index gives the same average as copying the prefix into a list, without the
+        // copy: the replay calls this on every bar.
+        var priorEnd = closes.Count - WeinsteinSlopeLookback;
+        var priorStart = priorEnd - WeinsteinPeriod;
+        var priorSum = 0m;
+
+        for (var index = priorStart; index < priorEnd; index++)
+        {
+            priorSum += closes[index];
+        }
+
+        var priorAverage = priorStart >= 0 ? priorSum / WeinsteinPeriod : (decimal?)null;
 
         if (currentAverage is not decimal current || priorAverage is not decimal prior)
         {

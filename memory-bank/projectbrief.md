@@ -45,7 +45,7 @@ The product is research tooling, **not investment advice**, and it is **not a li
 
 ## Success criteria
 
-- `dotnet test backend/PseSignalDesk.slnx` passes (**416 tests** as of 2026-11-26).
+- `dotnet test backend/PseSignalDesk.slnx` passes (**433 tests + 1 skipped manual benchmark** as of 2026-11-26), including the golden snapshots that pin the replay's published numbers byte-for-byte.
 - `npm test` in `frontend/` passes (**49 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/legalConsent.test.ts` and `lib/__tests__/queryCache.test.ts`).
 - `npm run build` in `frontend/` passes (`tsc --noEmit` + Vite build), with each dialog and the Pro table in their own chunk.
 - The terminal is usable one-thumbed on a 320px phone and dense on a 2560px desktop from the **same payload**: dialogs become bottom sheets, wide tables fall back to cards, and no mobile variant fetches a different endpoint.
@@ -73,11 +73,13 @@ backend/
     PseSignalDesk.Domain/          # entities, enums, PSE board-lot/tick/static-band rules, expectancy + fee maths
     PseSignalDesk.Application/     # quant filter, horizons, edge/odds, tickets, portfolio, research, backtest,
                                    # training, market direction, wave plans, pipeline, DTOs, interfaces
-    PseSignalDesk.Infrastructure/  # EF Core SQLite, live Yahoo/PSE Edge provider (+DQR), Ollama clients, RAG, scheduler
+    PseSignalDesk.Infrastructure/  # EF Core SQLite, live Yahoo/PSE Edge provider (+DQR) with its per-URL download cache,
+                                   # Ollama clients, RAG, scheduler
     PseSignalDesk.WebApi/          # controllers (signals, research, portfolio, knowledge), compliance + 499 middleware,
                                    # DI wiring, appsettings, EF migrations
-  tests/PseSignalDesk.Tests/        # 416 cases: board lot, quant, edge, tickets, portfolio, research/backtest, outcome,
-                                   # training, drift policy, direction/wave, classifier, parser, pipeline, knowledge, provider, prompt,
+  tests/PseSignalDesk.Tests/        # 434 cases (433 run + 1 skipped benchmark): board lot, quant, edge, tickets, portfolio,
+                                   # research/backtest, golden snapshots, outcome, training, drift policy, direction/wave,
+                                   # classifier, parser, pipeline, knowledge, provider + download cache, prompt,
                                    # compliance, cancellation middleware
 frontend/
   src/

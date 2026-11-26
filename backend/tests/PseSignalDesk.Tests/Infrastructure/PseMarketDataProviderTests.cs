@@ -375,6 +375,56 @@ public sealed class PseMarketDataProviderTests
         Assert.Contains("proxy", batch.RegimeNote, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task FetchAsync_serves_a_repeated_session_from_the_cache_instead_of_refetching_yahoo()
+    {
+        // The daily run, a manual run and the research panel ask for the same chart URLs within
+        // minutes of each other; only the first of them may cost a download.
+        var live = new LiveFeedHandler(TradeDate);
+        var requests = 0;
+
+        var provider = CreateProvider(new StubHandler((request, token) =>
+        {
+            Interlocked.Increment(ref requests);
+            return live.RespondAsync(request, token);
+        }));
+
+        var first = await provider.FetchAsync(TradeDate);
+        var afterFirstRun = requests;
+
+        var second = await provider.FetchAsync(TradeDate);
+
+        Assert.True(afterFirstRun >= 10, $"the first run only fetched {afterFirstRun} URLs");
+        Assert.Equal(afterFirstRun, requests);
+        Assert.Equal(first.TradeDate, second.TradeDate);
+        Assert.Equal(
+            first.Stocks.Select(stock => stock.Ticker),
+            second.Stocks.Select(stock => stock.Ticker));
+    }
+
+    [Fact]
+    public async Task InvalidateCache_forces_the_next_run_to_refetch_the_live_tape()
+    {
+        var live = new LiveFeedHandler(TradeDate);
+        var requests = 0;
+
+        var provider = CreateProvider(new StubHandler((request, token) =>
+        {
+            Interlocked.Increment(ref requests);
+            return live.RespondAsync(request, token);
+        }));
+
+        await provider.FetchAsync(TradeDate);
+        var afterFirstRun = requests;
+
+        provider.InvalidateCache();
+        await provider.FetchAsync(TradeDate);
+
+        Assert.True(
+            requests > afterFirstRun,
+            $"invalidation did not refetch: {requests} requests, {afterFirstRun} before");
+    }
+
     /// <summary>
     /// The one-bar index payload the live feed really returns for <c>PSEI.PS</c>: a price with no
     /// history, which is not enough to describe a 200-session trend.

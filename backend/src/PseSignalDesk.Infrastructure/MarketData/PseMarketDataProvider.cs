@@ -56,6 +56,16 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     private const int MacroLookbackDays = 75;
     private const string LiveQuotationSource = "pse-dqr-live";
 
+    /// <summary>
+    /// Upstream freshness bounds. A run only needs the tape to be right for as long as it lasts,
+    /// and the daily run, a backtest and the research panel all request the same chart URLs, so a
+    /// chart body is reused for ten minutes and an Edge page for five. <see cref="InvalidateCache"/>
+    /// clears both when a caller needs the newest tape instead.
+    /// </summary>
+    private static readonly TimeSpan ChartCacheTimeToLive = TimeSpan.FromMinutes(10);
+
+    private static readonly TimeSpan DisclosureCacheTimeToLive = TimeSpan.FromMinutes(5);
+
     private static readonly Regex AnchorTextRegex = new(
         "<a[^>]*>(?<text>[^<]{15,240})</a>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -91,18 +101,28 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     private readonly MarketDataOptions _options;
     private readonly ILogger<PseMarketDataProvider> _logger;
     private readonly IDailyQuotationParser _quotationParser;
+    private readonly MarketDataCache _cache;
 
     public PseMarketDataProvider(
         HttpClient httpClient,
         IOptions<MarketDataOptions> options,
         ILogger<PseMarketDataProvider> logger,
-        IDailyQuotationParser? quotationParser = null)
+        IDailyQuotationParser? quotationParser = null,
+        MarketDataCache? cache = null)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _logger = logger;
         _quotationParser = quotationParser ?? new PseDailyQuotationParser();
+        _cache = cache ?? new MarketDataCache();
     }
+
+    /// <summary>
+    /// Drops every cached upstream response so the next fetch reflects the live tape. The
+    /// container registers the cache as a singleton, so this clears it for every provider
+    /// instance in the process; providers built by hand own their private cache.
+    /// </summary>
+    public void InvalidateCache() => _cache.Clear();
 
     public Task<MarketDataBatch> FetchAsync(
         DateOnly tradeDate,
@@ -127,16 +147,26 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         var (pseiClose, pseiSma50, pseiSma200, regime) = ComputeIndexRegime(index);
         var pseiRealizedVol20dPct = QuantitativeFilterService.ComputeRealizedVolatilityPct(
             indexBars.Select(bar => bar.Close).ToList());
-        var usdPhp = await FetchUsdPhpAsync(sessionDate, lookbackDays, cancellationToken);
-        var disclosures = await FetchDisclosuresAsync(sessionDate, cancellationToken);
-        var stocks = await FetchStocksAsync(sessionDate, disclosures, lookbackDays, cancellationToken);
 
-        // Two independent best-effort enrichments. Neither may block the PSE tape: the DQR and
-        // the macro symbols fail soft to null, and the run keeps its live-only guarantees.
+        // Every remaining stage is addressed by the session date the index just decided, and none
+        // of them needs another's result, so they run together instead of in a chain: the FX
+        // series, the Edge pages, the DQR and the macro dials are downloaded while the ticker
+        // charts are already in flight. The stock stage still reads the disclosure map — it
+        // attaches each ticker's headlines — but it only awaits that map once its own chart has
+        // landed, so a slow Edge page no longer holds up 24 chart downloads.
+        var usdPhpTask = FetchUsdPhpAsync(sessionDate, lookbackDays, cancellationToken);
+        var disclosuresTask = FetchDisclosuresAsync(sessionDate, cancellationToken);
         var quotationTask = TryFetchQuotationReportAsync(sessionDate, cancellationToken);
         var macroTask = FetchMacroBenchmarksAsync(sessionDate, cancellationToken);
-        await Task.WhenAll(quotationTask, macroTask);
+        var stocksTask = FetchStocksAsync(sessionDate, disclosuresTask, lookbackDays, cancellationToken);
 
+        await Task.WhenAll(usdPhpTask, disclosuresTask, quotationTask, macroTask, stocksTask);
+
+        var usdPhp = await usdPhpTask;
+        var stocks = await stocksTask;
+
+        // The two best-effort enrichments were part of the same fan-out: the DQR and the macro
+        // symbols fail soft to null, and the run keeps its live-only guarantees.
         var quotation = await quotationTask;
         var macro = await macroTask;
         var netForeignFlowPhp = quotation?.MarketNetForeignFlowPhp;
@@ -989,7 +1019,7 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pages = Math.Max(1, _options.DisclosurePagesToScan);
 
-        var firstPage = await FetchDisclosureHtmlAsync(_options.PseEdgeAnnouncementsUrl, throwOnFailure: true, cancellationToken);
+        var firstPage = await FetchDisclosureHtmlAsync(_options.PseEdgeAnnouncementsUrl, cancellationToken);
         AddFilings(filings, seen, ExtractFilings(firstPage, sessionDate));
 
         for (var page = 2; page <= pages; page++)
@@ -1054,11 +1084,16 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
             ? baseUrl
             : $"{baseUrl}{(baseUrl.Contains('?') ? '&' : '?')}pageNo={page}";
 
+    /// <summary>
+    /// Fetches an extra Edge page. The page is served from the cache when it was already
+    /// downloaded inside the TTL; an unavailable page is logged and reported as null so the
+    /// caller stops paging instead of failing the whole disclosure scan.
+    /// </summary>
     private async Task<string?> TryFetchDisclosureHtmlAsync(string url, CancellationToken cancellationToken)
     {
         try
         {
-            return await FetchDisclosureHtmlAsync(url, throwOnFailure: false, cancellationToken);
+            return await FetchDisclosureHtmlAsync(url, cancellationToken);
         }
         catch (MarketDataUnavailableException ex)
         {
@@ -1068,12 +1103,28 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     }
 
     private Task<string> FetchDisclosureHtmlAsync(CancellationToken cancellationToken) =>
-        FetchDisclosureHtmlAsync(_options.PseEdgeAnnouncementsUrl, throwOnFailure: true, cancellationToken);
+        FetchDisclosureHtmlAsync(_options.PseEdgeAnnouncementsUrl, cancellationToken);
 
-    private async Task<string> FetchDisclosureHtmlAsync(
-        string url,
-        bool throwOnFailure,
-        CancellationToken cancellationToken)
+    /// <summary>
+    /// One Edge page, cached per URL for <see cref="DisclosureCacheTimeToLive"/>. Only a downloaded
+    /// page is cached: <see cref="DownloadDisclosureHtmlAsync"/> throws on every failure, and the
+    /// cache drops a failed entry before the exception reaches the caller, so a transient 5xx is
+    /// retried by the next run rather than remembered as an empty page.
+    /// </summary>
+    private Task<string> FetchDisclosureHtmlAsync(string url, CancellationToken cancellationToken) =>
+        _cache.GetOrAddAsync(
+            $"edge:{url}",
+            DisclosureCacheTimeToLive,
+            // The shared download outlives this caller; DownloadDisclosureHtmlAsync still applies
+            // the configured per-request timeout on its own.
+            () => DownloadDisclosureHtmlAsync(url, CancellationToken.None),
+            cancellationToken);
+
+    /// <summary>
+    /// The actual GET. Every failure is raised as <see cref="MarketDataUnavailableException"/> so
+    /// the cache never stores a non-page; the caller decides whether that is fatal.
+    /// </summary>
+    private async Task<string> DownloadDisclosureHtmlAsync(string url, CancellationToken cancellationToken)
     {
         using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         requestTimeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _options.RequestTimeoutSeconds)));
@@ -1086,32 +1137,16 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
             if (!response.IsSuccessStatusCode)
             {
-                if (!throwOnFailure)
-                {
-                    _logger.LogWarning(
-                        "PSE Edge returned HTTP {Status} for {Url}; this page is skipped.",
-                        (int)response.StatusCode,
-                        url);
-                    return string.Empty;
-                }
-
                 throw new MarketDataUnavailableException(
-                    $"PSE Edge returned HTTP {(int)response.StatusCode} for the announcement search. " +
-                    "Disclosures are part of the live signal contract, so the run fails.");
+                    $"PSE Edge returned HTTP {(int)response.StatusCode} for {url}. Disclosures are " +
+                    "part of the live signal contract, so the run fails.");
             }
 
             html = await response.Content.ReadAsStringAsync(requestTimeout.Token);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (MarketDataUnavailableException)
         {
-            // The caller went away; that is not a feed outage.
             throw;
-        }
-        catch (Exception ex) when (!throwOnFailure && ex is OperationCanceledException or HttpRequestException)
-        {
-            // Extra pages are best-effort: a timeout or transport error is logged, not fatal.
-            _logger.LogWarning(ex, "PSE Edge page unavailable: {Url}", url);
-            return string.Empty;
         }
         catch (OperationCanceledException ex)
         {
@@ -1125,11 +1160,6 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
         if (string.IsNullOrWhiteSpace(html))
         {
-            if (!throwOnFailure)
-            {
-                return string.Empty;
-            }
-
             throw new MarketDataUnavailableException("PSE Edge returned an empty announcements page.");
         }
 
@@ -1142,16 +1172,21 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     /// skipped with a warning; transport failures are fatal. Fewer than ten surviving
     /// names means the universe is not tradeable, so the run fails.
     /// </summary>
+    /// <remarks>
+    /// The disclosure map arrives as a task rather than a dictionary so the Edge pages can be
+    /// scraped while these charts are downloading: each ticker awaits it only after its own
+    /// chart has landed, which is the same point at which it used to read a finished map.
+    /// </remarks>
     private async Task<IReadOnlyList<StockMarketData>> FetchStocksAsync(
         DateOnly sessionDate,
-        IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>> disclosures,
+        Task<IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>>> disclosuresTask,
         int lookbackDays,
         CancellationToken cancellationToken)
     {
         using var throttle = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrency));
 
         var tasks = PseTickerCatalog.All
-            .Select(info => FetchStockAsync(info, sessionDate, disclosures, lookbackDays, throttle, cancellationToken))
+            .Select(info => FetchStockAsync(info, sessionDate, disclosuresTask, lookbackDays, throttle, cancellationToken))
             .ToList();
 
         var results = await Task.WhenAll(tasks);
@@ -1170,7 +1205,7 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     private async Task<StockMarketData?> FetchStockAsync(
         PseTickerInfo info,
         DateOnly sessionDate,
-        IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>> disclosures,
+        Task<IReadOnlyDictionary<string, IReadOnlyList<StockDisclosure>>> disclosuresTask,
         int lookbackDays,
         SemaphoreSlim throttle,
         CancellationToken cancellationToken)
@@ -1218,6 +1253,8 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
                 return null;
             }
 
+            var disclosures = await disclosuresTask;
+
             var tickerDisclosures = disclosures.TryGetValue(info.Ticker, out var headlines)
                 ? headlines
                 : Array.Empty<StockDisclosure>();
@@ -1242,6 +1279,13 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     /// timeout or transport error is a feed failure (503); a 404 is reported as an
     /// unavailable symbol so callers can skip delisted names.
     /// </summary>
+    /// <remarks>
+    /// The raw JSON body is cached per chart URL for <see cref="ChartCacheTimeToLive"/>, so the
+    /// index, the FX series, every stock and the two-year backtest window reuse one download
+    /// instead of repeating it per call site. Parsing stays per call because two callers can ask
+    /// for the same body with different tick rounding and volume filters. A failure is never
+    /// cached, so the mirror host is tried immediately.
+    /// </remarks>
     private async Task<ChartFetch> FetchChartAsync(
         string symbol,
         DateOnly tradeDate,
@@ -1258,7 +1302,14 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
 
             try
             {
-                var body = await GetChartBodyAsync(uri, symbol, cancellationToken);
+                // The shared download is not tied to this caller's token: abandoning one request
+                // must not cancel a response another request is waiting for. GetChartBodyAsync
+                // still applies the configured per-request timeout on its own.
+                var body = await _cache.GetOrAddAsync(
+                    $"chart:{uri.AbsoluteUri}",
+                    ChartCacheTimeToLive,
+                    () => GetChartBodyAsync(uri, symbol, CancellationToken.None),
+                    cancellationToken);
 
                 if (body is null)
                 {

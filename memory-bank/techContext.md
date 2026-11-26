@@ -29,7 +29,15 @@ dotnet run --project src/PseSignalDesk.WebApi        # http://localhost:5236
 
 # Backend tests
 cd backend
-dotnet test PseSignalDesk.slnx                        # currently 416 passing
+dotnet test PseSignalDesk.slnx                        # 433 passing, 1 skipped (the manual benchmark)
+
+# Golden snapshots (output-equivalence guard: replay + quantitative filter)
+dotnet test PseSignalDesk.slnx --filter "FullyQualifiedName~Golden"
+PSEDESK_UPDATE_GOLDEN=1 dotnet test PseSignalDesk.slnx --filter "FullyQualifiedName~Golden"   # rewrite them
+
+# Manual replay benchmark (prints elapsed time + allocations; Release only, ~5s)
+dotnet test PseSignalDesk.slnx -c Release --filter "FullyQualifiedName~Benchmark_reports" \
+  --logger "console;verbosity=detailed"
 
 # Frontend
 cd frontend
@@ -195,6 +203,7 @@ the API at all.
 - **PSE Edge** (`https://edge.pse.com.ph/announcements/search.ax`, plus the best-effort `companyDisclosures/search.ax` listing, `DisclosurePagesToScan` pages each): scraped announcement titles matched to tracked companies. Non-2xx, empty page or timeout on the announcements page → 503 (disclosures are part of the live contract); the second listing only adds coverage.
 - **Official PSE Daily Quotation Report**: the only source of net foreign flow. Fetched from `MarketData:PseDailyQuotationUrlTemplates` when configured (`{yyyy}` / `{MMddyyyy}` / `{MMddyy}` tokens) or supplied by an operator through `POST /api/signals/quotation-report`. Parsed by `PseDailyQuotationParser` (PDF text via PdfPig, CSV, TXT, TSV). Every failure is best-effort and leaves foreign flow `null`; provenance is stored in `ForeignFlowSource` (`pse-dqr-live` / `pse-dqr-upload`).
 - **Yahoo Finance macro symbols** (`^TNX`, `BZ=F`, `EPHE`): fetched concurrently with the same chart client (`roundToTick: false`), best-effort. `^TNX` is a percent yield (20-day change reported in bps), `BZ=F` is USD per barrel, `EPHE` is the MSCI Philippines ETF in USD.
+- **One download per URL per TTL.** `MarketDataCache` (singleton, in-memory, bounded at 200 entries) serves a chart body for 10 minutes and an Edge page for 5, keyed by the absolute URL, so the four horizons of one session, a replay and an on-demand research request share a single download (parsing still runs per call, so tick rounding and the volume filter stay per-caller). Failures are never cached. `POST /api/signals/run-now` calls `IMarketDataProvider.InvalidateCache()` first, so an operator-triggered run always sees the newest tape. The typed client uses a pooled `SocketsHttpHandler` with `AutomaticDecompression = All`.
 - **Ollama Cloud**: paid chat completion API; required — no offline substitute. Three roles from one endpoint: `Model` ranks the book, `FastExtractionModel` produces the compact disclosure/trap note (optional, failures swallowed), `EmbeddingModel` feeds `POST /api/embed` for knowledge vectors (optional, falls back to lexical).
 - Net foreign flow is only present for sessions with a parsed DQR; otherwise both columns are `null` and the UI renders `—` / `unreported`.
 - All scraping is best-effort by nature; when the markup changes the desk fails loudly rather than degrading to synthetic data.
@@ -207,6 +216,8 @@ the API at all.
 - **Macro dials are context, not inputs to a verdict.** `^TNX` / `BZ=F` / `EPHE` can be missing or stale (older than `MaxSessionLagDays`) and report `null`; nothing gates on them.
 - **The DQR upload never fabricates.** An unmatched ticker keeps its stored value, a file with no recognizable rows is a `400`, an unstored session is a `404`, and a successful re-save preserves the macro dials, FX, realized vol, rotation and breadth.
 - **SQLite stores decimals as TEXT**; do not assume numeric ordering/SQL aggregation on decimal columns.
+- **The market-data cache is a freshness window, not a source of truth.** Ten minutes for a chart body, five for an Edge page, in memory only (a restart is cold), and `POST /api/signals/run-now` clears it first. Nothing is fabricated and nothing is persisted, so a stale-cache bug can only serve a *real* older body, never a synthetic one.
+- **Output equivalence is enforced by goldens.** `backtest_{DAY,WEEK,MONTH,YEAR}.json` and `quantitative_filter_metrics.json` are reviewed files, not generated artefacts to be regenerated casually: any indicator, plan-level or fee change must leave them byte-identical, or the diff must be explained in the commit. Regenerate only with `PSEDESK_UPDATE_GOLDEN=1`, then read the diff.
 - **Tick rounding is bracket-sensitive.** Rounding can cross into a coarser tick bracket; always go through `PseBoardLotService` (15 tiers) rather than rounding ad hoc.
 - **The static band only clamps `DAY`.** `NormalizeTradePlanWithinStaticLimits` keeps day plans inside `+50%/-30%` of the reference close; other horizons keep the plain tick/`target > entry > stop` normalization.
 - **Retrieval is an enhancement, never a failure mode.** A missing embedding model, a dead Ollama embeddings call or an unreadable folder degrades to lexical + tag retrieval (or an ungrounded prompt) instead of failing the run.

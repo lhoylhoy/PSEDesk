@@ -28,6 +28,7 @@ public sealed class SignalsController : ControllerBase
     private readonly PortfolioService _portfolio;
     private readonly DailyQuotationImportService _quotationImports;
     private readonly MoneyManagerTrainingService _training;
+    private readonly IMarketDataProvider _marketData;
     private readonly ILogger<SignalsController> _logger;
 
     public SignalsController(
@@ -38,6 +39,7 @@ public sealed class SignalsController : ControllerBase
         PortfolioService portfolio,
         DailyQuotationImportService quotationImports,
         MoneyManagerTrainingService training,
+        IMarketDataProvider marketData,
         ILogger<SignalsController> logger)
     {
         _repository = repository;
@@ -47,6 +49,7 @@ public sealed class SignalsController : ControllerBase
         _portfolio = portfolio;
         _quotationImports = quotationImports;
         _training = training;
+        _marketData = marketData;
         _logger = logger;
     }
 
@@ -370,6 +373,13 @@ public sealed class SignalsController : ControllerBase
     /// stored session, otherwise today in PHT). Market data is fetched from Yahoo
     /// Finance and PSE Edge; there is no demo seed and no offline engine.
     /// </summary>
+    /// <remarks>
+    /// This is the desk's live action, so it starts from the tape as it is now: the provider's
+    /// short-lived upstream cache is dropped first, otherwise pressing the button twice inside
+    /// ten minutes would replay the download of the first press. The historical endpoints
+    /// (backtest, train) deliberately ride that cache — they read a two-year window whose newest
+    /// bar a few minutes of staleness does not change, and reuse is what makes them fast.
+    /// </remarks>
     [HttpPost("run-now")]
     public async Task<ActionResult<SignalRunDto>> RunNow(
         [FromQuery] string? date = null,
@@ -403,6 +413,8 @@ public sealed class SignalsController : ControllerBase
 
         try
         {
+            _marketData.InvalidateCache();
+
             var run = await _pipeline.RunAsync(runDate, horizon, cancellationToken);
             return Ok(run);
         }

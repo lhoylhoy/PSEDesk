@@ -1,0 +1,3170 @@
+{
+  "Horizon": "DAY",
+  "StartDate": "2025-03-13",
+  "EndDate": "2026-11-24",
+  "StartingCapitalPhp": 100000,
+  "EndingEquityPhp": 89975.20,
+  "NetReturnPct": -10.02,
+  "MaxDrawdownPct": 10.14,
+  "TotalTrades": 48,
+  "WinRate": 0.1875,
+  "ExpectancyR": -0.3640,
+  "ProfitFactor": 0.22,
+  "TotalFeesPaidPhp": 3699.86,
+  "SessionsEvaluated": 420,
+  "EquityCurve": [
+    {
+      "Date": "2025-03-13",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100000
+    },
+    {
+      "Date": "2025-03-14",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100022.44
+    },
+    {
+      "Date": "2025-03-17",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100127.57
+    },
+    {
+      "Date": "2025-03-18",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100337.54
+    },
+    {
+      "Date": "2025-03-19",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100559.57
+    },
+    {
+      "Date": "2025-03-20",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100471.62
+    },
+    {
+      "Date": "2025-03-21",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100383.80
+    },
+    {
+      "Date": "2025-03-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100445.99
+    },
+    {
+      "Date": "2025-03-25",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 100696.69
+    },
+    {
+      "Date": "2025-03-26",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101015.40
+    },
+    {
+      "Date": "2025-03-27",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101116.37
+    },
+    {
+      "Date": "2025-03-28",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101146.01
+    },
+    {
+      "Date": "2025-04-01",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101151.69
+    },
+    {
+      "Date": "2025-04-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101092.54
+    },
+    {
+      "Date": "2025-04-03",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101114.15
+    },
+    {
+      "Date": "2025-04-04",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101417.21
+    },
+    {
+      "Date": "2025-04-07",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 101941.04
+    },
+    {
+      "Date": "2025-04-08",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 102189.38
+    },
+    {
+      "Date": "2025-04-10",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 102264.32
+    },
+    {
+      "Date": "2025-04-11",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 102369.30
+    },
+    {
+      "Date": "2025-04-14",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 102669.45
+    },
+    {
+      "Date": "2025-04-15",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 103009.76
+    },
+    {
+      "Date": "2025-04-16",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 103486.09
+    },
+    {
+      "Date": "2025-04-21",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 104036.10
+    },
+    {
+      "Date": "2025-04-22",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 104528.08
+    },
+    {
+      "Date": "2025-04-23",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 104856.62
+    },
+    {
+      "Date": "2025-04-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 104969.09
+    },
+    {
+      "Date": "2025-04-25",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 105355.10
+    },
+    {
+      "Date": "2025-04-28",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 105888.50
+    },
+    {
+      "Date": "2025-04-29",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106018.00
+    },
+    {
+      "Date": "2025-04-30",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106592.53
+    },
+    {
+      "Date": "2025-05-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106744.19
+    },
+    {
+      "Date": "2025-05-05",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107137.83
+    },
+    {
+      "Date": "2025-05-06",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107143.51
+    },
+    {
+      "Date": "2025-05-07",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107581.61
+    },
+    {
+      "Date": "2025-05-08",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108045.75
+    },
+    {
+      "Date": "2025-05-09",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108450.60
+    },
+    {
+      "Date": "2025-05-12",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108918.06
+    },
+    {
+      "Date": "2025-05-13",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109410.46
+    },
+    {
+      "Date": "2025-05-14",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109783.04
+    },
+    {
+      "Date": "2025-05-15",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110221.00
+    },
+    {
+      "Date": "2025-05-16",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110456.88
+    },
+    {
+      "Date": "2025-05-19",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110665.75
+    },
+    {
+      "Date": "2025-05-20",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110784.17
+    },
+    {
+      "Date": "2025-05-21",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110977.11
+    },
+    {
+      "Date": "2025-05-22",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111173.24
+    },
+    {
+      "Date": "2025-05-23",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111462.03
+    },
+    {
+      "Date": "2025-05-26",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111380.58
+    },
+    {
+      "Date": "2025-05-27",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111668.26
+    },
+    {
+      "Date": "2025-05-28",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111810.65
+    },
+    {
+      "Date": "2025-05-29",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111734.19
+    },
+    {
+      "Date": "2025-05-30",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111785.86
+    },
+    {
+      "Date": "2025-06-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111869.79
+    },
+    {
+      "Date": "2025-06-03",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111700.12
+    },
+    {
+      "Date": "2025-06-04",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111854.56
+    },
+    {
+      "Date": "2025-06-05",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111744.17
+    },
+    {
+      "Date": "2025-06-09",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111850.54
+    },
+    {
+      "Date": "2025-06-10",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111947.22
+    },
+    {
+      "Date": "2025-06-11",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112201.10
+    },
+    {
+      "Date": "2025-06-13",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111946.94
+    },
+    {
+      "Date": "2025-06-16",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112224.65
+    },
+    {
+      "Date": "2025-06-17",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112184.07
+    },
+    {
+      "Date": "2025-06-18",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112128.39
+    },
+    {
+      "Date": "2025-06-19",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112013.84
+    },
+    {
+      "Date": "2025-06-20",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112149.30
+    },
+    {
+      "Date": "2025-06-23",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111790.43
+    },
+    {
+      "Date": "2025-06-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111744.44
+    },
+    {
+      "Date": "2025-06-25",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111381.28
+    },
+    {
+      "Date": "2025-06-26",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111140.69
+    },
+    {
+      "Date": "2025-06-27",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110938.75
+    },
+    {
+      "Date": "2025-06-30",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111083.90
+    },
+    {
+      "Date": "2025-07-01",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110716.58
+    },
+    {
+      "Date": "2025-07-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110665.75
+    },
+    {
+      "Date": "2025-07-03",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110527.24
+    },
+    {
+      "Date": "2025-07-04",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110334.99
+    },
+    {
+      "Date": "2025-07-07",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109874.60
+    },
+    {
+      "Date": "2025-07-08",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109465.72
+    },
+    {
+      "Date": "2025-07-09",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109272.92
+    },
+    {
+      "Date": "2025-07-10",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109065.16
+    },
+    {
+      "Date": "2025-07-11",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108774.85
+    },
+    {
+      "Date": "2025-07-14",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108860.31
+    },
+    {
+      "Date": "2025-07-15",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108415.98
+    },
+    {
+      "Date": "2025-07-16",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108534.95
+    },
+    {
+      "Date": "2025-07-17",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108284.26
+    },
+    {
+      "Date": "2025-07-18",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107820.95
+    },
+    {
+      "Date": "2025-07-21",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107680.64
+    },
+    {
+      "Date": "2025-07-22",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107718.73
+    },
+    {
+      "Date": "2025-07-23",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107593.80
+    },
+    {
+      "Date": "2025-07-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107408.20
+    },
+    {
+      "Date": "2025-07-25",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107264.70
+    },
+    {
+      "Date": "2025-07-28",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106937.13
+    },
+    {
+      "Date": "2025-07-29",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106560.53
+    },
+    {
+      "Date": "2025-07-30",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106737.82
+    },
+    {
+      "Date": "2025-07-31",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106785.47
+    },
+    {
+      "Date": "2025-08-01",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106853.61
+    },
+    {
+      "Date": "2025-08-04",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106654.03
+    },
+    {
+      "Date": "2025-08-05",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106280.33
+    },
+    {
+      "Date": "2025-08-06",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 105947.36
+    },
+    {
+      "Date": "2025-08-07",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 105939.05
+    },
+    {
+      "Date": "2025-08-08",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 105846.11
+    },
+    {
+      "Date": "2025-08-11",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106109.83
+    },
+    {
+      "Date": "2025-08-12",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106141.96
+    },
+    {
+      "Date": "2025-08-13",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106358.59
+    },
+    {
+      "Date": "2025-08-14",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106270.91
+    },
+    {
+      "Date": "2025-08-15",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106368.42
+    },
+    {
+      "Date": "2025-08-18",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106130.05
+    },
+    {
+      "Date": "2025-08-19",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106369.12
+    },
+    {
+      "Date": "2025-08-20",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106745.16
+    },
+    {
+      "Date": "2025-08-22",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106954.86
+    },
+    {
+      "Date": "2025-08-26",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107116.64
+    },
+    {
+      "Date": "2025-08-27",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107000.29
+    },
+    {
+      "Date": "2025-08-28",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106906.11
+    },
+    {
+      "Date": "2025-08-29",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 106842.53
+    },
+    {
+      "Date": "2025-09-01",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107035.34
+    },
+    {
+      "Date": "2025-09-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107042.12
+    },
+    {
+      "Date": "2025-09-03",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107461.38
+    },
+    {
+      "Date": "2025-09-04",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107691.03
+    },
+    {
+      "Date": "2025-09-05",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107653.49
+    },
+    {
+      "Date": "2025-09-08",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107797.40
+    },
+    {
+      "Date": "2025-09-09",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107886.88
+    },
+    {
+      "Date": "2025-09-10",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107995.19
+    },
+    {
+      "Date": "2025-09-11",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 107945.61
+    },
+    {
+      "Date": "2025-09-12",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108323.31
+    },
+    {
+      "Date": "2025-09-15",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108802.83
+    },
+    {
+      "Date": "2025-09-16",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 108879.98
+    },
+    {
+      "Date": "2025-09-17",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109371.95
+    },
+    {
+      "Date": "2025-09-18",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 109473.20
+    },
+    {
+      "Date": "2025-09-19",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110041.50
+    },
+    {
+      "Date": "2025-09-22",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110525.72
+    },
+    {
+      "Date": "2025-09-23",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110592.20
+    },
+    {
+      "Date": "2025-09-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110589.71
+    },
+    {
+      "Date": "2025-09-25",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 110614.36
+    },
+    {
+      "Date": "2025-09-26",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111198.59
+    },
+    {
+      "Date": "2025-09-29",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111207.73
+    },
+    {
+      "Date": "2025-09-30",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111439.31
+    },
+    {
+      "Date": "2025-10-01",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111643.89
+    },
+    {
+      "Date": "2025-10-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 111793.06
+    },
+    {
+      "Date": "2025-10-03",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112181.29
+    },
+    {
+      "Date": "2025-10-06",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 112675.21
+    },
+    {
+      "Date": "2025-10-07",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 113312.62
+    },
+    {
+      "Date": "2025-10-08",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 113787.84
+    },
+    {
+      "Date": "2025-10-09",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 114311.67
+    },
+    {
+      "Date": "2025-10-10",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 114846.87
+    },
+    {
+      "Date": "2025-10-13",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115372.78
+    },
+    {
+      "Date": "2025-10-14",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115552.84
+    },
+    {
+      "Date": "2025-10-15",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115508.65
+    },
+    {
+      "Date": "2025-10-16",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116066.70
+    },
+    {
+      "Date": "2025-10-17",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116248.84
+    },
+    {
+      "Date": "2025-10-20",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116485.13
+    },
+    {
+      "Date": "2025-10-21",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116985.42
+    },
+    {
+      "Date": "2025-10-22",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117392.63
+    },
+    {
+      "Date": "2025-10-23",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117889.04
+    },
+    {
+      "Date": "2025-10-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118219.10
+    },
+    {
+      "Date": "2025-10-27",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118246.80
+    },
+    {
+      "Date": "2025-10-28",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118143.06
+    },
+    {
+      "Date": "2025-10-29",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118592.38
+    },
+    {
+      "Date": "2025-10-30",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119007.07
+    },
+    {
+      "Date": "2025-10-31",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118785.04
+    },
+    {
+      "Date": "2025-11-03",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118643.21
+    },
+    {
+      "Date": "2025-11-04",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118945.71
+    },
+    {
+      "Date": "2025-11-05",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119277.02
+    },
+    {
+      "Date": "2025-11-06",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119611.65
+    },
+    {
+      "Date": "2025-11-07",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119452.09
+    },
+    {
+      "Date": "2025-11-10",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119532.70
+    },
+    {
+      "Date": "2025-11-11",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119606.94
+    },
+    {
+      "Date": "2025-11-12",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119313.45
+    },
+    {
+      "Date": "2025-11-13",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119129.79
+    },
+    {
+      "Date": "2025-11-14",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118856.65
+    },
+    {
+      "Date": "2025-11-17",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118603.04
+    },
+    {
+      "Date": "2025-11-18",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118855.68
+    },
+    {
+      "Date": "2025-11-19",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118884.35
+    },
+    {
+      "Date": "2025-11-20",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 119132.00
+    },
+    {
+      "Date": "2025-11-21",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118944.60
+    },
+    {
+      "Date": "2025-11-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118780.19
+    },
+    {
+      "Date": "2025-11-25",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118701.66
+    },
+    {
+      "Date": "2025-11-26",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118567.59
+    },
+    {
+      "Date": "2025-11-27",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118223.67
+    },
+    {
+      "Date": "2025-11-28",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118334.48
+    },
+    {
+      "Date": "2025-12-01",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 118176.44
+    },
+    {
+      "Date": "2025-12-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117784.05
+    },
+    {
+      "Date": "2025-12-03",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117910.23
+    },
+    {
+      "Date": "2025-12-04",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117974.36
+    },
+    {
+      "Date": "2025-12-05",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117757.18
+    },
+    {
+      "Date": "2025-12-09",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117866.46
+    },
+    {
+      "Date": "2025-12-10",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117604.13
+    },
+    {
+      "Date": "2025-12-11",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 117162.71
+    },
+    {
+      "Date": "2025-12-12",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116901.90
+    },
+    {
+      "Date": "2025-12-15",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116815.61
+    },
+    {
+      "Date": "2025-12-16",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116938.46
+    },
+    {
+      "Date": "2025-12-17",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116735.27
+    },
+    {
+      "Date": "2025-12-18",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116527.93
+    },
+    {
+      "Date": "2025-12-19",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116178.61
+    },
+    {
+      "Date": "2025-12-22",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115992.32
+    },
+    {
+      "Date": "2025-12-23",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 116169.33
+    },
+    {
+      "Date": "2025-12-24",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115762.95
+    },
+    {
+      "Date": "2025-12-26",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115877.36
+    },
+    {
+      "Date": "2025-12-29",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115822.10
+    },
+    {
+      "Date": "2026-01-02",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115543.28
+    },
+    {
+      "Date": "2026-01-05",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115261.00
+    },
+    {
+      "Date": "2026-01-06",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 114989.11
+    },
+    {
+      "Date": "2026-01-07",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115084.13
+    },
+    {
+      "Date": "2026-01-08",
+      "EquityPhp": 100000,
+      "DrawdownPct": 0,
+      "BenchmarkEquityPhp": 115181.78
+    },
+    {
+      "Date": "2026-01-09",
+      "EquityPhp": 99621.82,
+      "DrawdownPct": 0.38,
+      "BenchmarkEquityPhp": 114893.40
+    },
+    {
+      "Date": "2026-01-12",
+      "EquityPhp": 99592.66,
+      "DrawdownPct": 0.41,
+      "BenchmarkEquityPhp": 114868.06
+    },
+    {
+      "Date": "2026-01-13",
+      "EquityPhp": 99558.21,
+      "DrawdownPct": 0.44,
+      "BenchmarkEquityPhp": 114641.32
+    },
+    {
+      "Date": "2026-01-14",
+      "EquityPhp": 99503.85,
+      "DrawdownPct": 0.50,
+      "BenchmarkEquityPhp": 114810.99
+    },
+    {
+      "Date": "2026-01-15",
+      "EquityPhp": 99503.85,
+      "DrawdownPct": 0.50,
+      "BenchmarkEquityPhp": 114811.69
+    },
+    {
+      "Date": "2026-01-16",
+      "EquityPhp": 99259.96,
+      "DrawdownPct": 0.74,
+      "BenchmarkEquityPhp": 114641.74
+    },
+    {
+      "Date": "2026-01-19",
+      "EquityPhp": 99146.41,
+      "DrawdownPct": 0.85,
+      "BenchmarkEquityPhp": 114799.91
+    },
+    {
+      "Date": "2026-01-20",
+      "EquityPhp": 98907.35,
+      "DrawdownPct": 1.09,
+      "BenchmarkEquityPhp": 114902.55
+    },
+    {
+      "Date": "2026-01-21",
+      "EquityPhp": 98619.99,
+      "DrawdownPct": 1.38,
+      "BenchmarkEquityPhp": 115076.23
+    },
+    {
+      "Date": "2026-01-22",
+      "EquityPhp": 98619.99,
+      "DrawdownPct": 1.38,
+      "BenchmarkEquityPhp": 114793.68
+    },
+    {
+      "Date": "2026-01-23",
+      "EquityPhp": 98619.99,
+      "DrawdownPct": 1.38,
+      "BenchmarkEquityPhp": 114867.23
+    },
+    {
+      "Date": "2026-01-26",
+      "EquityPhp": 98619.99,
+      "DrawdownPct": 1.38,
+      "BenchmarkEquityPhp": 115268.62
+    },
+    {
+      "Date": "2026-01-27",
+      "EquityPhp": 98619.99,
+      "DrawdownPct": 1.38,
+      "BenchmarkEquityPhp": 115620.01
+    },
+    {
+      "Date": "2026-01-28",
+      "EquityPhp": 98560.01,
+      "DrawdownPct": 1.44,
+      "BenchmarkEquityPhp": 115391.20
+    },
+    {
+      "Date": "2026-01-29",
+      "EquityPhp": 98560.01,
+      "DrawdownPct": 1.44,
+      "BenchmarkEquityPhp": 115465.58
+    },
+    {
+      "Date": "2026-01-30",
+      "EquityPhp": 98572.00,
+      "DrawdownPct": 1.43,
+      "BenchmarkEquityPhp": 115460.87
+    },
+    {
+      "Date": "2026-02-02",
+      "EquityPhp": 98587.98,
+      "DrawdownPct": 1.41,
+      "BenchmarkEquityPhp": 115385.80
+    },
+    {
+      "Date": "2026-02-03",
+      "EquityPhp": 98587.98,
+      "DrawdownPct": 1.41,
+      "BenchmarkEquityPhp": 115507.82
+    },
+    {
+      "Date": "2026-02-04",
+      "EquityPhp": 98587.98,
+      "DrawdownPct": 1.41,
+      "BenchmarkEquityPhp": 115818.77
+    },
+    {
+      "Date": "2026-02-05",
+      "EquityPhp": 98587.98,
+      "DrawdownPct": 1.41,
+      "BenchmarkEquityPhp": 116091.63
+    },
+    {
+      "Date": "2026-02-06",
+      "EquityPhp": 98587.98,
+      "DrawdownPct": 1.41,
+      "BenchmarkEquityPhp": 116097.86
+    },
+    {
+      "Date": "2026-02-09",
+      "EquityPhp": 98587.98,
+      "DrawdownPct": 1.41,
+      "BenchmarkEquityPhp": 116474.60
+    },
+    {
+      "Date": "2026-02-10",
+      "EquityPhp": 98156.27,
+      "DrawdownPct": 1.84,
+      "BenchmarkEquityPhp": 116682.92
+    },
+    {
+      "Date": "2026-02-11",
+      "EquityPhp": 98024.28,
+      "DrawdownPct": 1.98,
+      "BenchmarkEquityPhp": 116842.06
+    },
+    {
+      "Date": "2026-02-12",
+      "EquityPhp": 97710.03,
+      "DrawdownPct": 2.29,
+      "BenchmarkEquityPhp": 117081.68
+    },
+    {
+      "Date": "2026-02-13",
+      "EquityPhp": 97248.86,
+      "DrawdownPct": 2.75,
+      "BenchmarkEquityPhp": 117257.58
+    },
+    {
+      "Date": "2026-02-16",
+      "EquityPhp": 96979.44,
+      "DrawdownPct": 3.02,
+      "BenchmarkEquityPhp": 117369.22
+    },
+    {
+      "Date": "2026-02-18",
+      "EquityPhp": 97033.24,
+      "DrawdownPct": 2.97,
+      "BenchmarkEquityPhp": 117770.20
+    },
+    {
+      "Date": "2026-02-19",
+      "EquityPhp": 97078.06,
+      "DrawdownPct": 2.92,
+      "BenchmarkEquityPhp": 118316.61
+    },
+    {
+      "Date": "2026-02-20",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 118910.53
+    },
+    {
+      "Date": "2026-02-23",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 119279.93
+    },
+    {
+      "Date": "2026-02-24",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 119394.20
+    },
+    {
+      "Date": "2026-02-25",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 119631.46
+    },
+    {
+      "Date": "2026-02-26",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 119696.84
+    },
+    {
+      "Date": "2026-02-27",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 120122.19
+    },
+    {
+      "Date": "2026-03-02",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 120729.82
+    },
+    {
+      "Date": "2026-03-03",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 121181.63
+    },
+    {
+      "Date": "2026-03-04",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 121579.84
+    },
+    {
+      "Date": "2026-03-05",
+      "EquityPhp": 97037.71,
+      "DrawdownPct": 2.96,
+      "BenchmarkEquityPhp": 121989.68
+    },
+    {
+      "Date": "2026-03-06",
+      "EquityPhp": 96787.37,
+      "DrawdownPct": 3.21,
+      "BenchmarkEquityPhp": 122052.15
+    },
+    {
+      "Date": "2026-03-09",
+      "EquityPhp": 96605.10,
+      "DrawdownPct": 3.39,
+      "BenchmarkEquityPhp": 122693.72
+    },
+    {
+      "Date": "2026-03-10",
+      "EquityPhp": 96290.34,
+      "DrawdownPct": 3.71,
+      "BenchmarkEquityPhp": 122894.41
+    },
+    {
+      "Date": "2026-03-11",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 123425.03
+    },
+    {
+      "Date": "2026-03-12",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 123711.61
+    },
+    {
+      "Date": "2026-03-13",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 124214.66
+    },
+    {
+      "Date": "2026-03-16",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 124544.59
+    },
+    {
+      "Date": "2026-03-17",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 124577.69
+    },
+    {
+      "Date": "2026-03-18",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 124613.84
+    },
+    {
+      "Date": "2026-03-19",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 124883.10
+    },
+    {
+      "Date": "2026-03-23",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 125054.43
+    },
+    {
+      "Date": "2026-03-24",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 125058.03
+    },
+    {
+      "Date": "2026-03-25",
+      "EquityPhp": 96074.20,
+      "DrawdownPct": 3.93,
+      "BenchmarkEquityPhp": 125589.49
+    },
+    {
+      "Date": "2026-03-26",
+      "EquityPhp": 95764.90,
+      "DrawdownPct": 4.24,
+      "BenchmarkEquityPhp": 125922.32
+    },
+    {
+      "Date": "2026-03-27",
+      "EquityPhp": 95677.36,
+      "DrawdownPct": 4.32,
+      "BenchmarkEquityPhp": 125935.62
+    },
+    {
+      "Date": "2026-03-30",
+      "EquityPhp": 95603.73,
+      "DrawdownPct": 4.40,
+      "BenchmarkEquityPhp": 126231.88
+    },
+    {
+      "Date": "2026-03-31",
+      "EquityPhp": 95334.88,
+      "DrawdownPct": 4.67,
+      "BenchmarkEquityPhp": 126448.92
+    },
+    {
+      "Date": "2026-04-01",
+      "EquityPhp": 95199.91,
+      "DrawdownPct": 4.80,
+      "BenchmarkEquityPhp": 126367.20
+    },
+    {
+      "Date": "2026-04-06",
+      "EquityPhp": 95213.85,
+      "DrawdownPct": 4.79,
+      "BenchmarkEquityPhp": 126861.26
+    },
+    {
+      "Date": "2026-04-07",
+      "EquityPhp": 95046.51,
+      "DrawdownPct": 4.95,
+      "BenchmarkEquityPhp": 126930.65
+    },
+    {
+      "Date": "2026-04-08",
+      "EquityPhp": 94976.79,
+      "DrawdownPct": 5.02,
+      "BenchmarkEquityPhp": 126864.58
+    },
+    {
+      "Date": "2026-04-10",
+      "EquityPhp": 94976.79,
+      "DrawdownPct": 5.02,
+      "BenchmarkEquityPhp": 126660.70
+    },
+    {
+      "Date": "2026-04-13",
+      "EquityPhp": 94976.79,
+      "DrawdownPct": 5.02,
+      "BenchmarkEquityPhp": 126486.60
+    },
+    {
+      "Date": "2026-04-14",
+      "EquityPhp": 94976.79,
+      "DrawdownPct": 5.02,
+      "BenchmarkEquityPhp": 126833.56
+    },
+    {
+      "Date": "2026-04-15",
+      "EquityPhp": 94976.79,
+      "DrawdownPct": 5.02,
+      "BenchmarkEquityPhp": 127188.28
+    },
+    {
+      "Date": "2026-04-16",
+      "EquityPhp": 94976.79,
+      "DrawdownPct": 5.02,
+      "BenchmarkEquityPhp": 127258.50
+    },
+    {
+      "Date": "2026-04-17",
+      "EquityPhp": 94651.54,
+      "DrawdownPct": 5.35,
+      "BenchmarkEquityPhp": 127207.25
+    },
+    {
+      "Date": "2026-04-20",
+      "EquityPhp": 94439.59,
+      "DrawdownPct": 5.56,
+      "BenchmarkEquityPhp": 127361.55
+    },
+    {
+      "Date": "2026-04-21",
+      "EquityPhp": 94023.39,
+      "DrawdownPct": 5.98,
+      "BenchmarkEquityPhp": 127615.43
+    },
+    {
+      "Date": "2026-04-22",
+      "EquityPhp": 93967.81,
+      "DrawdownPct": 6.03,
+      "BenchmarkEquityPhp": 127581.91
+    },
+    {
+      "Date": "2026-04-23",
+      "EquityPhp": 93967.81,
+      "DrawdownPct": 6.03,
+      "BenchmarkEquityPhp": 127662.25
+    },
+    {
+      "Date": "2026-04-24",
+      "EquityPhp": 93967.81,
+      "DrawdownPct": 6.03,
+      "BenchmarkEquityPhp": 127793.69
+    },
+    {
+      "Date": "2026-04-27",
+      "EquityPhp": 93967.81,
+      "DrawdownPct": 6.03,
+      "BenchmarkEquityPhp": 127875.83
+    },
+    {
+      "Date": "2026-04-28",
+      "EquityPhp": 93967.81,
+      "DrawdownPct": 6.03,
+      "BenchmarkEquityPhp": 128134.83
+    },
+    {
+      "Date": "2026-04-29",
+      "EquityPhp": 93760.78,
+      "DrawdownPct": 6.24,
+      "BenchmarkEquityPhp": 128170.57
+    },
+    {
+      "Date": "2026-04-30",
+      "EquityPhp": 93682.58,
+      "DrawdownPct": 6.32,
+      "BenchmarkEquityPhp": 128293.29
+    },
+    {
+      "Date": "2026-05-04",
+      "EquityPhp": 93663.66,
+      "DrawdownPct": 6.34,
+      "BenchmarkEquityPhp": 128554.23
+    },
+    {
+      "Date": "2026-05-05",
+      "EquityPhp": 93586.46,
+      "DrawdownPct": 6.41,
+      "BenchmarkEquityPhp": 128850.09
+    },
+    {
+      "Date": "2026-05-06",
+      "EquityPhp": 93586.46,
+      "DrawdownPct": 6.41,
+      "BenchmarkEquityPhp": 128412.13
+    },
+    {
+      "Date": "2026-05-07",
+      "EquityPhp": 93200.77,
+      "DrawdownPct": 6.80,
+      "BenchmarkEquityPhp": 128436.78
+    },
+    {
+      "Date": "2026-05-08",
+      "EquityPhp": 93126.35,
+      "DrawdownPct": 6.87,
+      "BenchmarkEquityPhp": 128700.50
+    },
+    {
+      "Date": "2026-05-11",
+      "EquityPhp": 93125.62,
+      "DrawdownPct": 6.87,
+      "BenchmarkEquityPhp": 128399.80
+    },
+    {
+      "Date": "2026-05-12",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127996.74
+    },
+    {
+      "Date": "2026-05-13",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127642.44
+    },
+    {
+      "Date": "2026-05-14",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127518.06
+    },
+    {
+      "Date": "2026-05-15",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127587.04
+    },
+    {
+      "Date": "2026-05-18",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127612.94
+    },
+    {
+      "Date": "2026-05-19",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127543.96
+    },
+    {
+      "Date": "2026-05-20",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127141.88
+    },
+    {
+      "Date": "2026-05-21",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 127012.79
+    },
+    {
+      "Date": "2026-05-22",
+      "EquityPhp": 92844.49,
+      "DrawdownPct": 7.16,
+      "BenchmarkEquityPhp": 126563.05
+    },
+    {
+      "Date": "2026-05-25",
+      "EquityPhp": 92641.83,
+      "DrawdownPct": 7.36,
+      "BenchmarkEquityPhp": 126584.94
+    },
+    {
+      "Date": "2026-05-26",
+      "EquityPhp": 92547.02,
+      "DrawdownPct": 7.45,
+      "BenchmarkEquityPhp": 126604.88
+    },
+    {
+      "Date": "2026-05-28",
+      "EquityPhp": 92508.16,
+      "DrawdownPct": 7.49,
+      "BenchmarkEquityPhp": 126216.23
+    },
+    {
+      "Date": "2026-05-29",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125959.16
+    },
+    {
+      "Date": "2026-06-01",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125465.80
+    },
+    {
+      "Date": "2026-06-02",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125528.54
+    },
+    {
+      "Date": "2026-06-03",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125362.75
+    },
+    {
+      "Date": "2026-06-04",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125518.02
+    },
+    {
+      "Date": "2026-06-05",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125697.94
+    },
+    {
+      "Date": "2026-06-08",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125458.18
+    },
+    {
+      "Date": "2026-06-09",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125588.79
+    },
+    {
+      "Date": "2026-06-10",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125319.81
+    },
+    {
+      "Date": "2026-06-11",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125337.27
+    },
+    {
+      "Date": "2026-06-15",
+      "EquityPhp": 92579.04,
+      "DrawdownPct": 7.42,
+      "BenchmarkEquityPhp": 125479.37
+    },
+    {
+      "Date": "2026-06-16",
+      "EquityPhp": 92284.18,
+      "DrawdownPct": 7.72,
+      "BenchmarkEquityPhp": 125476.46
+    },
+    {
+      "Date": "2026-06-17",
+      "EquityPhp": 92256.29,
+      "DrawdownPct": 7.74,
+      "BenchmarkEquityPhp": 125359.01
+    },
+    {
+      "Date": "2026-06-18",
+      "EquityPhp": 92152.71,
+      "DrawdownPct": 7.85,
+      "BenchmarkEquityPhp": 125604.86
+    },
+    {
+      "Date": "2026-06-19",
+      "EquityPhp": 91605.34,
+      "DrawdownPct": 8.39,
+      "BenchmarkEquityPhp": 125878.69
+    },
+    {
+      "Date": "2026-06-22",
+      "EquityPhp": 91366.30,
+      "DrawdownPct": 8.63,
+      "BenchmarkEquityPhp": 125758.05
+    },
+    {
+      "Date": "2026-06-23",
+      "EquityPhp": 91306.54,
+      "DrawdownPct": 8.69,
+      "BenchmarkEquityPhp": 125797.25
+    },
+    {
+      "Date": "2026-06-24",
+      "EquityPhp": 91244.79,
+      "DrawdownPct": 8.76,
+      "BenchmarkEquityPhp": 125737.14
+    },
+    {
+      "Date": "2026-06-25",
+      "EquityPhp": 91244.79,
+      "DrawdownPct": 8.76,
+      "BenchmarkEquityPhp": 125357.63
+    },
+    {
+      "Date": "2026-06-26",
+      "EquityPhp": 91244.79,
+      "DrawdownPct": 8.76,
+      "BenchmarkEquityPhp": 125117.32
+    },
+    {
+      "Date": "2026-06-29",
+      "EquityPhp": 91244.79,
+      "DrawdownPct": 8.76,
+      "BenchmarkEquityPhp": 124992.94
+    },
+    {
+      "Date": "2026-06-30",
+      "EquityPhp": 91244.79,
+      "DrawdownPct": 8.76,
+      "BenchmarkEquityPhp": 125303.75
+    },
+    {
+      "Date": "2026-07-01",
+      "EquityPhp": 91244.79,
+      "DrawdownPct": 8.76,
+      "BenchmarkEquityPhp": 125600.98
+    },
+    {
+      "Date": "2026-07-02",
+      "EquityPhp": 91244.79,
+      "DrawdownPct": 8.76,
+      "BenchmarkEquityPhp": 125903.90
+    },
+    {
+      "Date": "2026-07-03",
+      "EquityPhp": 91053.09,
+      "DrawdownPct": 8.95,
+      "BenchmarkEquityPhp": 125768.44
+    },
+    {
+      "Date": "2026-07-06",
+      "EquityPhp": 90983.17,
+      "DrawdownPct": 9.02,
+      "BenchmarkEquityPhp": 125474.25
+    },
+    {
+      "Date": "2026-07-07",
+      "EquityPhp": 90969.19,
+      "DrawdownPct": 9.03,
+      "BenchmarkEquityPhp": 125719.82
+    },
+    {
+      "Date": "2026-07-08",
+      "EquityPhp": 90917.25,
+      "DrawdownPct": 9.08,
+      "BenchmarkEquityPhp": 125965.95
+    },
+    {
+      "Date": "2026-07-09",
+      "EquityPhp": 90917.25,
+      "DrawdownPct": 9.08,
+      "BenchmarkEquityPhp": 126016.92
+    },
+    {
+      "Date": "2026-07-10",
+      "EquityPhp": 90917.25,
+      "DrawdownPct": 9.08,
+      "BenchmarkEquityPhp": 125925.23
+    },
+    {
+      "Date": "2026-07-13",
+      "EquityPhp": 90917.25,
+      "DrawdownPct": 9.08,
+      "BenchmarkEquityPhp": 125896.56
+    },
+    {
+      "Date": "2026-07-14",
+      "EquityPhp": 90844.13,
+      "DrawdownPct": 9.16,
+      "BenchmarkEquityPhp": 126297.40
+    },
+    {
+      "Date": "2026-07-15",
+      "EquityPhp": 90764.22,
+      "DrawdownPct": 9.24,
+      "BenchmarkEquityPhp": 126781.90
+    },
+    {
+      "Date": "2026-07-16",
+      "EquityPhp": 90724.27,
+      "DrawdownPct": 9.28,
+      "BenchmarkEquityPhp": 126897.83
+    },
+    {
+      "Date": "2026-07-17",
+      "EquityPhp": 90694.30,
+      "DrawdownPct": 9.31,
+      "BenchmarkEquityPhp": 127088.97
+    },
+    {
+      "Date": "2026-07-20",
+      "EquityPhp": 90694.30,
+      "DrawdownPct": 9.31,
+      "BenchmarkEquityPhp": 127328.03
+    },
+    {
+      "Date": "2026-07-21",
+      "EquityPhp": 90694.30,
+      "DrawdownPct": 9.31,
+      "BenchmarkEquityPhp": 127886.49
+    },
+    {
+      "Date": "2026-07-22",
+      "EquityPhp": 90419.14,
+      "DrawdownPct": 9.58,
+      "BenchmarkEquityPhp": 128081.37
+    },
+    {
+      "Date": "2026-07-23",
+      "EquityPhp": 90303.58,
+      "DrawdownPct": 9.70,
+      "BenchmarkEquityPhp": 128013.64
+    },
+    {
+      "Date": "2026-07-24",
+      "EquityPhp": 90194.87,
+      "DrawdownPct": 9.81,
+      "BenchmarkEquityPhp": 127989.68
+    },
+    {
+      "Date": "2026-07-27",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 128114.89
+    },
+    {
+      "Date": "2026-07-28",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 128130.40
+    },
+    {
+      "Date": "2026-07-29",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 128789.00
+    },
+    {
+      "Date": "2026-07-30",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 129081.95
+    },
+    {
+      "Date": "2026-07-31",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 129322.67
+    },
+    {
+      "Date": "2026-08-03",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 129972.13
+    },
+    {
+      "Date": "2026-08-04",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 130185.99
+    },
+    {
+      "Date": "2026-08-05",
+      "EquityPhp": 90031.22,
+      "DrawdownPct": 9.97,
+      "BenchmarkEquityPhp": 130785.03
+    },
+    {
+      "Date": "2026-08-06",
+      "EquityPhp": 89860.84,
+      "DrawdownPct": 10.14,
+      "BenchmarkEquityPhp": 131284.63
+    },
+    {
+      "Date": "2026-08-07",
+      "EquityPhp": 89933.25,
+      "DrawdownPct": 10.07,
+      "BenchmarkEquityPhp": 131877.44
+    },
+    {
+      "Date": "2026-08-10",
+      "EquityPhp": 89920.27,
+      "DrawdownPct": 10.08,
+      "BenchmarkEquityPhp": 132608.34
+    },
+    {
+      "Date": "2026-08-11",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 133132.73
+    },
+    {
+      "Date": "2026-08-12",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 133711.41
+    },
+    {
+      "Date": "2026-08-13",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 134160.18
+    },
+    {
+      "Date": "2026-08-14",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 134873.76
+    },
+    {
+      "Date": "2026-08-17",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 135274.47
+    },
+    {
+      "Date": "2026-08-18",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 135449.40
+    },
+    {
+      "Date": "2026-08-19",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 136227.40
+    },
+    {
+      "Date": "2026-08-20",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 136427.82
+    },
+    {
+      "Date": "2026-08-24",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137156.36
+    },
+    {
+      "Date": "2026-08-25",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137330.61
+    },
+    {
+      "Date": "2026-08-26",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137872.58
+    },
+    {
+      "Date": "2026-08-27",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 138210.68
+    },
+    {
+      "Date": "2026-08-28",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 138264.70
+    },
+    {
+      "Date": "2026-09-01",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 138561.80
+    },
+    {
+      "Date": "2026-09-02",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 138519.00
+    },
+    {
+      "Date": "2026-09-03",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139049.48
+    },
+    {
+      "Date": "2026-09-04",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139017.76
+    },
+    {
+      "Date": "2026-09-07",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139295.47
+    },
+    {
+      "Date": "2026-09-08",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139538.83
+    },
+    {
+      "Date": "2026-09-09",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139817.78
+    },
+    {
+      "Date": "2026-09-10",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139819.30
+    },
+    {
+      "Date": "2026-09-11",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139979.28
+    },
+    {
+      "Date": "2026-09-14",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140555.75
+    },
+    {
+      "Date": "2026-09-15",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141103.82
+    },
+    {
+      "Date": "2026-09-16",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141035.26
+    },
+    {
+      "Date": "2026-09-17",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141571.56
+    },
+    {
+      "Date": "2026-09-18",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141623.64
+    },
+    {
+      "Date": "2026-09-21",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141712.00
+    },
+    {
+      "Date": "2026-09-22",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141680.43
+    },
+    {
+      "Date": "2026-09-23",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141918.52
+    },
+    {
+      "Date": "2026-09-24",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 142316.87
+    },
+    {
+      "Date": "2026-09-25",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141942.07
+    },
+    {
+      "Date": "2026-09-28",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 142068.38
+    },
+    {
+      "Date": "2026-09-29",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141855.08
+    },
+    {
+      "Date": "2026-09-30",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141904.81
+    },
+    {
+      "Date": "2026-10-01",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141497.87
+    },
+    {
+      "Date": "2026-10-02",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141290.53
+    },
+    {
+      "Date": "2026-10-05",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141207.01
+    },
+    {
+      "Date": "2026-10-06",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141504.52
+    },
+    {
+      "Date": "2026-10-07",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141209.78
+    },
+    {
+      "Date": "2026-10-08",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141454.24
+    },
+    {
+      "Date": "2026-10-09",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 141016.28
+    },
+    {
+      "Date": "2026-10-12",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140557.41
+    },
+    {
+      "Date": "2026-10-13",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140687.74
+    },
+    {
+      "Date": "2026-10-14",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140573.61
+    },
+    {
+      "Date": "2026-10-15",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140517.93
+    },
+    {
+      "Date": "2026-10-16",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140583.72
+    },
+    {
+      "Date": "2026-10-19",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140813.92
+    },
+    {
+      "Date": "2026-10-20",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 140459.62
+    },
+    {
+      "Date": "2026-10-21",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139941.19
+    },
+    {
+      "Date": "2026-10-22",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139494.23
+    },
+    {
+      "Date": "2026-10-23",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 139126.35
+    },
+    {
+      "Date": "2026-10-26",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 138662.63
+    },
+    {
+      "Date": "2026-10-27",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 138240.74
+    },
+    {
+      "Date": "2026-10-28",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 138217.33
+    },
+    {
+      "Date": "2026-10-29",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137799.73
+    },
+    {
+      "Date": "2026-10-30",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137838.10
+    },
+    {
+      "Date": "2026-11-02",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137755.55
+    },
+    {
+      "Date": "2026-11-03",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137708.18
+    },
+    {
+      "Date": "2026-11-04",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137562.33
+    },
+    {
+      "Date": "2026-11-05",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137649.45
+    },
+    {
+      "Date": "2026-11-06",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137480.89
+    },
+    {
+      "Date": "2026-11-09",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137661.22
+    },
+    {
+      "Date": "2026-11-10",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137283.10
+    },
+    {
+      "Date": "2026-11-11",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137015.09
+    },
+    {
+      "Date": "2026-11-12",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137038.22
+    },
+    {
+      "Date": "2026-11-13",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137198.61
+    },
+    {
+      "Date": "2026-11-16",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137408.86
+    },
+    {
+      "Date": "2026-11-17",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137612.88
+    },
+    {
+      "Date": "2026-11-18",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137104.84
+    },
+    {
+      "Date": "2026-11-19",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 136983.92
+    },
+    {
+      "Date": "2026-11-20",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137021.60
+    },
+    {
+      "Date": "2026-11-23",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 137008.44
+    },
+    {
+      "Date": "2026-11-24",
+      "EquityPhp": 89975.20,
+      "DrawdownPct": 10.02,
+      "BenchmarkEquityPhp": 136728.51
+    }
+  ],
+  "Trades": [
+    {
+      "Ticker": "GTCAP",
+      "EntryDate": "2026-01-09",
+      "EntryPrice": 52.0000,
+      "ExitDate": "2026-01-14",
+      "ExitPrice": 54.4500,
+      "Shares": 100,
+      "NetPnlPhp": 182.95,
+      "NetR": 0.7581,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 10.21
+    },
+    {
+      "Ticker": "BDO",
+      "EntryDate": "2026-01-09",
+      "EntryPrice": 65.1500,
+      "ExitDate": "2026-01-14",
+      "ExitPrice": 66.6000,
+      "Shares": 90,
+      "NetPnlPhp": 68.74,
+      "NetR": 0.2904,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 9.19
+    },
+    {
+      "Ticker": "CNVRG",
+      "EntryDate": "2026-01-09",
+      "EntryPrice": 137.3000,
+      "ExitDate": "2026-01-14",
+      "ExitPrice": 135.8000,
+      "Shares": 110,
+      "NetPnlPhp": -291.01,
+      "NetR": -0.5156,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 22.45
+    },
+    {
+      "Ticker": "AEV",
+      "EntryDate": "2026-01-09",
+      "EntryPrice": 46.9000,
+      "ExitDate": "2026-01-14",
+      "ExitPrice": 45.8000,
+      "Shares": 300,
+      "NetPnlPhp": -456.83,
+      "NetR": -0.7550,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 31.05
+    },
+    {
+      "Ticker": "CNVRG",
+      "EntryDate": "2026-01-16",
+      "EntryPrice": 135.4000,
+      "ExitDate": "2026-01-21",
+      "ExitPrice": 134.4000,
+      "Shares": 110,
+      "NetPnlPhp": -234.81,
+      "NetR": -0.4091,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 22.47
+    },
+    {
+      "Ticker": "MBT",
+      "EntryDate": "2026-01-16",
+      "EntryPrice": 99.5000,
+      "ExitDate": "2026-01-21",
+      "ExitPrice": 95.9500,
+      "Shares": 150,
+      "NetPnlPhp": -649.05,
+      "NetR": -1.0247,
+      "ExitReason": "STOP",
+      "BarsHeld": 3,
+      "SlippagePhp": 15.67
+    },
+    {
+      "Ticker": "BPI",
+      "EntryDate": "2026-01-28",
+      "EntryPrice": 137.4000,
+      "ExitDate": "2026-02-02",
+      "ExitPrice": 138.1000,
+      "Shares": 40,
+      "NetPnlPhp": -32.01,
+      "NetR": -0.1431,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 8.04
+    },
+    {
+      "Ticker": "SCC",
+      "EntryDate": "2026-02-10",
+      "EntryPrice": 59.4000,
+      "ExitDate": "2026-02-13",
+      "ExitPrice": 59.1000,
+      "Shares": 290,
+      "NetPnlPhp": -235.25,
+      "NetR": -0.3523,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 29.73
+    },
+    {
+      "Ticker": "ICT",
+      "EntryDate": "2026-02-10",
+      "EntryPrice": 124.4000,
+      "ExitDate": "2026-02-13",
+      "ExitPrice": 122.6000,
+      "Shares": 140,
+      "NetPnlPhp": -399.76,
+      "NetR": -0.5664,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 28.58
+    },
+    {
+      "Ticker": "AP",
+      "EntryDate": "2026-02-10",
+      "EntryPrice": 120.2000,
+      "ExitDate": "2026-02-13",
+      "ExitPrice": 115.8000,
+      "Shares": 130,
+      "NetPnlPhp": -704.11,
+      "NetR": -1.0392,
+      "ExitReason": "STOP",
+      "BarsHeld": 3,
+      "SlippagePhp": 26.55
+    },
+    {
+      "Ticker": "JFC",
+      "EntryDate": "2026-02-16",
+      "EntryPrice": 88.3500,
+      "ExitDate": "2026-02-20",
+      "ExitPrice": 90.7000,
+      "Shares": 180,
+      "NetPnlPhp": 292.48,
+      "NetR": 0.4279,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 19.12
+    },
+    {
+      "Ticker": "GTCAP",
+      "EntryDate": "2026-02-16",
+      "EntryPrice": 60.5500,
+      "ExitDate": "2026-02-20",
+      "ExitPrice": 59.2000,
+      "Shares": 270,
+      "NetPnlPhp": -503.63,
+      "NetR": -0.7433,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 27.76
+    },
+    {
+      "Ticker": "MER",
+      "EntryDate": "2026-03-06",
+      "EntryPrice": 195.5000,
+      "ExitDate": "2026-03-11",
+      "ExitPrice": 190.6000,
+      "Shares": 80,
+      "NetPnlPhp": -514.42,
+      "NetR": -0.7460,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 16.05
+    },
+    {
+      "Ticker": "BLOOM",
+      "EntryDate": "2026-03-06",
+      "EntryPrice": 173.7000,
+      "ExitDate": "2026-03-11",
+      "ExitPrice": 170.1000,
+      "Shares": 90,
+      "NetPnlPhp": -449.09,
+      "NetR": -0.6955,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 18.50
+    },
+    {
+      "Ticker": "MONDE",
+      "EntryDate": "2026-03-26",
+      "EntryPrice": 26.9000,
+      "ExitDate": "2026-03-31",
+      "ExitPrice": 27.9000,
+      "Shares": 100,
+      "NetPnlPhp": 41.43,
+      "NetR": 0.2894,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 10.16
+    },
+    {
+      "Ticker": "SM",
+      "EntryDate": "2026-03-26",
+      "EntryPrice": 199.5000,
+      "ExitDate": "2026-03-31",
+      "ExitPrice": 195.1000,
+      "Shares": 80,
+      "NetPnlPhp": -476.79,
+      "NetR": -0.6972,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 16.06
+    },
+    {
+      "Ticker": "URC",
+      "EntryDate": "2026-03-26",
+      "EntryPrice": 30.4500,
+      "ExitDate": "2026-03-31",
+      "ExitPrice": 30.0000,
+      "Shares": 400,
+      "NetPnlPhp": -303.96,
+      "NetR": -0.5820,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 40.63
+    },
+    {
+      "Ticker": "JFC",
+      "EntryDate": "2026-04-01",
+      "EntryPrice": 109.7000,
+      "ExitDate": "2026-04-08",
+      "ExitPrice": 108.1000,
+      "Shares": 140,
+      "NetPnlPhp": -358.09,
+      "NetR": -0.5511,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 29.00
+    },
+    {
+      "Ticker": "DMC",
+      "EntryDate": "2026-04-17",
+      "EntryPrice": 123.6000,
+      "ExitDate": "2026-04-21",
+      "ExitPrice": 119.1000,
+      "Shares": 120,
+      "NetPnlPhp": -665.06,
+      "NetR": -1.0388,
+      "ExitReason": "STOP",
+      "BarsHeld": 2,
+      "SlippagePhp": 24.86
+    },
+    {
+      "Ticker": "AP",
+      "EntryDate": "2026-04-17",
+      "EntryPrice": 109.4000,
+      "ExitDate": "2026-04-22",
+      "ExitPrice": 113.3000,
+      "Shares": 50,
+      "NetPnlPhp": 132.83,
+      "NetR": 0.5175,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 10.04
+    },
+    {
+      "Ticker": "GLO",
+      "EntryDate": "2026-04-17",
+      "EntryPrice": 15.8200,
+      "ExitDate": "2026-04-22",
+      "ExitPrice": 15.4400,
+      "Shares": 900,
+      "NetPnlPhp": -476.75,
+      "NetR": -0.7495,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 37.86
+    },
+    {
+      "Ticker": "BDO",
+      "EntryDate": "2026-04-29",
+      "EntryPrice": 91.2500,
+      "ExitDate": "2026-05-05",
+      "ExitPrice": 90.7500,
+      "Shares": 170,
+      "NetPnlPhp": -209.34,
+      "NetR": -0.3500,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 17.64
+    },
+    {
+      "Ticker": "MBT",
+      "EntryDate": "2026-04-29",
+      "EntryPrice": 103.1000,
+      "ExitDate": "2026-05-05",
+      "ExitPrice": 102.1000,
+      "Shares": 90,
+      "NetPnlPhp": -172.01,
+      "NetR": -0.4204,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 18.34
+    },
+    {
+      "Ticker": "BLOOM",
+      "EntryDate": "2026-05-07",
+      "EntryPrice": 164.1000,
+      "ExitDate": "2026-05-12",
+      "ExitPrice": 173.7000,
+      "Shares": 30,
+      "NetPnlPhp": 230.44,
+      "NetR": 1.0107,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 6.03
+    },
+    {
+      "Ticker": "MONDE",
+      "EntryDate": "2026-05-07",
+      "EntryPrice": 32.1000,
+      "ExitDate": "2026-05-12",
+      "ExitPrice": 31.7500,
+      "Shares": 400,
+      "NetPnlPhp": -268.94,
+      "NetR": -0.4919,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 40.89
+    },
+    {
+      "Ticker": "AGI",
+      "EntryDate": "2026-05-07",
+      "EntryPrice": 159.3000,
+      "ExitDate": "2026-05-12",
+      "ExitPrice": 153.7000,
+      "Shares": 80,
+      "NetPnlPhp": -550.58,
+      "NetR": -1.0307,
+      "ExitReason": "STOP",
+      "BarsHeld": 3,
+      "SlippagePhp": 16.42
+    },
+    {
+      "Ticker": "BDO",
+      "EntryDate": "2026-05-07",
+      "EntryPrice": 90.4500,
+      "ExitDate": "2026-05-12",
+      "ExitPrice": 90.0000,
+      "Shares": 130,
+      "NetPnlPhp": -152.89,
+      "NetR": -0.3348,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 13.48
+    },
+    {
+      "Ticker": "SM",
+      "EntryDate": "2026-05-25",
+      "EntryPrice": 191.1000,
+      "ExitDate": "2026-05-29",
+      "ExitPrice": 198.8000,
+      "Shares": 20,
+      "NetPnlPhp": 100.03,
+      "NetR": 0.5332,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 4.03
+    },
+    {
+      "Ticker": "ICT",
+      "EntryDate": "2026-05-25",
+      "EntryPrice": 139.5000,
+      "ExitDate": "2026-05-29",
+      "ExitPrice": 138.3000,
+      "Shares": 80,
+      "NetPnlPhp": -189.01,
+      "NetR": -0.3910,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 16.39
+    },
+    {
+      "Ticker": "AP",
+      "EntryDate": "2026-05-25",
+      "EntryPrice": 118.7000,
+      "ExitDate": "2026-05-29",
+      "ExitPrice": 116.8000,
+      "Shares": 30,
+      "NetPnlPhp": -112.40,
+      "NetR": -0.6305,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 6.04
+    },
+    {
+      "Ticker": "BPI",
+      "EntryDate": "2026-05-26",
+      "EntryPrice": 197.1000,
+      "ExitDate": "2026-06-01",
+      "ExitPrice": 197.6000,
+      "Shares": 60,
+      "NetPnlPhp": -64.07,
+      "NetR": -0.1399,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 12.35
+    },
+    {
+      "Ticker": "MER",
+      "EntryDate": "2026-06-16",
+      "EntryPrice": 219.6000,
+      "ExitDate": "2026-06-19",
+      "ExitPrice": 211.8000,
+      "Shares": 50,
+      "NetPnlPhp": -484.27,
+      "NetR": -1.0432,
+      "ExitReason": "STOP",
+      "BarsHeld": 3,
+      "SlippagePhp": 20.05
+    },
+    {
+      "Ticker": "TEL",
+      "EntryDate": "2026-06-16",
+      "EntryPrice": 124.9000,
+      "ExitDate": "2026-06-19",
+      "ExitPrice": 125.2000,
+      "Shares": 100,
+      "NetPnlPhp": -76.69,
+      "NetR": -0.1583,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 20.39
+    },
+    {
+      "Ticker": "BLOOM",
+      "EntryDate": "2026-06-16",
+      "EntryPrice": 194.3000,
+      "ExitDate": "2026-06-19",
+      "ExitPrice": 193.4000,
+      "Shares": 60,
+      "NetPnlPhp": -146.26,
+      "NetR": -0.2898,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 12.03
+    },
+    {
+      "Ticker": "TEL",
+      "EntryDate": "2026-06-19",
+      "EntryPrice": 125.2000,
+      "ExitDate": "2026-06-24",
+      "ExitPrice": 124.4000,
+      "Shares": 90,
+      "NetPnlPhp": -167.81,
+      "NetR": -0.3846,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 18.35
+    },
+    {
+      "Ticker": "MER",
+      "EntryDate": "2026-06-19",
+      "EntryPrice": 213.2000,
+      "ExitDate": "2026-06-24",
+      "ExitPrice": 210.4000,
+      "Shares": 50,
+      "NetPnlPhp": -233.06,
+      "NetR": -0.4938,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 20.06
+    },
+    {
+      "Ticker": "BLOOM",
+      "EntryDate": "2026-06-19",
+      "EntryPrice": 193.4000,
+      "ExitDate": "2026-06-24",
+      "ExitPrice": 190.4000,
+      "Shares": 50,
+      "NetPnlPhp": -226.16,
+      "NetR": -0.5511,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 10.03
+    },
+    {
+      "Ticker": "LTG",
+      "EntryDate": "2026-07-03",
+      "EntryPrice": 85.1000,
+      "ExitDate": "2026-07-08",
+      "ExitPrice": 85.7000,
+      "Shares": 40,
+      "NetPnlPhp": -29.28,
+      "NetR": -0.1818,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 4.03
+    },
+    {
+      "Ticker": "URC",
+      "EntryDate": "2026-07-03",
+      "EntryPrice": 31.9000,
+      "ExitDate": "2026-07-08",
+      "ExitPrice": 31.8500,
+      "Shares": 200,
+      "NetPnlPhp": -83.36,
+      "NetR": -0.2947,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 20.27
+    },
+    {
+      "Ticker": "SM",
+      "EntryDate": "2026-07-03",
+      "EntryPrice": 211.2000,
+      "ExitDate": "2026-07-08",
+      "ExitPrice": 206.2000,
+      "Shares": 30,
+      "NetPnlPhp": -214.90,
+      "NetR": -0.7494,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 12.04
+    },
+    {
+      "Ticker": "URC",
+      "EntryDate": "2026-07-14",
+      "EntryPrice": 31.0000,
+      "ExitDate": "2026-07-17",
+      "ExitPrice": 30.2500,
+      "Shares": 200,
+      "NetPnlPhp": -222.95,
+      "NetR": -0.7889,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 20.26
+    },
+    {
+      "Ticker": "AP",
+      "EntryDate": "2026-07-22",
+      "EntryPrice": 110.8000,
+      "ExitDate": "2026-07-27",
+      "ExitPrice": 113.7000,
+      "Shares": 50,
+      "NetPnlPhp": 82.79,
+      "NetR": 0.3224,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 10.04
+    },
+    {
+      "Ticker": "SMPH",
+      "EntryDate": "2026-07-22",
+      "EntryPrice": 32.9500,
+      "ExitDate": "2026-07-27",
+      "ExitPrice": 32.6000,
+      "Shares": 200,
+      "NetPnlPhp": -143.61,
+      "NetR": -0.5458,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 20.32
+    },
+    {
+      "Ticker": "JFC",
+      "EntryDate": "2026-07-22",
+      "EntryPrice": 118.5000,
+      "ExitDate": "2026-07-27",
+      "ExitPrice": 115.9000,
+      "Shares": 70,
+      "NetPnlPhp": -252.92,
+      "NetR": -0.6947,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 14.40
+    },
+    {
+      "Ticker": "DMC",
+      "EntryDate": "2026-07-22",
+      "EntryPrice": 134.1000,
+      "ExitDate": "2026-07-27",
+      "ExitPrice": 129.4000,
+      "Shares": 60,
+      "NetPnlPhp": -349.34,
+      "NetR": -1.0364,
+      "ExitReason": "STOP",
+      "BarsHeld": 3,
+      "SlippagePhp": 12.27
+    },
+    {
+      "Ticker": "GTCAP",
+      "EntryDate": "2026-08-06",
+      "EntryPrice": 58.6500,
+      "ExitDate": "2026-08-11",
+      "ExitPrice": 61.7500,
+      "Shares": 50,
+      "NetPnlPhp": 101.17,
+      "NetR": 0.6486,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 5.04
+    },
+    {
+      "Ticker": "BDO",
+      "EntryDate": "2026-08-06",
+      "EntryPrice": 81.6500,
+      "ExitDate": "2026-08-11",
+      "ExitPrice": 82.5000,
+      "Shares": 30,
+      "NetPnlPhp": -25.55,
+      "NetR": -0.2029,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 3.03
+    },
+    {
+      "Ticker": "MBT",
+      "EntryDate": "2026-08-06",
+      "EntryPrice": 111.2000,
+      "ExitDate": "2026-08-11",
+      "ExitPrice": 110.1000,
+      "Shares": 60,
+      "NetPnlPhp": -131.64,
+      "NetR": -0.4584,
+      "ExitReason": "TIME",
+      "BarsHeld": 3,
+      "SlippagePhp": 12.24
+    }
+  ],
+  "BenchmarkReturnPct": 36.73,
+  "ExcessReturnPct": -46.75,
+  "CagrPct": -6.02,
+  "AnnualizedSharpeRatio": -4.87,
+  "CalmarRatio": -0.59,
+  "TotalSlippagePhp": 840.44,
+  "NetReturnAfterSlippagePct": -10.02
+}

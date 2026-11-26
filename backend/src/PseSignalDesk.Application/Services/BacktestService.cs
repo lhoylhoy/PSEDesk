@@ -138,6 +138,11 @@ public sealed class BacktestService
         var indexBars = batch.IndexBars ?? Array.Empty<OhlcvBar>();
         var minBars = Math.Max(profile.MinHistoryBars, QuantitativeFilterService.MinBarsRequired);
 
+        // The PSEi read depends only on the session, not on the ticker being graded, so it is
+        // resolved once per date instead of once per ticker per date: 24 identical 200-session
+        // averages per session were pure repetition.
+        var regimeByDate = new Dictionary<DateOnly, MarketRegime?>();
+
         foreach (var stock in batch.Stocks)
         {
             var bars = stock.Bars.OrderBy(bar => bar.Date).ToList();
@@ -168,7 +173,11 @@ public sealed class BacktestService
                     continue;
                 }
 
-                var regime = ResolveIndexRegime(indexPrefix, indexCloses);
+                if (!regimeByDate.TryGetValue(bars[index].Date, out var regime))
+                {
+                    regime = ResolveIndexRegime(indexPrefix, indexCloses);
+                    regimeByDate[bars[index].Date] = regime;
+                }
 
                 // The regime gate is measured on the closed prefix only: the PSEi needs its
                 // full 200 sessions before the desk trusts the average, and a bearish tape
@@ -392,34 +401,14 @@ public sealed class BacktestService
     /// </summary>
     private static decimal?[] BuildCausalEma20(IReadOnlyList<OhlcvBar> bars)
     {
-        var series = new decimal?[bars.Count];
-        var period = QuantitativeFilterService.EmaPeriod;
-        var multiplier = 2m / (period + 1m);
-        var seed = 0m;
-        decimal? ema = null;
+        var closes = new decimal[bars.Count];
 
         for (var index = 0; index < bars.Count; index++)
         {
-            seed += bars[index].Close;
-
-            if (index < period - 1)
-            {
-                continue;
-            }
-
-            if (index == period - 1)
-            {
-                ema = seed / period;
-            }
-            else
-            {
-                ema = (bars[index].Close * multiplier) + (ema!.Value * (1m - multiplier));
-            }
-
-            series[index] = ema;
+            closes[index] = bars[index].Close;
         }
 
-        return series;
+        return QuantitativeFilterService.ComputeEmaSeries(closes);
     }
 
     /// <summary>
@@ -965,16 +954,23 @@ public sealed class BacktestService
 
         foreach (var stock in stocks)
         {
-            var closes = new List<decimal>(stock.Bars.Count);
+            var bars = stock.Bars.OrderBy(bar => bar.Date).ToList();
+            var closes = new decimal[bars.Count];
 
-            foreach (var bar in stock.Bars.OrderBy(bar => bar.Date))
+            for (var index = 0; index < bars.Count; index++)
             {
-                closes.Add(bar.Close);
+                closes[index] = bars[index].Close;
+            }
 
-                var ema = QuantitativeFilterService.ComputeEma(closes);
-                if (ema is decimal value && value > 0m)
+            // One pass over the ticker's history instead of one pass per bar: the trail is needed on
+            // every session of the replay, and recomputing the whole EMA for each prefix was O(n²).
+            var ema20 = QuantitativeFilterService.ComputeEmaSeries(closes);
+
+            for (var index = 0; index < bars.Count; index++)
+            {
+                if (ema20[index] is decimal value && value > 0m)
                 {
-                    series[(stock.Ticker, bar.Date)] = value;
+                    series[(stock.Ticker, bars[index].Date)] = value;
                 }
             }
         }

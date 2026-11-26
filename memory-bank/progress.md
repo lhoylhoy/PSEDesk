@@ -1,10 +1,23 @@
 # Progress — PSE Signal Desk
 
-**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion, deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
+**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session, deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **416 backend / 49 frontend tests green, `npm run build` green** (2026-11-26, accuracy pass + live-drift wiring). Everything feed-dependent is unverified live in this environment (Yahoo/PSE answered 404/429 here); the open security remediation is listed under *Remaining*.
+**Latest verification:** **433 backend tests green + 1 skipped manual benchmark (434 total) / 49 frontend tests green** (2026-11-26, performance pass on top of the accuracy pass + live-drift wiring). The replay's published numbers are unchanged byte-for-byte (goldens pass against both the pre- and post-optimisation source) while allocations fell from 1,708.4 MB to ~1,402 MB per four-horizon run. Everything feed-dependent is unverified live in this environment (Yahoo/PSE answered 404/429 here); the open security remediation is listed under *Remaining*.
 
-## Latest verification (2026-11-26 — accuracy pass + live-drift wiring)
+## Latest verification (2026-11-26 — performance pass)
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 433, Skipped: 1, Total: 434` (7 s, exit 0) |
+| `dotnet test … -c Release --filter FullyQualifiedName~Benchmark_reports --logger "console;verbosity=detailed"` | before: 6,554 / 6,327 / 6,224 ms and **1,708.4 MB** every run; after: 4,741 / 5,649 / 6,247 ms and **1,401–1,404 MB** |
+| benchmark trade lines, both sides | DAY 48 trades 89,975.20 (−10.02 %), WEEK 36 · 89,709.45 (−10.29 %), MONTH 30 · 88,919.05 (−11.08 %), YEAR 27 · 89,081.12 (−10.92 %) — identical |
+| goldens run against the pre-optimisation source (`git stash push -u -- backend/src`) | `Passed! 5/5`, i.e. byte-identical output |
+| `dotnet test … --list-tests` | 434 rows over 31 test files |
+| `git status --porcelain` | 9 modified + 7 new paths, no strays; `git stash list` empty afterwards |
+
+Wall clock is noisy here (±30 % between identical runs), so the allocation number is the signal that is actually repeatable. Not run: anything needing network, and `dotnet ef` (no schema change in this pass).
+
+## Verification (2026-11-26 — accuracy pass + live-drift wiring; counts as of that pass)
 
 | Command | Result |
 | --- | --- |
@@ -32,6 +45,8 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 
 ### Signal pipeline and pricing
 - [x] Live market data: Yahoo v8 charts with a mirror-host retry, index resolution plus an equal-weight heavyweight proxy, USD/PHP staleness guard, 10-ticker minimum, tick-rounded candles, zero-volume echo removal, row-aware PSE Edge disclosure attribution, best-effort macro dials and an optional official DQR.
+- [x] **One download per upstream URL.** `MarketDataCache` (singleton, bounded at 200 entries, `TimeProvider`-injectable) caches the *task* of a raw body under the absolute URL — 10 minutes for a Yahoo chart, 5 for an Edge page — so the four horizons of one session, a replay and an ad-hoc research call share a single GET. Concurrent callers share one request, a failure is evicted rather than remembered, and an abandoned caller never cancels the download another request is waiting for (shared fetch on `CancellationToken.None`, per-caller `WaitAsync`, the download keeps its own timeout). `InvalidateCache()` (default no-op on the interface) clears it, and `POST /api/signals/run-now` calls it.
+- [x] **One fan-out per session.** With the session date fixed by the index, the FX series, the Edge pages, the DQR, the macro dials and the ticker charts start together; each ticker awaits the disclosure map only after its own chart lands. The typed client runs on a pooled `SocketsHttpHandler` (`AutomaticDecompression = All`, `UseCookies = false`, `PooledConnectionLifetime = 5 min`) and `GET /api/research/catalog` is client-cached for an hour.
 - [x] Quantitative filter: Wilder RSI-14, ATR-14, EMA-20, SMA-50/150/200, 52-week high, Weinstein stage, RS63d, ATR%, VCP ratio, up/down volume, Chaikin money flow, Kaufman efficiency, beta, max drawdown, realized volatility, 20-day turnover/volume (mean **and** median + active-session count), support/resistance, weighted pre-score (85-point technical total rescaled when foreign flow is unreported), the PHP 5M floor plus `MinimumActiveTradingDays20d = 16`, and the top-25 cap.
 - [x] `PseDisclosureClassifier`: headline → `DisclosureCategory`, trap flags (hard `SRO_DILUTION`, `TENDER_OFFER_PIN`, `TRADING_HALT_RISK`; soft overhang, ex-dividend, static-band chases) and UI copy.
 - [x] Defensive `SignalJsonParser`: outermost balanced JSON, fences/prose, braces in strings, numeric strings, contract validation and human-readable retry errors.
@@ -65,6 +80,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] `BacktestService`: prefix-only evaluation with `includeLiveForeignFlow: false` and session-scoped disclosures, the median turnover/active-day liquidity gate, multi-slot book (`MaxOpenPositions` 5, 6% heat, 2 names / 35% equity per sector), equity-based sizing with cash as a funding check, drawdown governor, board-lot slippage, break-even/EMA20 exit ladder, gap-open stop fills, **dated fees per trade**, the PSEi benchmark, alpha, CAGR, Sharpe, Calmar, total slippage and every trade.
 - [x] `WalkForwardEdge`: the replay's own residual model, refitted every 60 sessions on already-resolved candidates, used only when it beats the neutral base rate on its own trades; it never writes `TrainedHorizonModels` and its acceptance is deliberately in-sample.
 - [x] `SignalOutcomeService`: entry-fill gate, `UNFILLED` terminal rows, conservative same-bar tie to the stop, realized net R after per-leg fees, scorecard aggregation, live calibration offset and desk memory.
+- [x] **Replay cost is linear in bars, not quadratic.** One causal EMA-20 series per ticker (`BuildEma20Series`, the same `ComputeEmaSeries` the live filter uses) instead of one EMA per bar, the index regime memoised per date, and the filter's trailing-20-session statistics computed in a single pass — the four-horizon benchmark went from 1,708.4 MB to ~1,402 MB allocated with identical output.
 - [x] `GET /api/signals/scorecard`, `GET /api/signals/backtest`, `GET /api/research/catalog`, `GET /api/research/{query}`.
 
 ### Market data, DQR and knowledge
@@ -93,21 +109,24 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 
 ### Tooling and documentation
 - [x] `npm test` harness: `node --test "src/lib/__tests__/*.test.ts"` over the React-free `lib/` layer (no DOM, no dependencies).
+- [x] **Golden snapshot harness (backend).** `SyntheticMarketFixture` (seeded synthetic tape, no network, no clock), `GoldenSnapshot` (approval-style compare against `tests/…/Application/Golden/*.json`, `PSEDESK_UPDATE_GOLDEN=1` records) and a `Skip`ped Release-only benchmark that prints elapsed time and allocations. It is the guard that let the performance pass touch every indicator without moving a desk number.
 - [x] `.vscode/launch.json` + `tasks.json` (API launch/attach, Chrome, full-stack compound, build/test tasks, `backend: free port 5236`) and `frontend/.env.example`.
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 416 backend + 49 frontend
+## Test inventory — 434 backend (433 executed + 1 skipped benchmark) + 49 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
-### Backend — `backend/tests/PseSignalDesk.Tests` (27 files)
+### Backend — `backend/tests/PseSignalDesk.Tests` (31 files)
 
 | Layer | Suite | Cases |
 | --- | --- | --- |
 | Domain | `PseBoardLotServiceTests` — 15 tier/tick rows, bracket crossing, static band, plan repair, dated per-leg fees + commission floor, net R:R in pesos, break-even, EV, Quarter-Kelly, risk budget, gap fills, ADV, slippage | 78 |
 | Domain | `LiveDriftPolicyTests` — standard errors, required gaps, multipliers, classification thresholds, hysteresis, `Describe` copy | 8 |
-| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, mean+median liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring, point-in-time scoping | 36 |
+| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, mean+median liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring, point-in-time scoping, O(n) `ComputeEmaSeries` parity on every prefix, `IsAscendingByDate` | 38 |
+| Application | `BacktestGoldenTests` — the four-horizon replay serialised against checked-in snapshots (plus a `Skip`ped benchmark that only prints time/allocations) | 5 |
+| Application | `QuantitativeFilterGoldenTests` — `EvaluateStock`'s metrics against a checked-in snapshot | 1 |
 | Application | `OrderTicketCalculatorTests` — sizing, verdicts, governor band, drift multiplier (incl. `HALTED` → 0), lot step-down and the risk-budget refusal, heat/sector/cash caps, slippage, execution guidance, all seven pyramid rules | 31 |
 | Application | `PortfolioServiceTests` — open/close/stop rules, pyramiding, trims, drawdown posture, exposure, alert dedupe, drift-throttled tickets | 29 |
 | Application | `ProbabilisticEdgeServiceTests` — base rate, barrier geometry, tilts, clamps, verdict gates, hit rates, learned edge, calibration | 22 |
@@ -123,7 +142,8 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | Application | `MarketDirectionServiceTests` — pillar blend, clamp, bearish override, unreported dials | 6 |
 | Application | `DailyQuotationImportServiceTests` — live/upload paths, overlays, unmatched tickers, size guard | 4 |
 | Application | `MoneyManagerTrainingServiceTests` — promotion gate, purged split, inactive fallback | 3 |
-| Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials | 18 |
+| Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials, chart-cache reuse, `InvalidateCache` | 20 |
+| Infrastructure | `MarketDataCacheTests` — shared task under concurrency, no refetch inside the TTL, a failure is never served, TTL refetch, an abandoned caller cannot cancel, pre-cancelled does nothing, `Clear`, oldest-entry eviction | 8 |
 | Infrastructure | `OllamaPromptBuilderTests` — horizon block, knowledge, feedback, cross-asset, desk memory, guardrails | 16 |
 | Infrastructure | `SqliteKnowledgeServiceTests` — reindex idempotency, guardrail retrieval, delete protection, search boosts | 8 |
 | Infrastructure | `KnowledgeDocumentParserTests` — chunking, section refs, content hash | 6 |
@@ -150,7 +170,14 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] **Pillar 2 remainder** — `TrainedHorizonModel.FeatureKeysJson` (+ loader refusal on schema mismatch) so a book cannot price a feature vector it was not trained on.
 - [ ] **Pillar 5 remainder** — `InvalidationFirstPlanBuilder`, pipeline inversion (invalidation before target), `TradeExitLadderPolicy` as the single ladder, `OllamaTopPick` audit-only fields.
 - [ ] **Pillar 4 remainder** — real walk-forward folds (disjoint rolling windows + fold report); today the replay refits one rolling model.
-- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 416 / 49). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 433 executed + 1 skipped / 49). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+
+### Performance pass — follow-ups
+
+- [ ] Invalidate the download cache from the other manual entry points if a warm body ever proves stale there (`DailyQuotationImportService`, `POST /api/signals/train-all`); the daily run, research and replay deliberately reuse it.
+- [ ] Confirm the Edge pagination split against a real outage — first page fatal, extra pages logged and skipped.
+- [ ] Re-run the benchmark only in `Release`; `Debug` timings on this laptop are noise.
+- [ ] Raise `MarketDataCache.DefaultMaxEntries` if the tracked universe grows far beyond ~58 names.
 
 ### Security remediation (`security_audit_report.md`, 2026-11-26 — 15 findings)
 
@@ -201,9 +228,32 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - **Thin books start on the prior.** Below 25 held-out trades (training) or 20 graded picks (calibration) the desk prices off the structural prior with small tilts, so a fresh database reports `PRIOR_FALLBACK`.
 - **Retrieval degrades silently by design.** No embeddings key, an embeddings failure or a BM25-only fallback all still retrieve through guardrails rather than erroring.
 - **Ladder duplication.** The break-even/trail ladder lives in three services; a change must be applied in all three (training, replay, wave plans).
-- **Replay/training cost.** Both refetch long lookbacks for the liquid universe per call; refits are bounded and cached, but a cold `train-all` is the slowest operation in the app.
+- **Replay/training cost.** Both refetch long lookbacks for the liquid universe per call; the chart cache now absorbs the *repeat* requests (the four horizons of a session, research, a second refit within ten minutes), but a cold `train-all` on a fresh process is still the slowest operation in the app. The indicator work is linear in bars now, so what remains is upstream latency, not arithmetic.
+- **The download cache is per process.** It lives in memory, so a restart is cold and two API processes would each download their own copies; there is no on-disk cache and no cross-process invalidation.
+- **A failed extra Edge page is now silent.** `FetchDisclosuresAsync` still fails the run when the announcements page itself fails, but a failed second/third page is logged and skipped (the old `throwOnFailure` flag is gone). The suite pins the split; a real Edge outage has never been observed here.
 
 ## Verification log (newest first, observed output)
+
+**2026-11-26 — performance pass (cache, fan-out, linear indicators; 416 → 434, +17 executed rows and 1 skipped benchmark).**
+
+```
+cd backend && dotnet test PseSignalDesk.slnx --nologo
+  -> Passed! - Failed: 0, Passed: 433, Skipped: 1, Total: 434 (net10.0), exit 0
+     (skip: BacktestGoldenTests.Benchmark_reports_elapsed_time_and_allocations)
+dotnet test -c Release --filter 'FullyQualifiedName~Benchmark_reports' --logger 'console;verbosity=detailed'
+  before (stashed src, three runs): 6,554 / 6,327 / 6,224 ms, 1,708.4 MB allocated
+  after  (three runs):              4,741 / 5,649 / 6,247 ms, 1,401-1,404 MB allocated
+  both: DAY 48 trades 89,975.20 (-10.02%), WEEK 36 89,709.45 (-10.29%),
+        MONTH 30 88,919.05 (-11.08%), YEAR 27 89,081.12 (-10.92%)
+dotnet test -c Release --filter 'FullyQualifiedName~BacktestGoldenTests' with backend/src stashed
+  -> Passed! - Failed: 0, Passed: 5, Total: 5   (goldens match the pre-optimisation source)
+dotnet test --list-tests -> 434 rows over 31 test files
+  (MarketDataCacheTests 8, PseMarketDataProviderTests 20, QuantitativeFilterServiceTests 38,
+   BacktestGoldenTests 5, QuantitativeFilterGoldenTests 1)
+git status --porcelain   -> 9 modified + 7 new paths; git stash list empty
+```
+
+The `Debug` figures taken mid-pass (7,274 ms → 9,633 ms) were re-measured properly before being believed: on this machine the wall clock swings ±30 % run to run, so the claim rests on allocations (a steady −18 %) and on the goldens proving the numbers did not move.
 
 **2026-11-26 — live-drift throttle wiring (five new tests, 411 → 416).**
 

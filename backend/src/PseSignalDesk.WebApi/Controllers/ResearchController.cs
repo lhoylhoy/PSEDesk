@@ -21,7 +21,13 @@ public sealed class ResearchController : ControllerBase
         _research = research;
     }
 
+    /// <summary>
+    /// The tracked catalog: ticker, company name and sector, never a price. It is static
+    /// metadata, so the browser may hold it for an hour — a reload of the desk should not
+    /// re-download a list that only changes when the build changes.
+    /// </summary>
     [HttpGet("catalog")]
+    [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Client)]
     public ActionResult<IReadOnlyList<CatalogStockDto>> GetCatalog() =>
         Ok(_research.GetCatalog());
 

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -96,6 +97,12 @@ builder.Services.AddSingleton<QuantitativeFilterService>();
 builder.Services.AddSingleton<SignalJsonParser>();
 builder.Services.AddSingleton<IDailyQuotationParser, PseDailyQuotationParser>();
 
+// One upstream cache for the whole process: the typed market-data client is transient, so a
+// per-instance cache would never be reused. The daily run, the research endpoint and a manual
+// backtest all request the same Yahoo chart URLs, and the cache serves those repeats (and
+// concurrent duplicates) from a single download.
+builder.Services.AddSingleton<MarketDataCache>();
+
 builder.Services.AddHttpClient<IOllamaSignalEngine, OllamaSignalEngine>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<IOptions<OllamaCloudOptions>>().Value;
@@ -114,6 +121,20 @@ builder.Services.AddHttpClient<IMarketDataProvider, PseMarketDataProvider>((serv
     {
         client.DefaultRequestHeaders.UserAgent.ParseAdd(marketOptions.UserAgent.Trim());
     }
+})
+.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    // Yahoo answers each chart with a few hundred kilobytes of JSON and PSE Edge sends HTML; the
+    // default handler asks for the identity encoding, so every download would pay full size.
+    AutomaticDecompression = DecompressionMethods.All,
+
+    // Neither feed needs a cookie jar, and a shared one is a lock and an unbounded container for
+    // no benefit.
+    UseCookies = false,
+
+    // Recycle idle connections so a DNS move (or a failover to the mirror host) is picked up
+    // instead of pinning a stale socket for the life of the process.
+    PooledConnectionLifetime = TimeSpan.FromMinutes(5)
 });
 
 builder.Services.AddHttpClient<OllamaEmbeddingClient>(client =>

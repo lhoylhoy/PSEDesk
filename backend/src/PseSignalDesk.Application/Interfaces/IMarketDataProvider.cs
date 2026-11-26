@@ -23,6 +23,13 @@ public interface IMarketDataProvider
         FetchAsync(tradeDate, cancellationToken);
 
     /// <summary>
+    /// Drops any cached upstream responses so the next fetch reflects the live tape. A manual
+    /// run calls this when the operator asks for fresh numbers; scheduled runs rely on the
+    /// provider's short time-to-live instead. Providers that cache nothing keep this no-op.
+    /// </summary>
+    void InvalidateCache() { }
+
+    /// <summary>
     /// Fetches a single <c>{SYMBOL}.PS</c> chart plus its disclosures on demand, so the
     /// research endpoint can inspect any PSE name — including tickers that are not in the
     /// tracking catalog. Returning null means the symbol has no usable series.

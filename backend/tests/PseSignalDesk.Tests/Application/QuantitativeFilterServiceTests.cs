@@ -27,6 +27,49 @@ public sealed class QuantitativeFilterServiceTests
     }
 
     [Fact]
+    public void ComputeEmaSeries_matches_ComputeEma_on_every_prefix()
+    {
+        // The series is the O(n) form of "recompute the EMA from scratch at every bar". If the two
+        // ever disagree by one unit in the last place, the +1.5R trail fires on a different session
+        // and the replay's numbers move, so every index is pinned here.
+        var closes = Enumerable.Range(0, 240)
+            .Select(index => 20m + (index % 17) - (index % 5) + (index * 0.125m))
+            .ToList();
+
+        var series = QuantitativeFilterService.ComputeEmaSeries(closes);
+
+        Assert.Equal(closes.Count, series.Length);
+
+        for (var index = 0; index < closes.Count; index++)
+        {
+            var prefix = closes.Take(index + 1).ToList();
+            var expected = QuantitativeFilterService.ComputeEma(prefix);
+
+            Assert.Equal(expected, series[index]);
+
+            if (index < QuantitativeFilterService.EmaPeriod - 1)
+            {
+                Assert.Null(series[index]);
+            }
+        }
+    }
+
+    [Fact]
+    public void IsAscendingByDate_accepts_a_replay_prefix_and_rejects_an_out_of_order_series()
+    {
+        var ascending = Enumerable.Range(0, 5)
+            .Select(offset => new OhlcvBar(new DateOnly(2026, 11, 2).AddDays(offset), 1m, 1m, 1m, 1m, 1L))
+            .ToList();
+
+        Assert.True(QuantitativeFilterService.IsAscendingByDate(ascending));
+        Assert.True(QuantitativeFilterService.IsAscendingByDate(new[] { ascending[0] }));
+
+        var swapped = new List<OhlcvBar> { ascending[0], ascending[2], ascending[1], ascending[3] };
+
+        Assert.False(QuantitativeFilterService.IsAscendingByDate(swapped));
+    }
+
+    [Fact]
     public void ComputeRsi_saturates_on_one_way_trends_and_returns_50_when_flat()
     {
         var rising = Enumerable.Range(1, 30).Select(value => (decimal)value).ToList();
