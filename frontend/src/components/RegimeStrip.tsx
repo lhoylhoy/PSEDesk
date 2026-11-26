@@ -1,6 +1,6 @@
 import type { Horizon, RegimeSnapshot, SectorQuadrant, SectorRotation, SignalRun, TrustPulse } from '../types/signals';
 import { cn } from '../lib/cn';
-import { formatCompactPeso, formatPercent, formatWeekday } from '../lib/formatters';
+import { formatCompactPeso, formatDeltaBasisPoints, formatDeltaPercent, formatPercent, formatWeekday } from '../lib/formatters';
 import { horizonMeta } from '../lib/horizons';
 import { describeCashAdvice } from '../lib/plainAdvice';
 import type { ViewMode } from '../lib/viewMode';
@@ -86,7 +86,7 @@ function RotationCard({ card }: { card: SectorRotation }) {
         {card.compositeScore.toFixed(0)} score · {card.stockCount} name{card.stockCount === 1 ? '' : 's'}
       </p>
       <p className="tabular mt-0.5 text-[10px] text-slate-500">
-        RS {formatPercent(card.avgRelativeStrength63d, 1)} · {formatPercent(card.aboveSma50Pct, 0, false)} &gt; 50D
+        RS {formatDeltaPercent(card.avgRelativeStrength63d, 1)} · {formatPercent(card.aboveSma50Pct, 0, false)} &gt; 50D
       </p>
     </li>
   );
@@ -123,12 +123,6 @@ function describeForeignSource(source: string | null): string {
     default:
       return "today's flow";
   }
-}
-
-export function formatBasisPoints(value: number | null | undefined, digits = 1): string {
-  return value === null || value === undefined || !Number.isFinite(value)
-    ? dash
-    : `${value > 0 ? '+' : ''}${value.toFixed(digits)}bps`;
 }
 
 /** Green for a risk-on move, red for risk-off, muted when the feed never reported. */
@@ -180,7 +174,7 @@ export function IndicatorTiles({
         value={regime.usdPhp.toFixed(4)}
         detail={
           regime.usdPhpSma50 !== null
-            ? `50D ${regime.usdPhpSma50.toFixed(4)} · 20D ${formatPercent(regime.usdPhpChange20dPct, 1)}`
+            ? `50D ${regime.usdPhpSma50.toFixed(4)} · 20D ${formatDeltaPercent(regime.usdPhpChange20dPct, 1)}`
             : 'Yahoo Finance PHP=X close'
         }
         tone={
@@ -196,7 +190,7 @@ export function IndicatorTiles({
         value={regime.us10YClosePct !== null ? `${regime.us10YClosePct.toFixed(3)}%` : dash}
         detail={
           regime.us10YChange20dBps !== null
-            ? `20D ${formatBasisPoints(regime.us10YChange20dBps)} · ^TNX`
+            ? `20D ${formatDeltaBasisPoints(regime.us10YChange20dBps)} · ^TNX`
             : 'unreported by feed'
         }
         tone={changeTone(regime.us10YChange20dBps, false)}
@@ -206,7 +200,7 @@ export function IndicatorTiles({
         value={regime.brentUsd !== null ? `$${regime.brentUsd.toFixed(2)}` : dash}
         detail={
           regime.brentChange20dPct !== null
-            ? `20D ${formatPercent(regime.brentChange20dPct, 1)} · BZ=F`
+            ? `20D ${formatDeltaPercent(regime.brentChange20dPct, 1)} · BZ=F`
             : 'unreported by feed'
         }
         tone={changeTone(regime.brentChange20dPct, false)}
@@ -216,7 +210,7 @@ export function IndicatorTiles({
         value={regime.epheCloseUsd !== null ? `$${regime.epheCloseUsd.toFixed(2)}` : dash}
         detail={
           regime.epheChange20dPct !== null
-            ? `20D ${formatPercent(regime.epheChange20dPct, 1)} · MSCI PH ETF`
+            ? `20D ${formatDeltaPercent(regime.epheChange20dPct, 1)} · MSCI PH ETF`
             : 'unreported by feed'
         }
         tone={changeTone(regime.epheChange20dPct)}

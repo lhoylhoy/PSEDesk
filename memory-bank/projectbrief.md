@@ -46,9 +46,9 @@ The product is research tooling, **not investment advice**, and it is **not a li
 ## Success criteria
 
 - `dotnet test backend/PseSignalDesk.slnx` passes (**439 tests + 1 skipped manual benchmark** as of 2026-11-26), including the golden snapshots that pin the replay's published numbers byte-for-byte.
-- `npm test` in `frontend/` passes (**49 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/legalConsent.test.ts` and `lib/__tests__/queryCache.test.ts`).
+- `npm test` in `frontend/` passes (**55 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/legalConsent.test.ts`, `lib/__tests__/queryCache.test.ts` and `lib/__tests__/formatters.test.ts`, which pins "a value always carries its unit" and "unreported renders `—`, never `0`").
 - `npm run build` in `frontend/` passes (`tsc --noEmit` + Vite build), with each dialog and the Pro table in their own chunk.
-- The terminal is usable one-thumbed on a 320px phone and dense on a 2560px desktop from the **same payload**: dialogs become bottom sheets, wide tables fall back to cards, and no mobile variant fetches a different endpoint.
+- The terminal is usable one-thumbed on a 320px phone and dense on a 2560px desktop from the **same payload**: dialogs become bottom sheets, wide tables fall back to cards, and no mobile variant fetches a different endpoint. Simple mode carries its own type floor (12px labels, 13px explanatory notes, both scoped to `[data-view-mode='simple']`) and one polite live region announces every run, result and failure.
 - With network + `OLLAMA_API_KEY`, `run-now` for two consecutive sessions produces all four drift states and all three drop categories from real history, for every horizon.
 - Without either prerequisite the API fails loudly (`503` feed, `400` key) and persists nothing.
 - No run can persist a price that is not orderable on the PSE tick grid.
@@ -94,7 +94,7 @@ frontend/
     lib/        # formatters (PHP, PSE prices, Asia/Manila dates), horizons metadata, class joiner, theme, viewMode,
                 # legalConsent, plainAdvice, pseNicknames, sessionSelection, riskSizing, queryCache (SWR client cache),
                 # preloaders (chunk + data warmers)
-    lib/__tests__/ # node:test suites (legalConsent, plainAdvice, queryCache); excluded from the browser build
+    lib/__tests__/ # node:test suites (legalConsent, plainAdvice, queryCache, formatters); excluded from the browser build
     types/      # API contract types
 ```
 

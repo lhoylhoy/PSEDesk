@@ -81,6 +81,53 @@ export function formatRatio(value: number | null | undefined): string {
   return `${value.toFixed(2)} : 1`;
 }
 
+/**
+ * Direction as a glyph, so a colour tone is never the only channel a figure carries.
+ * A reader arriving from a Philippine broker app (where the up/down palette is often the
+ * reverse of a Western terminal) — or with a colour-vision deficiency — still sees which way
+ * a number moved. Zero and unreported values carry no glyph.
+ */
+export function directionGlyph(value: number | null | undefined): string {
+  if (!isNumber(value) || value === 0) {
+    return '';
+  }
+
+  return value > 0 ? '▲' : '▼';
+}
+
+/** A toned percentage with its direction glyph, e.g. `▼2.4%`, `0.0%`, `—`. */
+export function formatDeltaPercent(value: number | null | undefined, digits = 1): string {
+  if (!isNumber(value)) {
+    return dash;
+  }
+
+  const glyph = directionGlyph(value);
+  return glyph ? `${glyph}${Math.abs(value).toFixed(digits)}%` : `${(0).toFixed(digits)}%`;
+}
+
+/** The same convention in basis points, for the yield dial: `▲12.0bps`. */
+export function formatDeltaBasisPoints(value: number | null | undefined, digits = 1): string {
+  if (!isNumber(value)) {
+    return dash;
+  }
+
+  const glyph = directionGlyph(value);
+  return glyph ? `${glyph}${Math.abs(value).toFixed(digits)}bps` : `${(0).toFixed(digits)}bps`;
+}
+
+/**
+ * Elapsed wall clock for a long server action — a full screen downloads a few hundred
+ * candles before it ranks anything, so "still working, 42s" is the difference between a
+ * patient reader and a reload.
+ */
+export function formatElapsedSeconds(totalSeconds: number): string {
+  const seconds = Number.isFinite(totalSeconds) ? Math.max(0, Math.floor(totalSeconds)) : 0;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+
+  return minutes > 0 ? `${minutes}m ${String(remainder).padStart(2, '0')}s` : `${remainder}s`;
+}
+
 export function formatInteger(value: number | null | undefined): string {
   if (!isNumber(value)) {
     return dash;

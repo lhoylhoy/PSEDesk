@@ -11,7 +11,7 @@ import { WelcomeSetupBanner } from './components/WelcomeSetupBanner';
 import { Button } from './components/ui/Button';
 import { TechnicalDisclosure } from './components/ui/TechnicalDisclosure';
 import { TooltipProvider } from './components/ui/Tooltip';
-import { formatCompactPeso, formatTimestamp, formatWeekday } from './lib/formatters';
+import { formatCompactPeso, formatElapsedSeconds, formatTimestamp, formatWeekday } from './lib/formatters';
 import { horizonMeta } from './lib/horizons';
 import {
   clearLegalAcceptance,
@@ -88,6 +88,7 @@ export default function App() {
   const [error, setError] = useState<FriendlyError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<BusyAction>(null);
+  const [runElapsedSeconds, setRunElapsedSeconds] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
@@ -104,6 +105,25 @@ export default function App() {
     setPortfolioToken((token) => token + 1);
   }, []);
   const consumeDraft = useCallback(() => setTradeDraft(null), []);
+
+  /**
+   * A screen run downloads a few hundred candles, screens the universe and calls the model, so
+   * the reader gets a clock instead of a frozen button. The strip reports elapsed wall clock
+   * only — it never claims a stage the server did not confirm.
+   */
+  useEffect(() => {
+    if (busy !== 'run') {
+      setRunElapsedSeconds(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setRunElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
+    }, 1_000);
+
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   // The gate shows again when the notice changes, so a reader can never be silently held to an
   // older disclosure.
@@ -378,9 +398,26 @@ export default function App() {
     setReloadToken((token) => token + 1);
   }, []);
 
+  /**
+   * One polite live region for the whole shell. Without it a screen-reader user never hears
+   * that a run started, that it finished, or why a refresh failed — the page just changes.
+   * Elapsed seconds stay out of it on purpose: a live region that ticks every second is noise.
+   */
+  const liveStatus = error
+    ? `${error.title}. ${error.message}`
+    : notice ??
+      (busy === 'run'
+        ? `Running the ${horizon} screen. The previous session stays on screen until the new one lands.`
+        : '');
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="mx-auto flex min-h-dvh w-full max-w-[112rem] flex-col gap-4 px-3 py-4 sm:px-5 sm:py-6">
+        {/* Mounted from the first render so the region is live before anything changes. */}
+        <div aria-live="polite" aria-atomic="true" className="sr-only">
+          {liveStatus}
+        </div>
+
         <TerminalHeader
           dates={data?.dates ?? []}
           selectedDate={displayDate}
@@ -421,6 +458,26 @@ export default function App() {
             ) : undefined
           }
         />
+
+        {busy === 'run' ? (
+          <div className="rounded-xl border border-sky-400/30 bg-sky-400/5 px-4 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <p className="text-[11px] font-semibold text-slate-200 simple-label">
+                {viewMode === 'simple' ? 'Running the screen…' : `Running the ${horizon} screen…`}
+              </p>
+              <p className="tabular text-[11px] text-slate-400 simple-note">
+                {formatElapsedSeconds(runElapsedSeconds)} elapsed
+              </p>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-400 simple-note">
+              Downloading today’s prices and filings, then ranking the liquid names. This usually takes
+              under two minutes — the session on screen stays there until the new one lands.
+            </p>
+            <div aria-hidden className="mt-2 h-1 overflow-hidden rounded-full bg-ink-700">
+              <div className="run-progress h-full rounded-full bg-sky-400" />
+            </div>
+          </div>
+        ) : null}
 
         {viewingHistory ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-2.5 text-[11px] text-amber-400">
@@ -534,7 +591,7 @@ export default function App() {
                     </div>
                     <div className="flex items-center gap-2">
                       {refreshing && data ? (
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
+                        <span role="status" className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
                           Refreshing…
                         </span>
                       ) : null}

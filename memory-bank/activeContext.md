@@ -1,8 +1,80 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (fast-model fix — the shipped `FastExtractionModel` was `qwen3.5:4b`, a name Ollama Cloud never served, so every run logged `HTTP 404 model 'qwen3.5:4b' not found`; the default is now `glm-5.3-flash` and an unknown fast model latches the optional pass off after one warning; **451 backend tests green + 1 skipped benchmark / 49 frontend tests green**)
-**Last feature pass:** 2026-11-26 (fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and feed-diagnostics pass — same day)
-**Current task:** none in flight. The fast-model fix and the Yahoo-delisting pass are landed and verified live but **not committed** — the operator asked for no commits unless explicitly requested.
+**Last updated:** 2026-11-26 (header visual-organization pass — two desktop rows, one 40px control height, filled `cta` primary, grouped `More`; **451 backend tests green + 1 skipped benchmark / 55 frontend tests green**)
+**Last feature pass:** 2026-11-26 (header visual organization, then the UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and feed-diagnostics pass — same day)
+**Current task:** none in flight. The header pass, the UI/UX legibility pass, the fast-model fix and the Yahoo-delisting pass are landed and verified but **not committed** — the operator asked for no commits unless explicitly requested.
+
+## Session note (2026-11-26) — header visual organization
+
+Prompted by "content has no proper visual organization" on the desktop command bar. Three frontend files
+plus the memory bank; no backend file, no API contract, no new dependency and no new architectural layer.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 55 · ℹ pass 55 · ℹ fail 0` (0.34 s, exit 0) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 129 modules transformed`, `✓ built in 231ms`, exit 0 |
+| `npm run preview -- --port 5199 --host 127.0.0.1` | `index:200`, serves `assets/index-BTiMI5v1.js`; server stopped afterwards |
+| built CSS inspection | `sm:h-10`, `sm:h-full`, `bg-mint-500`, `text-ink-950` all emitted |
+
+Diagnosis: the desktop bar mixed **25px** (both switch groups, collapsed under `sm:min-h-0`),
+**36px** (`More`) and **40px** (buttons, select) in one row; six near-identical tiles carried no grouping;
+and identity (≈504px) + controls (≈827px) could not fit between 1024 and ~1439px, so the whole cluster
+wrapped under the logo. The switch groups were also the last 10px uppercase labels left in Simple mode.
+
+What changed:
+
+1. `SegmentedControl` — one component behind `ThemeSwitch` and `ViewModeSwitch`, with a `sm:h-10` frame and
+   `sm:h-full` pills that carry `.ui-button` (so the Simple type floor reaches them). `More` is `h-10`;
+   `TabsList`/`TabsTrigger` use the same frame pair, so dialog rails match their 40px buttons too.
+2. Desktop row 1 = identity + trading day + divider + `My Trades` + the filled `Run` + `More ▾`; row 2 =
+   the four horizon tabs (helper label only from `xl`) + the two appearance switches + a quiet `N days saved`.
+3. `Button` gains an opt-in `variant="cta"` (filled `mint-500` / `ink-950`, AA in both palettes), used only
+   by the header Run on phone and desktop; `primary` keeps its previous look everywhere else.
+4. `More` groups *Learn* / *Tools*; the tagline is one `truncate` line with the full sentence on `title`;
+   the 10px uppercase sessions/RAG sentence was deleted (the footer already states fees + Manila time).
+5. The tablet-only `Check a Stock` / `Past Results` pills were removed — they squeezed the horizon rail
+   until `Long-Term (1+ Yr)` was clipped and wrapped their own labels; both actions live in the ☰ sheet.
+
+Verified in a real browser for the first time: a static copy of `dist/` was served from `/tmp` with
+`psedesk.legalAcceptedVersion` seeded, then captured with headless Chrome at 390 (inside a 390px iframe,
+because headless Chrome clamps `--window-size` to 500px), 768, 1024, 1280 and 1440 Pro. Every header
+control measured 40px, row 1 never wrapped, all four horizon tabs were visible at 768+, and the light CTA
+sampled `#0a6f4d` on `#f3f6fb`.
+
+Deliberately not done: the page-body hierarchy pass (tracked as **Phase 2** under *UI/UX follow-ups* in
+`progress.md`), an icon-only theme toggle (this audience needs the visible state), and any restyle of
+`primary` outside the header. Still not run: 320px, 2560px and a VoiceOver/NVDA pass.
+
+## Session note (2026-11-26) — UI/UX legibility pass
+
+A frontend-only pass, prompted by "what makes a good UI/UX for this type of app?". Seven files under
+`frontend/src` changed plus one new suite; **no backend file, no API contract and no server number moved**.
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 55 · ℹ pass 55 · ℹ fail 0` (≈0.3 s, exit 0) — 49 → 55 with `formatters.test.ts` |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 129 modules transformed`, `✓ built in 235ms`, exit 0 |
+| `npm run dev -- --port 5199 --host 127.0.0.1` | `index:200`; `App.tsx` and `AdviceCardList.tsx` transform; server stopped afterwards |
+| built CSS inspection | `.simple-label` 0.75rem (old 0.6875rem gone), `.simple-note`, `.run-progress` + keyframes + reduced-motion override, `sr-only` all emitted |
+| `git status --porcelain` | `M App.tsx`, `M AdviceCardList.tsx`, `M RegimeStrip.tsx`, `M TerminalHeader.tsx`, `M ui/Button.tsx`, `M index.css`, `M lib/formatters.ts`, `?? lib/__tests__/formatters.test.ts` |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 451, Skipped: 1, Total: 452` (8 s, exit 0) — regression check, no backend file changed |
+
+Not run: a real browser/screen-reader pass (no jsdom or component-test harness exists; adding one would be
+a new dependency, which the memory-bank rules forbid without a recorded decision).
+
+**What it fixed, in priority order** (from the audit in the same conversation):
+
+1. **Nothing was announced.** `grep -rn 'aria-live\|role="status"\|aria-busy' src` returned **zero** hits, so a run result, an amber stale-data line or a failure was silent for screen readers. `App.tsx` now mounts one `aria-live="polite" aria-atomic` node from the first render; `Button` sets `aria-busy`; the Pro "Refreshing…" line is a `role="status"`.
+2. **The smallest text explained the biggest number.** 262 occurrences of `text-[9px]`/`text-[10px]` (46 at 9px) sat on the Simple reading path. `.simple-label` is now 12px and a new `.simple-note` (13px / 1.55) replaced every 9–10px explanatory line in the advice card, order box, watch list and card headers. Both rules are scoped to `[data-view-mode='simple']`, so Pro density is unchanged.
+3. **`run-now` looked hung.** It is a minutes-scale operation (a few hundred PSE Edge POSTs + four model calls) behind a disabled button. A strip under the header now counts elapsed seconds (`formatElapsedSeconds`) beside an indeterminate bar and states that the previous session stays on screen until the new one lands. It narrates elapsed time only — never a stage or percentage the server did not confirm.
+4. **Simple cards carried two bordered meter blocks.** The promised win-chance meter is now full width; confidence folded into one line ("Desk confidence 82 / 100 · …") with its plain sentence, and the raw score remains a `TechRow` in the drawer.
+5. **Colour could be the only channel.** `directionGlyph` / `formatDeltaPercent` / `formatDeltaBasisPoints` now prefix every toned 20D delta (USD/PHP, US 10Y bps, Brent, EPHE, rotation RS) with `▲`/`▼` — insurance against the reversed red-up/green-down palette common in PH broker apps and against colour-vision deficiency.
+6. **Unit and absence discipline is now tested.** `formatters.test.ts` pins "a value always carries its unit" and "unreported renders `—`, never `0`" for `formatPrice`, `formatCompactPeso`, `formatPercent`, `formatRatio`, the delta formatters and the elapsed clock.
+
+Deliberately **not** done: a stage-by-stage progress estimate (would fabricate what the server has not
+reported), any new dependency, and any colour-semantics change (needs the 3–5 reader check recorded
+under *Remaining* in `progress.md`).
+
 
 ## Session note (2026-11-26) — "where are the tickers?"
 

@@ -58,76 +58,94 @@ interface TerminalHeaderProps {
   quotationImport?: ReactNode;
 }
 
-/** Simple | Pro segmented switch: the only control that changes how much depth is on screen. */
-function ViewModeSwitch({
+type SegmentOption<T extends string> = {
+  value: T;
+  label: string;
+  /** Decorative leading glyph (the sun/moon pair). */
+  icon?: string;
+  /** Warm-up hook for a heavier mode; never fired on mount. */
+  preload?: () => void;
+};
+
+/**
+ * One 40px-tall segmented switch. Both appearance controls are the same control with different
+ * options, so height, radius and the Simple-mode type floor live in exactly one place — and a
+ * desktop row of segments lines up with the 40px buttons and date picker beside it.
+ */
+function SegmentedControl<T extends string>({
+  label,
   value,
+  options,
   onChange,
 }: {
-  value: ViewMode;
-  onChange: (mode: ViewMode) => void;
+  label: string;
+  value: T;
+  options: SegmentOption<T>[];
+  onChange: (value: T) => void;
 }) {
   return (
     <div
       role="group"
-      aria-label="Detail level"
-      className="inline-flex items-center gap-1 rounded-xl border border-line/80 bg-ink-900/80 p-1"
+      aria-label={label}
+      className="inline-flex items-center gap-0.5 rounded-xl border border-line/80 bg-ink-900/80 p-1 sm:h-10"
     >
-      {(['simple', 'pro'] as const).map((mode) => (
+      {options.map((option) => (
         <button
-          key={mode}
+          key={option.value}
           type="button"
-          aria-pressed={value === mode}
-          onClick={() => onChange(mode)}
-          onPointerEnter={mode === 'pro' ? preloadSignalTable : undefined}
-          onFocus={mode === 'pro' ? preloadSignalTable : undefined}
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          onPointerEnter={option.preload}
+          onFocus={option.preload}
           className={cn(
-            'inline-flex min-h-9 items-center rounded-lg px-3 text-[10px] font-semibold uppercase tracking-[0.14em] transition sm:min-h-0 sm:px-2.5',
-            value === mode
+            // `sm:h-full` makes the inner pill exactly fill the 40px frame, so segments never
+            // float shorter than the buttons next to them. `ui-button` lifts the label to the
+            // Simple-mode type floor (Pro keeps the 10px terminal scale).
+            'inline-flex min-h-9 items-center rounded-lg px-3 text-[10px] font-semibold uppercase tracking-[0.14em] transition ui-button sm:h-full sm:min-h-0 sm:px-2.5',
+            value === option.value
               ? 'bg-mint-400/10 text-mint-400 ring-1 ring-mint-400/30'
               : 'text-slate-500 hover:text-slate-200',
           )}
         >
-          {mode}
+          {option.icon ? (
+            <span aria-hidden className="mr-1">
+              {option.icon}
+            </span>
+          ) : null}
+          {option.label}
         </button>
       ))}
     </div>
   );
 }
 
-/** Sun/moon switch. Both palettes are defined in index.css, so this only flips the attribute. */
-function ThemeSwitch({
-  value,
-  onChange,
-}: {
-  value: ThemeMode;
-  onChange: (theme: ThemeMode) => void;
-}) {
+/** Simple | Pro segmented switch: the only control that changes how much depth is on screen. */
+function ViewModeSwitch({ value, onChange }: { value: ViewMode; onChange: (mode: ViewMode) => void }) {
   return (
-    <div
-      role="group"
-      aria-label="Colour theme"
-      className="inline-flex items-center gap-1 rounded-xl border border-line/80 bg-ink-900/80 p-1"
-    >
-      {(['light', 'dark'] as const).map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          aria-pressed={value === mode}
-          onClick={() => onChange(mode)}
-          className={cn(
-            'inline-flex min-h-9 items-center rounded-lg px-3 text-[10px] font-semibold uppercase tracking-[0.14em] transition sm:min-h-0 sm:px-2.5',
-            value === mode
-              ? 'bg-mint-400/10 text-mint-400 ring-1 ring-mint-400/30'
-              : 'text-slate-500 hover:text-slate-200',
-          )}
-        >
-          <span aria-hidden className="mr-1">
-            {mode === 'light' ? '☀' : '☾'}
-          </span>
-          {mode}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label="Detail level"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: 'simple', label: 'Simple' },
+        { value: 'pro', label: 'Pro', preload: preloadSignalTable },
+      ]}
+    />
+  );
+}
+
+/** Sun/moon switch. Both palettes are defined in index.css, so this only flips the attribute. */
+function ThemeSwitch({ value, onChange }: { value: ThemeMode; onChange: (theme: ThemeMode) => void }) {
+  return (
+    <SegmentedControl
+      label="Colour theme"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: 'light', label: 'Light', icon: '☀' },
+        { value: 'dark', label: 'Dark', icon: '☾' },
+      ]}
+    />
   );
 }
 
@@ -156,16 +174,21 @@ function MoreMenu({
 
   const itemClass =
     'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-300 transition hover:bg-ink-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40';
+  // Two tiny group labels replace a flat list of four unrelated sheets, so "what is this desk"
+  // and "show me a result" stop reading as the same kind of thing.
+  const groupClass =
+    'px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600';
 
   return (
     <details className="group relative">
-      <summary className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-xl border border-line/80 bg-ink-900/80 px-3 text-xs font-medium text-slate-200 transition select-none hover:border-mint-400/40">
+      <summary className="flex h-10 cursor-pointer list-none items-center gap-1 rounded-xl border border-line/80 bg-ink-900/80 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition select-none ui-button hover:border-mint-400/40">
         More
         <span aria-hidden className="text-[10px] text-slate-500 transition group-open:rotate-180">
           ▾
         </span>
       </summary>
       <div className="absolute right-0 z-40 mt-2 w-60 rounded-xl border border-line bg-ink-850 p-1 shadow-2xl shadow-black/60">
+        <p className={groupClass}>Learn</p>
         <button
           type="button"
           className={itemClass}
@@ -176,6 +199,20 @@ function MoreMenu({
         >
           {simple ? 'How it works' : 'Guide'}
         </button>
+        {simple ? null : (
+          <button
+            type="button"
+            className={itemClass}
+            disabled={busy}
+            onClick={closeThen(onOpenKnowledge)}
+            onPointerEnter={preloadKnowledgeBaseDialog}
+            onFocus={preloadKnowledgeBaseDialog}
+          >
+            Knowledge base
+          </button>
+        )}
+
+        <p className={cn(groupClass, 'mt-1 border-t border-line/60')}>Tools</p>
         <button
           type="button"
           className={itemClass}
@@ -195,19 +232,9 @@ function MoreMenu({
         >
           {simple ? 'Past Results' : 'Scorecard'}
         </button>
-        {simple ? null : (
-          <button
-            type="button"
-            className={itemClass}
-            disabled={busy}
-            onClick={closeThen(onOpenKnowledge)}
-            onPointerEnter={preloadKnowledgeBaseDialog}
-            onFocus={preloadKnowledgeBaseDialog}
-          >
-            Knowledge base
-          </button>
-        )}
-        {quotationImport && !simple ? <div className="border-t border-line/60 p-2">{quotationImport}</div> : null}
+        {quotationImport && !simple ? (
+          <div className="mt-1 border-t border-line/60 p-2">{quotationImport}</div>
+        ) : null}
       </div>
     </details>
   );
@@ -242,6 +269,15 @@ export function TerminalHeader({
   // The primary action never says "latest" while a stored session is on screen: it re-runs the
   // day being read, which is a different thing and must be labelled as such.
   const runLabel = describeRunLabel(historicalSession, simple);
+
+  // The full sentence stays reachable on hover/focus; the visible line is short enough to hold
+  // one line at 1024px, where the old `max-w-md` sentence wrapped and outgrew the 40px row.
+  const tagline = simple
+    ? 'Clear buy, target and cut-loss plans for Philippine stocks — PSE fees already factored in.'
+    : 'Probabilistic desk · fee-adjusted odds, server-sized tickets, a paper blotter and a self-grading scorecard';
+  const shortTagline = simple
+    ? 'Buy, target and cut-loss plans — fees included.'
+    : 'Fee-adjusted odds, server-sized tickets, graded results';
 
   // The newest stored session is what "latest" means. Label it in the picker so a reader who
   // stepped into history can always find the way back.
@@ -317,13 +353,13 @@ export function TerminalHeader({
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
           <Button
-            variant="primary"
+            variant="cta"
             busy={busy === 'run'}
             onClick={onRunNow}
             disabled={busy !== null}
             className="w-full whitespace-nowrap"
           >
-            {runLabel}
+            {busy === 'run' ? 'Running…' : runLabel}
           </Button>
           <Button
             variant="secondary"
@@ -339,26 +375,25 @@ export function TerminalHeader({
         </div>
       </div>
 
-      {/* Desktop command bar: everything visible, no drawer required. */}
-      <div className="hidden flex-wrap items-start justify-between gap-4 lg:flex">
-        <div className="flex items-center gap-3">
+      {/* Desktop command bar: identity and session on the left, the action cluster on the right.
+          One 40px control height and one divider between "which day" and "do something"; the
+          appearance switches live on the row below so this line never has to wrap. */}
+      <div className="hidden items-center justify-between gap-4 lg:flex">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-mint-400/30 bg-mint-400/10 font-mono text-sm font-bold tracking-tight text-mint-400">
             PS
           </div>
-          <div className="max-w-md">
+          <div className="min-w-0 max-w-md">
             <h1 className="text-lg font-semibold tracking-tight text-white">PSE Signal Desk</h1>
-            <p className="text-[11px] text-slate-500">
-              {simple
-                ? 'Clear buy, target and cut-loss plans for Philippine stocks — PSE fees already factored in.'
-                : 'Probabilistic desk · fee-adjusted odds, server-sized tickets, a paper blotter and a self-grading scorecard'}
+            <p className="truncate text-[11px] text-slate-500" title={tagline}>
+              {shortTagline}
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <ThemeSwitch value={theme} onChange={onThemeChange} />
-          <ViewModeSwitch value={viewMode} onChange={onViewModeChange} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {datePicker()}
+          <span aria-hidden className="h-6 w-px shrink-0 bg-line/70" />
           <Button
             variant="secondary"
             onClick={onOpenPortfolio}
@@ -369,8 +404,8 @@ export function TerminalHeader({
             {simple ? 'My Trades' : 'Book'}
             {alertBadge}
           </Button>
-          <Button variant="primary" busy={busy === 'run'} onClick={onRunNow} disabled={busy !== null}>
-            {runLabel}
+          <Button variant="cta" busy={busy === 'run'} onClick={onRunNow} disabled={busy !== null}>
+            {busy === 'run' ? 'Running…' : runLabel}
           </Button>
           <MoreMenu
             simple={simple}
@@ -387,7 +422,7 @@ export function TerminalHeader({
       <div className="flex flex-col gap-2 border-t border-line/60 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           {simple ? (
-            <span className="hidden text-[10px] uppercase tracking-[0.16em] text-slate-500 sm:inline">
+            <span className="hidden text-[10px] uppercase tracking-[0.16em] text-slate-500 xl:inline">
               How long do you want to hold?
             </span>
           ) : null}
@@ -411,35 +446,15 @@ export function TerminalHeader({
           </Tabs>
         </div>
 
-        {/* Tablet: the two everyday sheets get one-tap pills instead of a menu. */}
-        <div className="hidden items-center gap-2 sm:flex lg:hidden">
-          <Button
-            variant="secondary"
-            onClick={onOpenResearch}
-            onPointerEnter={preloadResearchDialog}
-            onFocus={preloadResearchDialog}
-            disabled={busy !== null}
-            className="h-9 px-3"
-          >
-            {simple ? 'Check a Stock' : 'Research'}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={onOpenScorecard}
-            onPointerEnter={() => preloadScorecardDialog(horizon)}
-            onFocus={() => preloadScorecardDialog(horizon)}
-            disabled={busy !== null}
-            className="h-9 px-3"
-          >
-            {simple ? 'Past Results' : 'Scorecard'}
-          </Button>
+        {/* Below lg the ☰ sheet already holds both sheets, so the tab rail keeps the whole row
+            instead of being squeezed until the fourth horizon is clipped. */}
+        <div className="hidden items-center gap-2 lg:flex">
+          <ThemeSwitch value={theme} onChange={onThemeChange} />
+          <ViewModeSwitch value={viewMode} onChange={onViewModeChange} />
+          <span className="hidden whitespace-nowrap text-[11px] text-slate-500 xl:inline">
+            {dates.length} day{dates.length === 1 ? '' : 's'} saved
+          </span>
         </div>
-
-        <p className="hidden text-[10px] uppercase tracking-[0.18em] text-slate-600 lg:block">
-          {simple
-            ? `${dates.length} day${dates.length === 1 ? '' : 's'} saved · broker fees & board lots included · Manila time`
-            : `${dates.length} session${dates.length === 1 ? '' : 's'} stored · SQLite RAG playbooks · live Yahoo Finance + PSE Edge · Ollama Cloud · server-owned odds and ticket sizes`}
-        </p>
       </div>
 
       {/* Everything the phone hides lives here, in one thumb-reachable sheet. */}

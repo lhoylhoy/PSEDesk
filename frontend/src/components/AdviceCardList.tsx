@@ -75,7 +75,7 @@ export function PlanSteps({
             <InfoTip label={step.hint} term={step.label.replace(/^\d+ · /, '')} />
           </p>
           <p className={cn('tabular mt-0.5 text-sm font-semibold', step.tone)}>{formatPrice(step.price)}</p>
-          <p className="tabular text-[10px] text-slate-500">{step.note}</p>
+          <p className="tabular text-[10px] text-slate-500 simple-note">{step.note}</p>
         </li>
       ))}
     </ol>
@@ -133,7 +133,7 @@ export function WavePlanGrid({ plan }: { plan: WaveTradePlan }) {
         >
           {timing.label}
         </span>
-        <span className="text-[10px] leading-relaxed text-slate-500">{timing.detail}</span>
+        <span className="text-[10px] leading-relaxed text-slate-500 simple-note">{timing.detail}</span>
       </div>
 
       <ol className="grid grid-cols-2 gap-2 xl:grid-cols-4">
@@ -141,7 +141,7 @@ export function WavePlanGrid({ plan }: { plan: WaveTradePlan }) {
           <li key={step.label} className="rounded-lg border border-line/70 bg-ink-900/70 px-2.5 py-2">
             <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500 simple-label">{step.label}</p>
             <p className={cn('tabular mt-0.5 text-sm font-semibold', step.tone)}>{formatPrice(step.price)}</p>
-            <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{step.note}</p>
+            <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500 simple-note">{step.note}</p>
           </li>
         ))}
       </ol>
@@ -177,13 +177,13 @@ function Meter({
   return (
     <div className="rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-        <p className="tabular text-[11px] font-semibold text-slate-200">{value}</p>
+        <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500 simple-label">{label}</p>
+        <p className="tabular text-xs font-semibold text-slate-200">{value}</p>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink-700">
         <div className={cn('h-full rounded-full', barClass)} style={{ width }} />
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{detail}</p>
+      <p className="mt-1 text-[10px] leading-relaxed text-slate-500 simple-note">{detail}</p>
     </div>
   );
 }
@@ -200,12 +200,12 @@ export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: Signa
   if (!guide.actionable) {
     return (
       <div className="rounded-lg border border-line/70 bg-ink-900/70 px-3 py-2">
-        <p className="text-[11px] font-semibold text-slate-300">Watch only — no ticket</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{guide.orderTip}</p>
+        <p className="text-[11px] font-semibold text-slate-300 simple-copy">Watch only — no ticket</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-400 simple-copy">{guide.orderTip}</p>
         {guide.warnings.length > 0 ? (
           <ul className="mt-1.5 space-y-0.5">
             {guide.warnings.map((warning) => (
-              <li key={warning} className="text-[10px] leading-relaxed text-amber-300/90">
+              <li key={warning} className="text-[10px] leading-relaxed text-amber-300/90 simple-note">
                 {warning}
               </li>
             ))}
@@ -218,40 +218,40 @@ export function OrderBox({ guide, item }: { guide: PlainOrderGuide; item?: Signa
   return (
     <div className="rounded-lg border border-mint-400/25 bg-mint-400/5 px-3 py-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[11px] font-semibold text-slate-100">
+        <p className="text-[11px] font-semibold text-slate-100 simple-copy">
           Ticket: {formatInteger(guide.shares)} share{guide.shares === 1 ? '' : 's'}
           <span className="font-normal text-slate-500">
             {' '}
             ({guide.lots} board lot{guide.lots === 1 ? '' : 's'} of {guide.boardLot})
           </span>
         </p>
-        <p className="tabular text-[11px] text-slate-300">
+        <p className="tabular text-[11px] text-slate-300 simple-note">
           about {formatCompactPeso(guide.cashNeededPhp)} all-in
         </p>
       </div>
-      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+      <p className="mt-1 text-[11px] leading-relaxed text-slate-400 simple-copy">
         If the price reaches the target the ticket keeps about{' '}
         <span className="font-semibold text-mint-400">{formatCompactPeso(guide.netGainAtTargetPhp)}</span> after broker
         fees; at the cut-loss it gives up about{' '}
         <span className="font-semibold text-rose-400">{formatCompactPeso(guide.netLossAtStopPhp)}</span>.
       </p>
-      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{guide.orderTip}</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-slate-500 simple-copy">{guide.orderTip}</p>
       {guide.warnings.length > 0 ? (
         <ul className="mt-1.5 space-y-0.5">
           {guide.warnings.map((warning) => (
-            <li key={warning} className="text-[10px] leading-relaxed text-amber-300/90">
+            <li key={warning} className="text-[10px] leading-relaxed text-amber-300/90 simple-note">
               {warning}
             </li>
           ))}
         </ul>
       ) : null}
       {guide.serverSized ? null : (
-        <p className="mt-1 text-[10px] text-slate-600">
+        <p className="mt-1 text-[10px] text-slate-600 simple-note">
           Estimated size — this older session has no server order ticket.
         </p>
       )}
       {item ? (
-        <p className="mt-1 text-[10px] leading-relaxed text-slate-600">
+        <p className="mt-1 text-[10px] leading-relaxed text-slate-600 simple-note">
           Placing an order is your decision and your broker’s execution; nothing here is routed or sent.
         </p>
       ) : null}
@@ -404,13 +404,13 @@ function AdviceCard({ item, horizon, onSelect, onTakeTrade }: AdviceCardProps) {
             </span>
             <DriftBadge status={item.driftStatus} previousRank={item.previousRank} friendly />
           </div>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500">
+          <p className="mt-0.5 truncate text-[11px] text-slate-500 simple-note">
             {nicknameFor(item.ticker) ? `${item.companyName} · ${item.sector}` : item.sector}
           </p>
         </div>
         <div className="text-right">
           <p className="tabular text-lg font-semibold text-slate-100">{formatPrice(item.entryPrice)}</p>
-          <p className="flex items-center justify-end gap-1 text-[10px] text-slate-500">
+          <p className="flex items-center justify-end gap-1 text-[10px] text-slate-500 simple-label">
             buy price
             <InfoTip
               term="buy price"
@@ -420,38 +420,42 @@ function AdviceCard({ item, horizon, onSelect, onTakeTrade }: AdviceCardProps) {
         </div>
       </header>
 
-      <p className="text-xs leading-relaxed text-slate-300">{item.thesis}</p>
+      <p className="text-xs leading-relaxed text-slate-300 simple-copy">{item.thesis}</p>
 
       <WavePlanSteps item={item} />
-      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 simple-label">
         Plan to hold for about{' '}
         {item.wavePlan ? `up to ${item.wavePlan.maxHoldTradingDays} session${item.wavePlan.maxHoldTradingDays === 1 ? '' : 's'}` : horizonMeta[horizon].holding}
       </p>
 
       <OrderBox guide={guide} item={item} />
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Meter
-          label="Confidence"
-          pct={item.convictionScore}
-          value={`${Math.round(item.convictionScore)} / 100`}
-          detail={describeConviction(item.convictionScore)}
-          barClass="bg-linear-to-r from-mint-500 to-mint-400"
-        />
-        <Meter
-          label="Chance it reaches the target"
-          pct={item.winProbability * 100}
-          value={formatProbability(item.winProbability)}
-          detail={describeWinChance(item.winProbability, item.breakEvenWinRate)}
-          barClass={beatsBreakEven ? 'bg-sky-400' : 'bg-rose-400'}
-        />
-      </div>
+      <Meter
+        label="Chance it reaches the target"
+        pct={item.winProbability * 100}
+        value={formatProbability(item.winProbability)}
+        detail={describeWinChance(item.winProbability, item.breakEvenWinRate)}
+        barClass={beatsBreakEven ? 'bg-sky-400' : 'bg-rose-400'}
+      />
+
+      {/*
+       * One calm line instead of a second bordered block. The promised figure (the chance the
+       * plan reaches its target) keeps the meter; the model's conviction becomes the sentence a
+       * first-time reader actually acts on, and the raw score stays in the drawer below.
+       */}
+      <p className="text-[10px] leading-relaxed text-slate-500 simple-note">
+        <span className="font-semibold text-slate-300">
+          Desk confidence {Math.round(item.convictionScore)} / 100
+        </span>
+        {' · '}
+        {describeConviction(item.convictionScore)}
+      </p>
 
       <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2">
-        <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-400">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-400 simple-label">
           What would prove this wrong
         </p>
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-300">{item.bearCase}</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-300 simple-copy">{item.bearCase}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -472,7 +476,7 @@ function AdviceCard({ item, horizon, onSelect, onTakeTrade }: AdviceCardProps) {
         >
           Full Details
         </Button>
-        <span className="text-[10px] text-slate-500">
+        <span className="text-[10px] text-slate-500 simple-note">
           {guide.actionable
             ? 'Adds it to your practice account — no real order is sent.'
             : 'No board lot fits the paper account at this price.'}
@@ -502,11 +506,11 @@ function WatchList({ items, onSelect }: { items: SignalItem[]; onSelect: (ticker
           <span aria-hidden className="text-[10px] text-slate-500">
             {open ? '▾' : '▸'}
           </span>
-          <span className="text-[11px] font-semibold text-slate-300">
+          <span className="text-[11px] font-semibold text-slate-300 simple-label">
             Not yet — these {items.length} can wait
           </span>
         </span>
-        <span className="text-[10px] text-slate-500">the reward after fees is too thin</span>
+        <span className="text-[10px] text-slate-500 simple-note">the reward after fees is too thin</span>
       </button>
 
       {open ? (
@@ -521,12 +525,12 @@ function WatchList({ items, onSelect }: { items: SignalItem[]; onSelect: (ticker
                 >
                   {companyLabel(item.ticker, item.companyName)}
                 </button>
-                <span className="tabular text-[10px] text-slate-500">{formatPrice(item.entryPrice)}</span>
+                <span className="tabular text-[10px] text-slate-500 simple-note">{formatPrice(item.entryPrice)}</span>
               </div>
-              <p className="truncate font-mono text-[10px] text-slate-500">
+              <p className="truncate font-mono text-[10px] text-slate-500 simple-note">
                 {item.ticker} · {item.companyName}
               </p>
-              <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400 simple-note">
                 {describePlainVerdict(item.edgeVerdict).explanation}
               </p>
             </li>
@@ -557,7 +561,7 @@ export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: Advice
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-100">{meta.friendlyTitle}</h2>
-          <p className="mt-1 max-w-3xl text-[11px] leading-relaxed text-slate-500">{meta.friendlySummary}</p>
+          <p className="mt-1 max-w-3xl text-[11px] leading-relaxed text-slate-500 simple-copy">{meta.friendlySummary}</p>
         </div>
         <span className="tabular rounded-full border border-line/80 bg-ink-850 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-slate-400">
           {buyable.length} TO BUY · {watchOnly.length} TO WAIT
@@ -571,7 +575,7 @@ export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: Advice
       {buyable.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-line/80 bg-ink-950/40 px-4 py-6 text-center">
           <p className="text-xs font-semibold text-slate-300">Nothing cleared the test today</p>
-          <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
+          <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-slate-500 simple-copy">
             That is a real answer, not a glitch — the model would rather hold cash than size a setup that does not
             pay its fees. The next session is screened as usual.
           </p>
@@ -596,7 +600,7 @@ export function AdviceCardList({ items, horizon, onSelect, onTakeTrade }: Advice
           type="button"
           aria-expanded={showAll}
           onClick={() => setShowAll((current) => !current)}
-          className="mt-3 w-full rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-ink-800/60"
+          className="mt-3 w-full rounded-xl border border-line/70 bg-ink-850/60 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-ink-800/60 simple-label"
         >
           {showAll
             ? 'Show just the top three'

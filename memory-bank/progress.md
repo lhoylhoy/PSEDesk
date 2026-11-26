@@ -2,9 +2,58 @@
 
 **Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **451 backend tests green + 1 skipped manual benchmark (452 total) / 49 frontend tests green** (2026-11-26, fast-model fix on top of the Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes). The fix replaced the shipped `FastExtractionModel` (`qwen3.5:4b`, a name Ollama Cloud never served → `404` on every run) with `glm-5.3-flash`, validated against the live catalogue, and made an unknown fast model latch the optional pass off instead of throwing once per horizon. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell (the key itself sits in user-secrets and was used for read-only `curl` probes); the open security remediation is listed under *Remaining*.
+**Latest verification:** **55 frontend tests green / 451 backend tests green + 1 skipped manual benchmark (452 total)** (2026-11-26, header visual-organization pass on top of the UI/UX legibility pass, the fast-model fix, which sits on the Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes). The header pass gives the desktop bar two deliberate rows at one 40px control height, moves the `Simple | Pro` and light/dark segments down to the horizon row, groups `More` into *Learn*/*Tools* and adds an opt-in filled `cta` variant used only by the primary Run; `npm test` (55/55) and `npm run build` (129 modules, 231 ms) both pass. The legibility pass added a Simple-mode type floor, one shell-wide polite live region, a narrated clock plus indeterminate bar for `run-now`, a full-width win-chance meter with conviction folded to one line, direction glyphs on every toned delta, and six `formatters.test.ts` cases (49 → 55). The fast-model fix replaced the shipped `FastExtractionModel` (`qwen3.5:4b`, a name Ollama Cloud never served → `404` on every run) with `glm-5.3-flash`, validated against the live catalogue, and made an unknown fast model latch the optional pass off instead of throwing once per horizon. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell (the key itself sits in user-secrets and was used for read-only `curl` probes); the open security remediation is listed under *Remaining*.
 
-## Latest verification (2026-11-26 — fast-model fix)
+## Latest verification (2026-11-26 — header visual organization)
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 55 · ℹ pass 55 · ℹ fail 0` (≈0.34 s, exit 0) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean; `✓ 129 modules transformed`, `✓ built in 231ms`, exit 0 |
+| `npm run preview` + headless Chrome (static copy of `dist/` in `/tmp`, seeded `psedesk.legalAcceptedVersion`) | screenshots at **390** (390px iframe), **768**, **1024**, **1280** and **1440 Pro**: every header control measures 40px, row 1 never wraps, all four horizon tabs are visible at 768+, and the light-theme CTA samples `#0a6f4d` on `#f3f6fb` |
+| built CSS inspection | `sm:h-10`, `sm:h-full`, `bg-mint-500`, `text-ink-950` emitted; the switch groups no longer depend on `sm:min-h-0` for their height |
+| `git status --porcelain` | `M TerminalHeader.tsx`, `M ui/Button.tsx`, `M ui/Tabs.tsx` on top of the still-uncommitted legibility pass; no backend file, API contract or server number touched |
+
+Not run: a screen-reader pass (VoiceOver/NVDA) and a 2560px wide-monitor check. Headless Chrome on macOS
+clamps `--window-size` to **500px** wide, so the 390px phone layout was captured inside a 390px iframe
+(`frame-390.html`) and the 320px case was reasoned from the same classes.
+
+## What the header pass changed
+
+Three frontend files. No new dependency, no new layer, no server change.
+
+- **One control height.** `SegmentedControl` (new, shared by `ThemeSwitch` and `ViewModeSwitch`) uses a `sm:h-10` frame with `sm:h-full` inner pills; `More` moved `h-9` → `h-10`; `TabsList`/`TabsTrigger` use the same pair. The desktop bar previously mixed 25px (both switch groups, which collapsed under `sm:min-h-0`), 36px (`More`) and 40px (buttons, select) in one row.
+- **Two rows with one job each.** Row 1: identity + trading day + `My Trades` + `Run` + `More`. Row 2: horizon tabs + `ThemeSwitch`/`ViewModeSwitch` + a quiet `N days saved`. The tagline is a single `truncate` line (`title` keeps the full sentence) and the 10px uppercase sessions/RAG sentence is gone — the footer already states fees and Manila time.
+- **A real primary action.** `Button` gains `variant="cta"`: filled `bg-mint-500` on `text-ink-950` (≈11:1 dark, ≈6.5:1 light). Used only by the header Run on phone and desktop; `primary` keeps its previous outline look everywhere else.
+- **Grouped overflow.** `More` lists *Learn* (How it works / Guide, Knowledge base in Pro) and *Tools* (Check a Stock, Past Results) instead of four flat rows.
+- **One horizon strip below `lg`.** The tablet-only `Check a Stock` / `Past Results` pills squeezed the rail until `Long-Term (1+ Yr)` was clipped and wrapped their own labels onto two lines. Both actions stay in the ☰ *Desk controls* sheet, so the rail keeps the full row at 768px.
+- **Simple-mode type floor reaches the switches.** Both segmented controls and the `More` summary carry `.ui-button`, so Simple renders them at 13px normal-case rather than 10px uppercase.
+
+## Latest verification (2026-11-26 — UI/UX legibility pass)
+
+| Command | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 55 · ℹ pass 55 · ℹ fail 0` (≈0.3 s, exit 0) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean; `✓ 129 modules transformed`, `✓ built in 235ms`, exit 0 |
+| `npm run dev -- --port 5199 --host 127.0.0.1` | `index:200`; `src/App.tsx` and `src/components/AdviceCardList.tsx` both transform (`simple-note` present 16×), then the server was stopped |
+| built CSS inspection | `[data-view-mode=simple] .simple-label` → `0.75rem` (the old `0.6875rem` is gone), `.simple-note` emitted, `.run-progress` keyframes emitted, reduced-motion override present, `sr-only` emitted |
+| `git status --porcelain` | 7 modified files + 1 new test file, all under `frontend/src`; no backend file touched |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo` | `Passed! - Failed: 0, Passed: 451, Skipped: 1, Total: 452` (8 s, exit 0) — regression check only, no backend file changed |
+
+Not run in this pass: a real browser/DOM pass (the project has no jsdom or component-test harness, and adding one would be a new dependency).
+
+## What the UI/UX legibility pass changed
+
+Six frontend files plus one new suite. No API contract, no server number, no backend file changed.
+
+- **Legibility floor for Simple mode.** `[data-view-mode='simple'] .simple-label` moved 11px → 12px with a line height, and a new `.simple-note` (13px / 1.55) now carries every explanatory second line that used to be 9–10px: plan-step notes, order-box disclaimers, warnings, watch-list copy, the thesis and the pre-mortem. Pro mode is untouched because the rule is scoped to the attribute.
+- **A shell-wide live region.** `App.tsx` mounts one `aria-live="polite" aria-atomic` node from the first render and feeds it the error, the run notice and the "running" state; `Button` now sets `aria-busy`, the Pro "Refreshing…" line is a `role="status"`, and the header run button reads `Running…` while it works.
+- **`run-now` is narrated, not frozen.** A new strip under the header counts elapsed seconds (`formatElapsedSeconds`) beside an indeterminate bar (`.run-progress`, reduced-motion aware) and says the previous session stays on screen. It reports elapsed time only — never a stage or percentage the server did not confirm.
+- **One fewer bordered block per card.** The promised win-chance meter is now full width; the confidence score became a single line ("Desk confidence 82 / 100 · …") with its plain sentence, and the raw value still lives in the technical drawer.
+- **Direction is not colour-only.** `directionGlyph` / `formatDeltaPercent` / `formatDeltaBasisPoints` prefix every toned 20D delta (USD/PHP, US 10Y bps, Brent, EPHE, rotation RS) with `▲`/`▼`, so a reader whose broker app uses the opposite palette (or who is colour-blind) is not misled.
+- **`formatters.test.ts` (6 cases)** pins the two invariants: a value always carries its unit, and an unreported value renders `—` rather than `0`.
+
+## Verification (2026-11-26 — fast-model fix)
 
 | Command | Result |
 | --- | --- |
@@ -135,6 +184,8 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] Responsive foundations: Radix `Dialog` as a bottom sheet below `sm` with a sticky header, card fallbacks for every wide table below `md`, pinned identifier column, scrolling tab rail, touch-sized controls, `100dvh` / `viewport-fit=cover` / `.pb-safe`, pre-paint theme colour and 16px mobile inputs.
 - [x] Zero-dependency SWR cache (`lib/queryCache.ts`, ref-counted abort, in-flight dedupe, prefix invalidation) plus idempotent preloaders; every reader paints cached data, then revalidates, and keeps the last payload behind an amber line when a refresh fails.
 - [x] Lazy dialog chunks and pinned vendor chunks through a `manualChunks` **function** (Vite 8 / rolldown rejects the object form).
+- [x] **Legibility and announcement layer.** Simple mode has a scoped type floor (`.simple-label` 12px, `.simple-note` 13px/1.55) applied across the advice card, order box, watch list and the plan-step grid; one `aria-live="polite"` region mounted from first render announces runs, results and failures; `Button` sets `aria-busy`; `run-now` renders an elapsed clock (`formatElapsedSeconds`) and a reduced-motion-aware indeterminate bar while it works.
+- [x] **Header organization.** Two desktop rows at one 40px control height (identity + trading day + `My Trades` + the filled `Run` + `More ▾`; then the four horizon tabs + `Simple | Pro` + light/dark), grouped overflow under *Learn*/*Tools*, a single-line tagline, and Simple-mode type on the segmented switches. The phone keeps its two thumb rows and the "Desk controls" sheet.
 
 ### Tooling and documentation
 - [x] `npm test` harness: `node --test "src/lib/__tests__/*.test.ts"` over the React-free `lib/` layer (no DOM, no dependencies).
@@ -143,7 +194,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 452 backend (451 executed + 1 skipped benchmark) + 49 frontend
+## Test inventory — 452 backend (451 executed + 1 skipped benchmark) + 55 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
@@ -184,13 +235,14 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | WebApi | `RequestCancellationMiddlewareTests` — 499 on abort, no write after cancellation | 4 |
 | WebApi | `KnowledgeControllerTests` — upload attestation, protected-delete mapping | 2 |
 
-### Frontend — `frontend/src/lib/__tests__` (3 files, React-free)
+### Frontend — `frontend/src/lib/__tests__` (4 files, React-free)
 
 | File | Covers | Cases |
 | --- | --- | --- |
 | `plainAdvice.test.ts` | `plainAdvice` / `plainStatus` / formatter copy for every plan, verdict, scorecard and backtest field, plus the "not advice" wording | 35 |
 | `queryCache.test.ts` | cache read/write, ref-counted abort, in-flight dedupe, prefix invalidation, failed-refresh retention | 8 |
 | `legalConsent.test.ts` | first-run gate, versioned acceptance, stale notice, review clears flag, throwing storage, notice content | 6 |
+| `formatters.test.ts` | unit is never dropped (₱ / % / `: 1`), unreported renders `—` and never `0`, direction glyph for toned deltas, elapsed-clock formatting | 6 |
 
 ## Remaining
 
@@ -201,7 +253,16 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] **Pillar 2 remainder** — `TrainedHorizonModel.FeatureKeysJson` (+ loader refusal on schema mismatch) so a book cannot price a feature vector it was not trained on.
 - [ ] **Pillar 5 remainder** — `InvalidationFirstPlanBuilder`, pipeline inversion (invalidation before target), `TradeExitLadderPolicy` as the single ladder, `OllamaTopPick` audit-only fields.
 - [ ] **Pillar 4 remainder** — real walk-forward folds (disjoint rolling windows + fold report); today the replay refits one rolling model.
-- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 439 executed + 1 skipped / 49). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 451 executed + 1 skipped / 55). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+
+### UI/UX follow-ups (2026-11-26 legibility pass)
+
+- [ ] Real browser **and screen-reader** pass (VoiceOver / NVDA) over Simple and Pro from 320px to 2560px; the repo has no DOM test harness, so announcement behaviour is reasoned, not observed.
+- [ ] **Validate the up/down colour convention with 3–5 PH retail readers** before any further colour work (several Philippine broker apps use red-up/green-down). Record the outcome in `productContext.md`; the `▲/▼` glyph shipped as the interim redundancy.
+- [ ] Put the remaining Simple surfaces on the same type floor (`MarketDirectionHero` reason lines, `DropPanel` copy, `WelcomeSetupBanner`, `RidingNowStrip` chips); the advice-card path is done.
+- [ ] Optional: a `GET /api/signals/run-status` read so a mid-run reload attaches to the in-flight run instead of starting a second one — needs a `systemPatterns.md` decision first because it adds a run-state resource.
+- [ ] **Remaining breakpoint + assistive pass** — 320px, 2560px and a VoiceOver/NVDA run. 390 (iframe), 768, 1024, 1280 and 1440-Pro are already captured from a seeded static `dist/` copy in headless Chrome (see *Latest verification*).
+- [ ] **Phase 2 — page-body hierarchy** (decision deferred until the header is seen in a browser): one shared section-header shape for `AdviceCardList` / `SignalTable` / `DropPanel` (they hand-write the same `h2` + `text-[11px]` block), a visual weight ladder so the market-call hero outranks the "Nothing changed" strip, and deleting the duplicated empty-state copy in `DropPanel`.
 
 ### Performance pass — follow-ups
 

@@ -241,10 +241,42 @@
   }
 
   [data-view-mode='simple'] .simple-label {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 600;
+    line-height: 1.4;
     letter-spacing: 0.02em;
     text-transform: none;
+  }
+
+  /*
+   * The second line under a figure ("never pay above ₱147.80", "about ₱18k all-in").
+   * It used to be 10px — the smallest text in the app explaining the largest number on a
+   * 320px phone. Simple mode gives it a real reading size; Pro keeps its dense scale.
+   */
+  [data-view-mode='simple'] .simple-note {
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+}
+
+/*
+ * Indeterminate progress for a long server action (`run-now` downloads a few hundred candles
+ * before it ranks anything). It reports motion, never a fabricated percentage.
+ */
+.run-progress {
+  width: 35%;
+  animation: run-progress-slide 1.6s ease-in-out infinite;
+}
+
+@keyframes run-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(300%);
   }
 }
 
@@ -273,6 +305,14 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dialog-sheet {
+    animation: none;
+  }
+
+  /* A slide that never settles is the one animation a reduced-motion reader cannot escape.
+     The bar becomes a static band: still a "working" signal, no movement. */
+  .run-progress {
+    width: 100%;
+    opacity: 0.35;
     animation: none;
   }
 }
