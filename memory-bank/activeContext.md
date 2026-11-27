@@ -1,8 +1,107 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (wayfinding pass: keyboard shortcuts with one source of truth, a three-step "how to read this screen" strip, a skip link and honest list copy — **87 frontend tests green**, up from 71; backend untouched at **538 + 1 skipped**)
-**Last feature pass:** 2026-11-26 (frontend wayfinding pass, on top of abuse-protection hardening, per-company PSE Edge disclosures, feed health ledger, hand cursor, row-opens-modal, typography, signal list, typeface, compliance hardening, responsive pass, brand mark + icon set, header visual organization, UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and the feed-diagnostics pass — same day)
-**Current task:** slices 1–2 of 4 are done and verified, and the frontend wayfinding pass landed on top. **Slices 3–4 are planned, not started** (see *Next* below). Everything is landed but **not committed** — the operator asked for no commits unless explicitly requested.
+**Last updated:** 2026-11-26 (LLM measurement + structured-output pass: run provenance, `QuantPreScore`/`QuantRank` persistence, model-vs-quant scorecard, JSON-schema `format`, sampling/context controls, dead response fields removed — backend **548 + 1 skipped**, frontend **87**)
+**Last feature pass:** 2026-11-26 (the LLM pass, then the `More ▾` stacking fix, then wayfinding, abuse-protection hardening, per-company PSE Edge disclosures, feed health ledger, hand cursor, row-opens-modal, typography, signal list, typeface, compliance hardening, responsive pass, brand mark + icon set, header visual organization, UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and the feed-diagnostics pass — same day)
+**Current task:** slices 1–2 of 4 are done and verified; the **measurement half of slice 4** (provenance + quant rank + model-vs-quant scorecard) and the **prompt/client cleanup** are now landed. Still open in slice 4: opt-in prompt archive (`Signals:ArchivePrompts`) and `POST /api/signals/eval-prompt-replay`. Slice 3 (surface unenforced trap flags) is planned, not started. Everything is landed but **not committed** — the operator asked for no commits unless explicitly requested.
+
+## Session note (2026-11-26) — the LLM pass: measure the ranking, then clean the contract
+
+Prompted by "make the signal LLM more intelligent". The diagnosis was that **the model's rank order *is*
+the product** (`SignalPipelineService` keeps the model's array order and answers `502` when no pick
+survives), yet its skill had never been measured: no quant rank was persisted, no prompt fingerprint, no
+model-vs-quant read, and the request was a plain chat completion with `format: "json"`, a hardcoded
+`temperature: 0.1`, no `seed`/`num_ctx`, no `think`, and a prompt that asked for `rank`, `drift_status`
+and `previous_rank` — fields the server validates and then overwrites.
+
+**Slice A (measure) + Slice B.1–B.3 (contract and controls), backend + two frontend type files.** No new
+dependency, no new architectural layer, and every server-owned invariant is intact (prices, ticks, band,
+sizing, probability, EV, verdict, drift, drops still server-computed; `502` when no pick survives;
+citations still verified against the retrieved set). The raw-response archive and the replay endpoint were
+deliberately **not** built: they need the archive this pass only prepares.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo -v q` | `Passed! - Failed: 0, Passed: 548, Skipped: 1, Total: 549` (8 s) — 538 → 548, **+10** |
+| `dotnet ef migrations add AddSignalRankingProvenance …` | `20261126124346_AddSignalRankingProvenance` — 12 `SignalRuns` columns + 2 `SignalItems` columns, all defaulted so legacy rows read "unmeasured" |
+| `cd frontend && npx tsc --noEmit` | clean (exit 0) |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` — unchanged, no test touched |
+
+Not run: a live `run-now` (still needs `OLLAMA_API_KEY`, unset in this shell), so whether Ollama Cloud
+honours the schema, `seed`, `num_ctx` and `think` is **unverified against the real endpoint**. The schema
+path is therefore defended in code: a `400` on schema-constrained output is retried once in plain JSON mode
+and the schema is latched off for the process.
+
+**What it built**
+
+1. **Provenance travels with the book.** `SignalRun` gained `EngineName`, `ModelName`, `PromptHash`
+   (SHA-256 of system + user prompt), `ModelTemperature`, `ModelSeed`, `ModelRetryCount`,
+   `ModelLatencyMs`, `PromptTokens`, `CompletionTokens`, `PromptCharacters`, `SchemaConstrained` and
+   `FastExtractionApplied`; `IOllamaSignalEngine.GenerateSignalAsync` now returns
+   `OllamaSignalResult(Output, OllamaGenerationMetadata)` and `ApplyModelProvenance` stamps the run.
+   `SignalRunDto.ModelProvenance` exposes it (null on pre-pass rows).
+2. **Quant rank is stored per pick.** `SignalItem.QuantPreScore` + `QuantRank` (1-based position in the
+   candidate table the prompt prints: score, then turnover, then ticker). `SignalItemDto` carries both.
+3. **The scorecard can now answer "did the model add anything?".** `RankingQualityDto` on
+   `SignalScorecardDto`: runs measured, picks with a quant rank, mean Spearman rho (model order vs the
+   quant order *re-ranked within the picks it made*, so the coefficient stays in `[-1, 1]`), and the
+   realized win rate / mean R of each side's top three. Null until a graded run stores a quant rank.
+4. **The response contract is a JSON schema, not just JSON mode.** `OllamaPromptBuilder.ResponseSchemaJson`
+   / `FastExtractionSchemaJson`; `format` carries the schema, `drop_category` is an `enum`, and only
+   `ticker`/`conviction_score`/`entry_price`/`stop_loss`/`target_price`/`thesis`/`bear_case` are required.
+5. **The dead fields are gone.** `OllamaTopPick.Rank`/`DriftStatus`/`PreviousRank` were deleted with their
+   parser validation, the system-prompt contract and the correction-prompt reminder; rule 8 and the TASK
+   line now say *the array order IS the ranking* and ask the model to compare the whole candidate set
+   before choosing. A model that still echoes `rank`/`drift_status` no longer burns the corrective retry.
+6. **Sampling and context are controlled.** `OllamaCloudOptions` gained `Temperature` (0.1), `Seed` (42),
+   `NumCtx` (16 384 — the old ~8k-token prompt had no explicit window), `NumPredict` (4 096), `TopP`
+   (null = provider default), `ReasoningEffort` (blank = no `think`; `off`/`on`/`low`/`medium`/`high`/`max`
+   mapped, unknown values omitted rather than sent) and `UseStructuredOutput` (true). Only configured knobs
+   are serialised, and `RequestTimeoutSeconds` moved 120 → 180 because a thinking model needs headroom.
+
+**Decision.** Measurement first, and measurement must cost nothing at run time: provenance and quant rank
+are written from data the pipeline already has, and the scorecard reads the stored ledger. The prompt
+archive and the replay endpoint stay out until there is a graded sample to replay against — an eval harness
+with no ground truth is just latency.
+
+**Next**
+
+- Set `OLLAMA_API_KEY`, probe `GET /api/tags` for the strongest reasoning model, then run one session per
+  horizon and compare `GET /api/signals/scorecard` → `rankingQuality` before/after, with
+  `modelProvenance.promptHash` proving the inputs are comparable.
+- Then: prompt archive behind `Signals:ArchivePrompts` (default off) + `eval-prompt-replay` under the
+  `Expensive` policy; slice 3's "trap flags are unenforced this session" warning; the F-03 fencing patch for
+  retrieved/untrusted text; `KnowledgeBase:MaxSnippets` 6 → 8–10 so more `pse_rules` sections are guaranteed.
+
+## Session note (2026-11-26) — `More ▾` no longer hides under the desk (frontend only)
+
+Prompted by "it is hiding under" on the header's `More ▾` panel. The cause was **layering, not
+positioning**: `index.css`'s `.panel` applies `backdrop-blur`, so every panel — including `<header>`
+— is a stacking context. The menu's `absolute right-0 z-40` therefore ranked only *inside the header*,
+and because the header was `position: static; z-index: auto` it painted before the `.panel` cards that
+follow it in `<main>` (`HowToReadStrip`, `WelcomeSetupBanner`, `#market-call`, `AdviceCardList`), so the
+open menu was swallowed by whichever card sat underneath it. One file (`components/TerminalHeader.tsx`),
+**no new dependency, no API or data change, no second component tree**:
+
+1. **The header owns a rung.** `<header>` is now `panel relative z-30` — above the in-flow panels
+   (`z-auto` = 0) it overlaps and below every portalled overlay (`Dialog` / `Select` / `Tooltip` are all
+   `z-50`). The menu keeps `z-40`, so it still clears the header's own tab row.
+2. **The menu closes like a menu.** One `document` listener pair (inside `MoreMenu`) closes it on the
+   next outside `pointerdown` — capture phase, so it lands before whatever is underneath acts — and on
+   `Escape`, which also returns focus to the summary. A press *inside* the menu is left to the item
+   handler. No React state, so no extra renders and no fight with `closeThen`.
+
+| Command / probe | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` (≈0.36 s, exit 0) — unchanged, no test touched |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 135 modules transformed`, `✓ built in 239ms`, exit 0 |
+| built-bundle audit | `grep -c "panel relative z-30" dist/assets/index-*.js` → `1`; CSS unchanged at `61.85 kB / 11.55 kB gzip` |
+| real built app — `dist/` on `127.0.0.1:5399`, legal flag seeded, 1280×940 iframe, headless Chrome `elementsFromPoint` | **fix kept:** `NATURAL menuOnTop=true`; with a `.panel` card inserted under the header `CARD+FIX => menu P/DIV.absolute z-40 > SECTION.panel, menuOnTop=true`. **Defect reproduced** by forcing the old `static/z-auto` back: `CARD+BEFORE => SECTION.panel > menu, menuOnTop=false` |
+| same page — dismissal | `pressInsideStaysOpen=true · pressOutsideClosed=true · escapeClosed=true · focusBackOnSummary=true · reopens=true` |
+
+Not run: `dotnet test` (nothing in `backend/` changed) and a Safari/Firefox pass. No automated
+regression test was added: the suite is DOM-free `node:test` over `lib/`, and a class-string assertion
+would only restate the JSX. The layering rule now lives in `systemPatterns.md` under *Conventions*.
 
 ## Session note (2026-11-26) — wayfinding pass (frontend only)
 
@@ -390,50 +489,50 @@ PSEi, cash and horizon. `describeSignalRow` in `plainAdvice.ts` composes only ex
 **Decision.** The market call stays in Simple, but as one bar: dropping it leaves a list context-free on
 a risk-off day, and keeping the hero re-creates the wall the list replaces.
 
-## Session note (2026-11-26) — "use Google Flex Sans as main font"
+## Session note (2026-11-26) — typeface is Outfit ("use Outfit font from google font instead")
 
-Frontend only: `src/index.css`, `index.html`, `package.json`, the new `scripts/fetch-fonts.mjs`, the new
-`public/fonts/` assets, and the three notices. **No backend file, no API contract, no new dependency**
-(the fetcher uses Node's global `fetch`), no indicator/plan/fee/golden moved.
+Frontend only: `src/index.css`, `index.html`, `scripts/fetch-fonts.mjs`, `public/fonts/` (the new woff2 +
+`OFL.txt`; the Google Sans Flex binary was deleted), and the three notices. **No backend file, no API
+contract, no new dependency** (the fetcher uses Node's global `fetch`), no indicator/plan/fee/golden
+moved. The vendoring contract is unchanged: the face is committed and preloaded, never CDN-linked.
 
 | Command | Result |
 | --- | --- |
-| `node scripts/fetch-fonts.mjs` | `google-sans-flex-latin.woff2 49988 bytes` · `OFL.txt 4488 bytes`, exit 0; a second run reproduced the **identical MD5** (`306cc19…`) |
-| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 231ms`; `grep -c @font-face dist/assets/index-*.css` → **1**; `dist/fonts/` carries only the woff2 + `OFL.txt` |
-| `cd frontend && npm test` | `ℹ tests 66 · ℹ pass 66 · ℹ fail 0` (≈0.25 s) |
-| `npm run preview` + `curl` | `/`, `/fonts/*.woff2` → `200`, `font/woff2`, byte-exact sizes |
-| headless Chrome, built app over `http://127.0.0.1:5290` (legal gate seeded) | 1280px light Simple, 1280px dark Pro and 500px dark Pro all render in the new face with **no wrap/clip regression**; screenshots `/tmp/app-gsf*.png` |
-| `document.fonts` probe | 1 face, `U+0-FF …`, status `loaded`; advance `A` = **26.81 px** at 40 px vs **24.09** for the Menlo fallback → the bundled face really is applied |
+| `node scripts/fetch-fonts.mjs` | `outfit-latin.woff2 32228 bytes` · `OFL.txt 4389 bytes`, exit 0; MD5 `98ccc2b…` |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 285ms`; `grep -c @font-face dist/assets/index-*.css` → **1**; `dist/fonts/` carries only the woff2 + `OFL.txt` |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` (≈0.37 s) |
+| `python3 -m http.server` + `curl` | `/` `200 text/html`; `/fonts/outfit-latin.woff2` `200 font/woff2` (32,228 bytes) |
+| headless Chrome, built app over `http://127.0.0.1:8732` (legal gate seeded, dark Pro) | 1280px and 430px both render in the new face with **no wrap/clip regression**; screenshots `/tmp/outfit-desktop2.png`, `/tmp/outfit-mobile2.png` |
+| `document.fonts` probe | 1 face, `Outfit loaded`, `document.fonts.check("40px 'Outfit'")` → `true`; advance `A` = **27.84 px** at 40 px vs **25.78** for `ui-sans-serif, system-ui`; computed `body` family starts with `Outfit` |
 
-**The one measurement that shaped the change.** The API's other subsets were fetched and tested before
-being dropped: `latin-ext` and `symbols` do **not** contain `₱` (U+20B1), `▲`/`▼` (U+25B2/U+25BC) or `→`.
-Rendering those through `'Google Sans Flex', monospace` produced byte-identical pixels to the fallback,
-and the **official** `fonts.googleapis.com` CSS behaved the same way in the same browser — so the desk's
-peso sign and direction arrows come from the system font either way. Bundling them would have added
-~51 kB for zero glyphs, so `SUBSETS` in `scripts/fetch-fonts.mjs` (and the single `@font-face`) stays at
-`latin`. Do not "fix" that without re-running the same measurement.
+**The measurement that shaped the change.** The upstream `Outfit[wght].ttf` cmap was parsed (throwaway
+Node script, no new dependency): 360 glyphs, and **no** `₱` (U+20B1), **no** `▲`/`▼` (U+25B2/U+25BC).
+`→` (U+2192) *is* in the font, but the served `latin` `unicode-range` omits it, so it still falls back.
+Outfit's `latin-ext` sheet is the trap: its `unicode-range` lists `U+20B1` (inside `U+20AD-20C4`) yet the
+font carries no such glyph — shipping it would add 14,760 bytes for zero usable glyphs. So `SUBSETS`
+stays `latin` and `₱`/`▲▼`/`→` come from the system font, exactly as they did with Google Sans Flex.
 
 **What it built**
 
-1. **`public/fonts/google-sans-flex-latin.woff2` + `OFL.txt` (new, committed).** Google Sans Flex,
-   variable `100 900`, the `latin` subset, 49,988 bytes, OFL 1.1 with the licence beside it (OFL §1
-   requires the licence to travel with a redistribution).
+1. **`public/fonts/outfit-latin.woff2` + `OFL.txt` (committed).** Outfit, variable `100 900`, `latin`
+   subset, 32,228 bytes (14.8 kB lighter than Google Sans Flex), OFL 1.1 with the licence beside it
+   (OFL §1 requires the licence to travel with a redistribution).
 2. **`src/index.css`.** One `@font-face` (`font-display: swap`, the API's own `unicode-range`) and
-   `--font-sans: 'Google Sans Flex', 'Inter', ui-sans-serif, …` — Inter kept as a local-install fallback,
+   `--font-sans: 'Outfit', 'Inter', ui-sans-serif, …` — Inter kept as a local-install fallback,
    `--font-mono` untouched (tickers stay monospace).
-3. **`index.html`.** `<link rel="preload" as="font" type="font/woff2" crossorigin>` for the latin file, so
-   the first paint does not flash the fallback (the preload needs `crossorigin` even same-origin).
-4. **`scripts/fetch-fonts.mjs` (new, zero dependencies).** Reads the Google Fonts CSS with a desktop UA,
-   extracts the subset URL, **verifies the `wOF2` signature** before overwriting (an HTML error page can
-   never replace a good binary), writes the licence, and `--check` prints the upstream URLs without
-   writing. `package.json` gained `"fonts": "node scripts/fetch-fonts.mjs"`.
-5. **The notices stay true.** `PRIVACY.md` §5 now states the font is bundled rather than CDN-linked (the
-   only page-load requests are to the desk's own API); `THIRD_PARTY_NOTICES.md` §4 gained a *Bundled
-   assets* table with the OFL row; `README.md` documents the asset and the command. No copy in the
-   legal gate changed, so `CURRENT_LEGAL_VERSION` did **not** need a bump.
+3. **`index.html`.** `<link rel="preload" as="font" type="font/woff2" crossorigin>` for the latin file
+   (`crossorigin` is required on a font preload even same-origin).
+4. **`scripts/fetch-fonts.mjs`.** Re-pointed at `family=Outfit` / `ofl/outfit` and `outfit-<subset>.woff2`;
+   it still reads the CSS with a desktop UA, **verifies the `wOF2` signature** before overwriting (an HTML
+   error page can never replace a good binary), writes the licence, and `--check` prints the upstream URLs.
+5. **The notices stay true.** `PRIVACY.md` §5 states the font is bundled rather than CDN-linked (the only
+   page-load requests are to the desk's own API); `THIRD_PARTY_NOTICES.md` §4's *Bundled assets* table names
+   Outfit and the measured coverage; `README.md` documents the asset and the command. No copy in the legal
+   gate changed, so `CURRENT_LEGAL_VERSION` did **not** need a bump.
 
 Out of scope (not done): a wordmark typeface for the logo, per-weight `.woff2` instancing, and any
-change to `--font-mono` (tickers keep their monospace).
+change to `--font-mono` (tickers keep their monospace). Google Sans Flex was the face from earlier the
+same day until this switch; no other CSS token or type-scale step moved.
 
 ## Session note (2026-11-26) — compliance hardening (is this government compliant?)
 

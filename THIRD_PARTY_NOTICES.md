@@ -92,13 +92,15 @@ Frontend tests run on the Node.js built-in test runner (`node --test`) against t
 
 | Asset | Source | Licence | Used for |
 | --- | --- | --- | --- |
-| **Google Sans Flex** — `frontend/public/fonts/google-sans-flex-latin.woff2` (variable 100–900) | Google Fonts (`https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@100..900`), fetched by `frontend/scripts/fetch-fonts.mjs` (`npm run fonts`) | **SIL Open Font License 1.1** — the licence travels with the font as `frontend/public/fonts/OFL.txt`, which is what OFL §1 requires of a redistribution | The terminal's UI typeface (`--font-sans` in `src/index.css`) |
+| **Outfit** — `frontend/public/fonts/outfit-latin.woff2` (variable 100–900) | Google Fonts (`https://fonts.googleapis.com/css2?family=Outfit:wght@100..900`), fetched by `frontend/scripts/fetch-fonts.mjs` (`npm run fonts`) | **SIL Open Font License 1.1** — the licence travels with the font as `frontend/public/fonts/OFL.txt`, which is what OFL §1 requires of a redistribution | The terminal's UI typeface (`--font-sans` in `src/index.css`) |
 
 The font is **vendored, not linked**: the browser never contacts `fonts.googleapis.com` or
 `fonts.gstatic.com`, so loading the desk tells no third party who is reading it and the terminal
 still renders with nothing but the API on loopback. Only the `latin` subset is shipped — the
-`latin-ext` and `symbols` subsets were measured and do not contain the `₱` or `▲ ▼` glyphs the desk
-prints, so the system font supplies those two, exactly as it would behind a Google Fonts `<link>`.
+upstream Outfit cmap (360 glyphs) has no `₱` (U+20B1), `▲ ▼` (U+25B2/U+25BC) or `→`, so the
+system font supplies those, exactly as it would behind a Google Fonts `<link>`. Outfit's
+`latin-ext` sheet lists U+20B1 inside its claimed `unicode-range`, but the font carries no such
+glyph, so shipping that subset would add ~14.8 kB for nothing.
 
 ## 5. Trade marks
 

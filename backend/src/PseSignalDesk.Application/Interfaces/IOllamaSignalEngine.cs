@@ -10,7 +10,7 @@ public interface IOllamaSignalEngine
 {
     string EngineName { get; }
 
-    Task<OllamaSignalOutput> GenerateSignalAsync(
+    Task<OllamaSignalResult> GenerateSignalAsync(
         OllamaSignalRequest request,
         CancellationToken cancellationToken = default);
 }

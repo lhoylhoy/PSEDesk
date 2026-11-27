@@ -64,7 +64,7 @@ backend/
                                    # provider + download cache, prompt, compliance, cancellation middleware
 frontend/
   public/          # favicon.svg / favicon.ico (16+32+48) / apple-touch-icon.png — generated, see `npm run icons`;
-                   # fonts/ = Google Sans Flex (latin subset, OFL 1.1) — vendored, see `npm run fonts`
+                   # fonts/ = Outfit (latin subset, OFL 1.1) — vendored, see `npm run fonts`
   scripts/         # generate-icons.mjs: zero-dependency SVG/PNG/ICO writer driven by src/lib/deskMarkGeometry.ts;
                    # fetch-fonts.mjs: re-download the bundled woff2 + its OFL licence from the Google Fonts API
   src/
@@ -196,7 +196,7 @@ The terminal opens behind a first-run **legal gate**, then in **Simple** mode. `
 
 The tab icon is not a hand-drawn asset: `src/lib/deskMarkGeometry.ts` describes the mark once (three ascending candlesticks on a 32-unit grid), `DeskLogo` renders it in the header in `currentColor`, and `npm run icons` rasterises the same geometry into `public/favicon.svg`, `public/favicon.ico` (16/32/48, PNG-compressed entries) and `public/apple-touch-icon.png` (180px, full-bleed because iOS masks it and paints transparent corners black). Re-run `npm run icons` after touching the geometry — the command needs no dependency, it writes PNGs through `node:zlib` and the ICO container by hand.
 
-The typeface is **Google Sans Flex** (variable 100–900), served from `public/fonts/` rather than from a font CDN: the woff2 is bundled, `index.html` preloads it, and `npm run fonts` re-downloads the `latin` subset plus its OFL licence from the Google Fonts API if you ever want to move the font forward. Bundling is what keeps the privacy notice literal — a page load talks to nothing but the API — and the font file ships under the SIL Open Font License with `public/fonts/OFL.txt` beside it. The peso sign and the `▲ ▼` direction glyphs are not in any Google-served subset (measured), so those few characters render from the reader's system font beside Google Sans Flex digits; the rest of the UI — all copy, tickers and the digits of every price — is the bundled face.
+The typeface is **Outfit** (variable 100–900), served from `public/fonts/` rather than from a font CDN: the woff2 is bundled, `index.html` preloads it, and `npm run fonts` re-downloads the `latin` subset plus its OFL licence from the Google Fonts API if you ever want to move the font forward. Bundling is what keeps the privacy notice literal — a page load talks to nothing but the API — and the font file ships under the SIL Open Font License with `public/fonts/OFL.txt` beside it. The peso sign, the `▲ ▼` direction glyphs and `→` are not covered by any Google-served Outfit subset (measured against the upstream cmap: 360 glyphs, none of those), so those few characters render from the reader's system font beside Outfit digits; the rest of the UI — all copy, tickers and the digits of every price — is the bundled face.
 
 ### 3. First live run
 

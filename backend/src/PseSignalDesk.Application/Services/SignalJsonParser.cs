@@ -153,10 +153,11 @@ public sealed class SignalJsonParser
 
         var seenTickers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var pick in picks)
+        for (var index = 0; index < picks.Count; index++)
         {
+            var pick = picks[index];
             var ticker = (pick.Ticker ?? string.Empty).Trim().ToUpperInvariant();
-            var label = ticker.Length == 0 ? $"pick at rank {pick.Rank}" : ticker;
+            var label = ticker.Length == 0 ? $"pick #{index + 1}" : ticker;
 
             if (ticker.Length == 0)
             {
@@ -165,11 +166,6 @@ public sealed class SignalJsonParser
             else if (!seenTickers.Add(ticker))
             {
                 errors.Add($"{label}: duplicate ticker in top_10.");
-            }
-
-            if (pick.Rank < 1 || pick.Rank > 10)
-            {
-                errors.Add($"{label}: rank must be between 1 and 10.");
             }
 
             if (pick.EntryPrice <= 0m)

@@ -97,7 +97,9 @@ public static class SignalRunMapper
                         metric?.ClosePrice ?? 0m,
                         metric?.Ema20,
                         item.EdgeVerdict,
-                        run.Horizon));
+                        run.Horizon),
+                    item.QuantPreScore,
+                    item.QuantRank);
             })
             .ToList();
 
@@ -134,7 +136,24 @@ public static class SignalRunMapper
                     run.BreadthAboveSma50Pct,
                     run.BreadthAboveSma200Pct,
                     run.Stage2Count ?? 0,
-                    run.EvaluatedStockCount.Value));
+                    run.EvaluatedStockCount.Value),
+            // An empty model name means the row predates provenance tracking: report null
+            // rather than a fabricated engine.
+            string.IsNullOrWhiteSpace(run.ModelName)
+                ? null
+                : new ModelProvenanceDto(
+                    run.EngineName,
+                    run.ModelName,
+                    run.PromptHash,
+                    run.ModelTemperature,
+                    run.ModelSeed,
+                    run.ModelRetryCount,
+                    run.ModelLatencyMs,
+                    run.PromptTokens,
+                    run.CompletionTokens,
+                    run.PromptCharacters,
+                    run.SchemaConstrained,
+                    run.FastExtractionApplied));
     }
 
     public static IReadOnlyList<string> ReadCitations(string? json)

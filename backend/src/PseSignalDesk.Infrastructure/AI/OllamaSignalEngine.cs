@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,12 +15,24 @@ using PseSignalDesk.Infrastructure.Configuration;
 namespace PseSignalDesk.Infrastructure.AI;
 
 /// <summary>
-/// Thin, typed client for Ollama Cloud's chat API. It enforces the strict JSON
-/// contract and performs exactly one corrective retry when parsing fails.
+/// Thin, typed client for Ollama Cloud's chat API. It sends the response contract as a JSON
+/// schema, controls the sampling/context knobs the desk needs to reproduce a run, enforces the
+/// strict JSON contract and performs exactly one corrective retry when parsing fails.
 /// </summary>
 public sealed class OllamaSignalEngine : IOllamaSignalEngine
 {
     private static readonly JsonSerializerOptions EnvelopeJsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Parsed once: the schema is a constant, and re-parsing it per horizon would be pointless
+    /// allocation. The node is only ever read, never mutated.
+    /// </summary>
+    private static readonly JsonNode ResponseSchema = JsonNode.Parse(OllamaPromptBuilder.ResponseSchemaJson)!;
+
+    private static readonly JsonNode FastExtractionSchema = JsonNode.Parse(OllamaPromptBuilder.FastExtractionSchemaJson)!;
+
+    /// <summary>Plain JSON mode, the fallback when an endpoint rejects schema-constrained output.</summary>
+    private static readonly JsonNode JsonMode = JsonValue.Create("json")!;
 
     private readonly HttpClient _httpClient;
     private readonly OllamaCloudOptions _options;
@@ -32,6 +46,12 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
     /// not repeat (and log) the same failure.
     /// </summary>
     private volatile bool _fastExtractionUnavailable;
+
+    /// <summary>
+    /// An endpoint that rejects the response schema with <c>400</c> falls back to plain JSON
+    /// mode once and stays there, so one unsupported knob cannot fail every horizon.
+    /// </summary>
+    private volatile bool _structuredOutputUnavailable;
 
     public OllamaSignalEngine(
         HttpClient httpClient,
@@ -47,7 +67,7 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
 
     public string EngineName => $"Ollama Cloud ({_options.Model})";
 
-    public async Task<OllamaSignalOutput> GenerateSignalAsync(
+    public async Task<OllamaSignalResult> GenerateSignalAsync(
         OllamaSignalRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -59,40 +79,61 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
                 "ranking engine: the desk is live-only.");
         }
 
+        var stopwatch = Stopwatch.StartNew();
         var enriched = await EnrichWithFastExtractionAsync(request, cancellationToken);
+
+        var systemPrompt = OllamaPromptBuilder.BuildSystemPrompt(enriched.Horizon);
+        var userPrompt = OllamaPromptBuilder.BuildUserPrompt(enriched);
+        var promptHash = OllamaPromptBuilder.ComputePromptHash(systemPrompt, userPrompt);
 
         var messages = new List<ChatMessage>
         {
-            new("system", OllamaPromptBuilder.BuildSystemPrompt(enriched.Horizon)),
-            new("user", OllamaPromptBuilder.BuildUserPrompt(enriched))
+            new("system", systemPrompt),
+            new("user", userPrompt)
         };
 
-        var firstResponse = await SendRankingChatAsync(messages, cancellationToken);
-        var firstParse = _parser.Parse(firstResponse);
+        var completion = await SendRankingChatAsync(messages, cancellationToken);
+        var parse = _parser.Parse(completion.Content);
+        var retryCount = 0;
 
-        if (firstParse.IsSuccess)
+        if (!parse.IsSuccess)
         {
-            return firstParse.Output!;
+            _logger.LogWarning(
+                "Ollama Cloud response failed validation ({Errors}). Sending one corrective retry.",
+                string.Join(" | ", parse.Errors));
+
+            retryCount = 1;
+            messages.Add(new ChatMessage("assistant", completion.Content));
+            messages.Add(new ChatMessage("user", OllamaPromptBuilder.BuildCorrectionPrompt(parse.Errors, enriched)));
+
+            completion = await SendRankingChatAsync(messages, cancellationToken);
+            parse = _parser.Parse(completion.Content);
+
+            if (!parse.IsSuccess)
+            {
+                throw new SignalGenerationException(
+                    "Ollama Cloud returned an invalid signal payload after one corrective retry: " +
+                    string.Join(" | ", parse.Errors));
+            }
         }
 
-        _logger.LogWarning(
-            "Ollama Cloud response failed validation ({Errors}). Sending one corrective retry.",
-            string.Join(" | ", firstParse.Errors));
+        stopwatch.Stop();
 
-        messages.Add(new ChatMessage("assistant", firstResponse));
-        messages.Add(new ChatMessage("user", OllamaPromptBuilder.BuildCorrectionPrompt(firstParse.Errors, enriched)));
+        var metadata = new OllamaGenerationMetadata(
+            EngineName,
+            _options.Model,
+            promptHash,
+            _options.Temperature,
+            _options.Seed,
+            systemPrompt.Length + userPrompt.Length,
+            completion.PromptTokens,
+            completion.CompletionTokens,
+            retryCount,
+            (int)stopwatch.ElapsedMilliseconds,
+            completion.SchemaConstrained,
+            !string.IsNullOrWhiteSpace(enriched.FastExtractionSummary));
 
-        var retryResponse = await SendRankingChatAsync(messages, cancellationToken);
-        var retryParse = _parser.Parse(retryResponse);
-
-        if (retryParse.IsSuccess)
-        {
-            return retryParse.Output!;
-        }
-
-        throw new SignalGenerationException(
-            "Ollama Cloud returned an invalid signal payload after one corrective retry: " +
-            string.Join(" | ", retryParse.Errors));
+        return new OllamaSignalResult(parse.Output!, metadata);
     }
 
     /// <summary>
@@ -100,13 +141,17 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
     /// <see cref="SignalGenerationException"/> so the API keeps mapping a failed ranking to
     /// <c>502</c>, exactly as before the optional pass learned to inspect the status code.
     /// </summary>
-    private async Task<string> SendRankingChatAsync(
+    private async Task<ChatCompletion> SendRankingChatAsync(
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await SendChatAsync(messages, _options.Model, cancellationToken);
+            return await SendStructuredChatAsync(
+                messages,
+                _options.Model,
+                ResponseSchema,
+                cancellationToken);
         }
         catch (ChatResponseException ex)
         {
@@ -114,23 +159,125 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         }
     }
 
-    private async Task<string> SendChatAsync(
+    /// <summary>
+    /// Sends one chat call with the response contract as a JSON schema. If the endpoint rejects
+    /// the schema (<c>400</c>), the call is retried once in plain JSON mode and the schema is
+    /// disabled for the life of this instance: a provider that does not support structured
+    /// output must not take the desk down.
+    /// </summary>
+    private async Task<ChatCompletion> SendStructuredChatAsync(
         IReadOnlyList<ChatMessage> messages,
         string model,
+        JsonNode schema,
+        CancellationToken cancellationToken)
+    {
+        var constrained = _options.UseStructuredOutput && !_structuredOutputUnavailable;
+
+        try
+        {
+            return await SendChatAsync(
+                messages,
+                model,
+                constrained ? schema : JsonMode,
+                constrained,
+                cancellationToken);
+        }
+        catch (ChatResponseException ex) when (constrained && ex.Status == HttpStatusCode.BadRequest)
+        {
+            _structuredOutputUnavailable = true;
+            _logger.LogWarning(
+                "Ollama Cloud rejected the response schema (HTTP 400). Falling back to JSON mode for the " +
+                "rest of this process. Detail: {Detail}",
+                Truncate(ex.Message, 300));
+
+            return await SendChatAsync(messages, model, JsonMode, schemaConstrained: false, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Maps <see cref="OllamaCloudOptions.ReasoningEffort"/> onto the request's <c>think</c>
+    /// field. Blank or unrecognised values are omitted rather than sent, so a typo in
+    /// configuration degrades to the provider default instead of failing a live run.
+    /// </summary>
+    private object? ResolveThinkingMode()
+    {
+        var effort = _options.ReasoningEffort.Trim().ToLowerInvariant();
+
+        return effort switch
+        {
+            "" => null,
+            "off" or "false" or "none" or "disabled" => false,
+            "on" or "true" => true,
+            "low" or "medium" or "high" or "max" => effort,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Only the knobs that are actually configured are sent. Explicit nulls would be rejected
+    /// by the endpoint, and a zero or negative bound is meaningless.
+    /// </summary>
+    private Dictionary<string, object> BuildSamplingOptions()
+    {
+        var options = new Dictionary<string, object>
+        {
+            ["temperature"] = _options.Temperature
+        };
+
+        if (_options.Seed is int seed)
+        {
+            options["seed"] = seed;
+        }
+
+        if (_options.NumCtx > 0)
+        {
+            options["num_ctx"] = _options.NumCtx;
+        }
+
+        if (_options.NumPredict is int numPredict && numPredict > 0)
+        {
+            options["num_predict"] = numPredict;
+        }
+
+        if (_options.TopP is decimal topP && topP > 0m && topP <= 1m)
+        {
+            options["top_p"] = topP;
+        }
+
+        return options;
+    }
+
+    private async Task<ChatCompletion> SendChatAsync(
+        IReadOnlyList<ChatMessage> messages,
+        string model,
+        JsonNode format,
+        bool schemaConstrained,
         CancellationToken cancellationToken)
     {
         var endpoint = new Uri(new Uri(_options.BaseUrl.TrimEnd('/') + "/"), "api/chat");
 
+        var body = new Dictionary<string, object?>
+        {
+            ["model"] = model,
+            ["messages"] = messages,
+            ["stream"] = false,
+            ["format"] = format
+        };
+
+        if (ResolveThinkingMode() is { } thinking)
+        {
+            body["think"] = thinking;
+        }
+
+        var sampling = BuildSamplingOptions();
+        if (sampling.Count > 0)
+        {
+            body["options"] = sampling;
+        }
+
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey.Trim());
-        httpRequest.Content = JsonContent.Create(new
-        {
-            model,
-            messages,
-            stream = false,
-            format = "json",
-            options = new { temperature = 0.1 }
-        });
+        httpRequest.Content = JsonContent.Create(body);
 
         HttpResponseMessage response;
 
@@ -150,36 +297,40 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
 
         using (response)
         {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
                 throw new ChatResponseException(
                     response.StatusCode,
                     $"Ollama Cloud returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}). " +
-                    Truncate(body, 600));
+                    Truncate(payload, 600));
             }
 
             OllamaChatEnvelope? envelope;
 
             try
             {
-                envelope = JsonSerializer.Deserialize<OllamaChatEnvelope>(body, EnvelopeJsonOptions);
+                envelope = JsonSerializer.Deserialize<OllamaChatEnvelope>(payload, EnvelopeJsonOptions);
             }
             catch (JsonException ex)
             {
                 throw new SignalGenerationException(
-                    "Ollama Cloud returned a malformed response envelope: " + Truncate(body, 400), ex);
+                    "Ollama Cloud returned a malformed response envelope: " + Truncate(payload, 400), ex);
             }
 
-            var content = envelope?.Message?.Content;
-            if (string.IsNullOrWhiteSpace(content))
+            var reply = envelope?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(reply))
             {
                 throw new SignalGenerationException(
-                    "Ollama Cloud returned an empty assistant message. " + Truncate(body, 400));
+                    "Ollama Cloud returned an empty assistant message. " + Truncate(payload, 400));
             }
 
-            return content;
+            return new ChatCompletion(
+                reply,
+                envelope!.PromptEvalCount,
+                envelope.EvalCount,
+                schemaConstrained);
         }
     }
 
@@ -210,8 +361,12 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
 
         try
         {
-            var raw = await SendChatAsync(messages, _options.FastExtractionModel, cancellationToken);
-            var json = SignalJsonParser.ExtractJsonObject(raw);
+            var completion = await SendStructuredChatAsync(
+                messages,
+                _options.FastExtractionModel,
+                FastExtractionSchema,
+                cancellationToken);
+            var json = SignalJsonParser.ExtractJsonObject(completion.Content);
 
             if (json is null)
             {
@@ -291,10 +446,26 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         [property: JsonPropertyName("role")] string Role,
         [property: JsonPropertyName("content")] string Content);
 
+    /// <summary>
+    /// One accepted assistant answer plus the usage figures the endpoint reported, so a run can
+    /// record what it actually cost.
+    /// </summary>
+    private sealed record ChatCompletion(
+        string Content,
+        int? PromptTokens,
+        int? CompletionTokens,
+        bool SchemaConstrained);
+
     private sealed class OllamaChatEnvelope
     {
         [JsonPropertyName("message")]
         public OllamaChatMessage? Message { get; set; }
+
+        [JsonPropertyName("prompt_eval_count")]
+        public int? PromptEvalCount { get; set; }
+
+        [JsonPropertyName("eval_count")]
+        public int? EvalCount { get; set; }
     }
 
     private sealed class OllamaChatMessage

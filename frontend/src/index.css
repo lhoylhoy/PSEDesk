@@ -1,37 +1,36 @@
 @import 'tailwindcss';
 
 /*
- * Typeface: Google Sans Flex (variable 100–900), bundled with the app — never fetched from a
+ * Typeface: Outfit (variable 100–900), bundled with the app — never fetched from a
  * font CDN. A `fonts.googleapis.com` link would tell a third party who is reading the desk and
  * would break the "the terminal works with the API on loopback and nothing else" guarantee
  * (PRIVACY.md §5), so the woff2 lives in `public/fonts/` and `npm run fonts` refreshes it from
  * the Google Fonts API (OFL licence shipped next to the file).
  *
  * One subset, deliberately. The `latin` file carries the ASCII range plus the punctuation the
- * copy leans on (— · … – ’ × ÷ ±). The API's `latin-ext` and `symbols` subsets were measured on
- * 2026-11-26 and do **not** contain the glyphs this desk actually needs — the peso sign (U+20B1),
- * the direction triangles (U+25B2/U+25BC) and → all still resolved through the system font, byte
- * for byte, exactly as they do behind the official Google Fonts `<link>`. Bundling them would
- * have cost ~51 kB and changed nothing, so they are left out; `₱` and `▲▼` render from the
- * reader's system font beside Google Sans Flex digits.
+ * copy leans on (— · … – ’ × ÷ ± •). The API's `latin-ext` sheet was measured on 2026-11-26 and
+ * its `unicode-range` claims the peso sign (U+20B1) even though the upstream Outfit cmap has no
+ * such glyph — so it, the direction triangles (U+25B2/U+25BC) and the `→` printed between prices
+ * all still resolve through the reader's system font, exactly as they do behind the official
+ * Google Fonts `<link>`. Bundling `latin-ext` would have cost ~14.8 kB for zero new glyphs, so it
+ * is left out; `₱` and `▲▼` render from the system font beside Outfit digits.
  *
  * `font-display: swap` paints system text immediately, and index.html preloads this one file,
  * which carries almost every character on screen.
  */
 @font-face {
-  font-family: 'Google Sans Flex';
+  font-family: 'Outfit';
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
-  src: url('/fonts/google-sans-flex-latin.woff2') format('woff2');
+  src: url('/fonts/outfit-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
     U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @theme {
   /* The bundled face wins; `Inter` stays for a machine that has it installed, then the system. */
-  --font-sans: 'Google Sans Flex', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
-    sans-serif;
+  --font-sans: 'Outfit', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /*

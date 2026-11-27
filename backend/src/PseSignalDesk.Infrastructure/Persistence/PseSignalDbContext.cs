@@ -104,6 +104,15 @@ public class PseSignalDbContext : DbContext
             entity.Property(e => e.Horizon).HasConversion<string>().HasMaxLength(16).IsRequired();
             entity.Property(e => e.RawModelResponseJson).IsRequired();
             entity.Property(e => e.RecommendedCashPct).HasDefaultValue(0m);
+            entity.Property(e => e.EngineName).HasMaxLength(128).HasDefaultValue(string.Empty);
+            entity.Property(e => e.ModelName).HasMaxLength(128).HasDefaultValue(string.Empty);
+            entity.Property(e => e.PromptHash).HasMaxLength(64).HasDefaultValue(string.Empty);
+            entity.Property(e => e.ModelTemperature).HasDefaultValue(0m);
+            entity.Property(e => e.ModelRetryCount).HasDefaultValue(0);
+            entity.Property(e => e.ModelLatencyMs).HasDefaultValue(0);
+            entity.Property(e => e.PromptCharacters).HasDefaultValue(0);
+            entity.Property(e => e.SchemaConstrained).HasDefaultValue(false);
+            entity.Property(e => e.FastExtractionApplied).HasDefaultValue(false);
             entity.HasIndex(e => new { e.RunDate, e.Horizon, e.CreatedAtUtc });
 
             entity.HasMany(e => e.Items)

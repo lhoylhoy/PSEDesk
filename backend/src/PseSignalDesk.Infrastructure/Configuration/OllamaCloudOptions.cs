@@ -33,7 +33,51 @@ public sealed class OllamaCloudOptions
 
     public string ApiKey { get; set; } = string.Empty;
 
-    public int RequestTimeoutSeconds { get; set; } = 120;
+    public int RequestTimeoutSeconds { get; set; } = 180;
+
+    /// <summary>
+    /// Sampling temperature for the ranking call. The desk wants a considered, repeatable
+    /// book rather than variety, so this stays low.
+    /// </summary>
+    public decimal Temperature { get; set; } = 0.1m;
+
+    /// <summary>
+    /// Fixed sampling seed, so two calls with the same prompt make the same choices where the
+    /// provider honours it. Null leaves the provider's own seeding in charge.
+    /// </summary>
+    public int? Seed { get; set; } = 42;
+
+    /// <summary>
+    /// Context window requested from the provider. The ranking prompt for a full 25-candidate
+    /// run is roughly 8k tokens, so a window that is too small silently truncates the tail of
+    /// the prompt (yesterday's list and the task line) instead of failing loudly.
+    /// </summary>
+    public int NumCtx { get; set; } = 16_384;
+
+    /// <summary>
+    /// Upper bound on the completion length. Null leaves the provider default.
+    /// </summary>
+    public int? NumPredict { get; set; } = 4_096;
+
+    /// <summary>
+    /// Nucleus sampling cut-off. Null leaves the provider default (1.0).
+    /// </summary>
+    public decimal? TopP { get; set; }
+
+    /// <summary>
+    /// Reasoning effort for models that support thinking: blank leaves the provider default,
+    /// <c>off</c>/<c>false</c> disables it, and <c>on</c>/<c>true</c>/<c>low</c>/<c>medium</c>/
+    /// <c>high</c>/<c>max</c> are forwarded as the <c>think</c> request field. An unrecognised
+    /// value is ignored rather than sent, so a typo cannot fail a live run.
+    /// </summary>
+    public string ReasoningEffort { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Send the response contract as a JSON schema instead of plain JSON mode. Schema-constrained
+    /// output is materially less likely to be malformed; if the endpoint rejects the schema the
+    /// engine falls back to JSON mode once and logs it.
+    /// </summary>
+    public bool UseStructuredOutput { get; set; } = true;
 
     public bool HasApiKey => !string.IsNullOrWhiteSpace(ApiKey);
 

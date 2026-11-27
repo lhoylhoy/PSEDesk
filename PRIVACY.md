@@ -76,7 +76,7 @@ None. The frontend ships no analytics, no ad tech, no session cookies and no thi
 The only storage used is `localStorage` for the consent version, and every access is wrapped so a
 browser that refuses storage still runs the desk (the gate simply shows once per session).
 
-The typeface is no exception: **Google Sans Flex is bundled with the app** (`frontend/public/fonts/`,
+The typeface is no exception: **Outfit is bundled with the app** (`frontend/public/fonts/`,
 OFL 1.1) instead of being linked from a font CDN, so opening the terminal makes no request to
 `fonts.googleapis.com` or `fonts.gstatic.com` and no font provider learns your address. The only
 requests a page load makes are to the desk's own API.

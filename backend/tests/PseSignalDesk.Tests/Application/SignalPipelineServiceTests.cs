@@ -31,8 +31,8 @@ public sealed class SignalPipelineServiceTests
         {
             Top10 =
             {
-                BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 110m),
-                BuildPick(2, "DDD", entry: 10m, stop: 9m, target: 13m)
+                BuildPick("AAA", entry: 100m, stop: 95m, target: 110m),
+                BuildPick("DDD", entry: 10m, stop: 9m, target: 13m)
             },
             DroppedFromYesterday =
             {
@@ -73,6 +73,27 @@ public sealed class SignalPipelineServiceTests
         Assert.Equal(1, repository.SaveRunCalls);
         Assert.NotNull(repository.SavedRun);
         Assert.Equal("FakeEngine", engine.EngineName);
+
+        // The quant table the model was shown is persisted with every pick, so the scorecard can
+        // later ask whether the model's order beat the screen's own.
+        var savedAaa = repository.SavedRun!.Items.Single(item => item.Ticker == "AAA");
+        Assert.Equal(90, savedAaa.QuantPreScore);
+        Assert.Equal(1, savedAaa.QuantRank);
+
+        var savedDdd = repository.SavedRun.Items.Single(item => item.Ticker == "DDD");
+        Assert.Equal(80, savedDdd.QuantPreScore);
+        Assert.Equal(2, savedDdd.QuantRank);
+
+        // Provenance travels with the stored run: which model, which prompt, what it cost.
+        Assert.Equal("FakeEngine", repository.SavedRun.EngineName);
+        Assert.Equal("fake-model", repository.SavedRun.ModelName);
+        Assert.Equal("fake-prompt-hash", repository.SavedRun.PromptHash);
+        Assert.Equal(4_200, repository.SavedRun.ModelLatencyMs);
+        Assert.True(repository.SavedRun.SchemaConstrained);
+
+        // ...and the same provenance is on the API view of the run.
+        Assert.NotNull(dto.ModelProvenance);
+        Assert.Equal("fake-model", dto.ModelProvenance!.Model);
     }
 
     [Fact]
@@ -88,7 +109,7 @@ public sealed class SignalPipelineServiceTests
         // quant-only top-up left, the run must fail rather than invent a buy list.
         var engine = new FakeSignalEngine(new OllamaSignalOutput
         {
-            Top10 = { BuildPick(1, "ZZZ", entry: 10m, stop: 9m, target: 12m) }
+            Top10 = { BuildPick("ZZZ", entry: 10m, stop: 9m, target: 12m) }
         });
 
         var pipeline = CreatePipeline(repository, engine);
@@ -110,7 +131,7 @@ public sealed class SignalPipelineServiceTests
             BuildMetric(DayTwo, "BBB", close: 46m, score: 70)
         };
 
-        var thesisless = BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 110m);
+        var thesisless = BuildPick("AAA", entry: 100m, stop: 95m, target: 110m);
         thesisless.Thesis = "   ";
 
         var engine = new FakeSignalEngine(new OllamaSignalOutput
@@ -118,7 +139,7 @@ public sealed class SignalPipelineServiceTests
             Top10 =
             {
                 thesisless,
-                BuildPick(2, "BBB", entry: 45m, stop: 43m, target: 52m)
+                BuildPick("BBB", entry: 45m, stop: 43m, target: 52m)
             }
         });
 
@@ -153,9 +174,9 @@ public sealed class SignalPipelineServiceTests
         {
             Top10 =
             {
-                BuildPick(1, "ICT", entry: 100m, stop: 95m, target: 110m),
-                BuildPick(2, "BDO", entry: 100m, stop: 95m, target: 110m),
-                BuildPick(3, "SM", entry: 100m, stop: 95m, target: 110m)
+                BuildPick("ICT", entry: 100m, stop: 95m, target: 110m),
+                BuildPick("BDO", entry: 100m, stop: 95m, target: 110m),
+                BuildPick("SM", entry: 100m, stop: 95m, target: 110m)
             }
         });
         var pipeline = CreatePipeline(repository, engine, provider);
@@ -187,8 +208,8 @@ public sealed class SignalPipelineServiceTests
         {
             Top10 =
             {
-                BuildPick(1, "BDO", entry: 100m, stop: 95m, target: 110m),
-                BuildPick(2, "SM", entry: 100m, stop: 95m, target: 110m)
+                BuildPick("BDO", entry: 100m, stop: 95m, target: 110m),
+                BuildPick("SM", entry: 100m, stop: 95m, target: 110m)
             }
         });
         var pipeline = CreatePipeline(repository, engine, provider);
@@ -217,7 +238,7 @@ public sealed class SignalPipelineServiceTests
 
         // A 90% target on a ₱100 close breaches the +50% static ceiling, and only one of
         // the two cited references was actually retrieved, so the other must be dropped.
-        var pick = BuildPick(1, "AAA", entry: 101m, stop: 97m, target: 190m);
+        var pick = BuildPick("AAA", entry: 101m, stop: 97m, target: 190m);
         pick.CitedRules = new List<string>
         {
             "pse_rules#static-price-band",
@@ -262,7 +283,7 @@ public sealed class SignalPipelineServiceTests
             BuildMetric(DayTwo, "AAA", close: 100m, score: 90)
         };
 
-        var pick = BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 112m);
+        var pick = BuildPick("AAA", entry: 100m, stop: 95m, target: 112m);
         pick.CitedRules = new List<string> { "pse_rules#invented" };
 
         var engine = new FakeSignalEngine(new OllamaSignalOutput { Top10 = { pick } });
@@ -287,7 +308,7 @@ public sealed class SignalPipelineServiceTests
 
         var engine = new FakeSignalEngine(new OllamaSignalOutput
         {
-            Top10 = { BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 115m) }
+            Top10 = { BuildPick("AAA", entry: 100m, stop: 95m, target: 115m) }
         });
 
         var dto = await CreatePipeline(repository, engine).RunAsync(DayTwo, SignalHorizon.WEEK);
@@ -340,7 +361,7 @@ public sealed class SignalPipelineServiceTests
             BuildMetric(DayTwo, "AAA", close: 104m, score: 90)
         };
 
-        var pick = BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 115m);
+        var pick = BuildPick("AAA", entry: 100m, stop: 95m, target: 115m);
         pick.BearCase = "A close below 95 on heavy volume invalidates the breakout.";
 
         var engine = new FakeSignalEngine(new OllamaSignalOutput { Top10 = { pick } });
@@ -387,7 +408,7 @@ public sealed class SignalPipelineServiceTests
 
         var engine = new FakeSignalEngine(new OllamaSignalOutput
         {
-            Top10 = { BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 115m) }
+            Top10 = { BuildPick("AAA", entry: 100m, stop: 95m, target: 115m) }
         });
 
         // Sector rotation is a pure function of the session's metrics, so the run publishes it
@@ -422,7 +443,7 @@ public sealed class SignalPipelineServiceTests
 
         var engine = new FakeSignalEngine(new OllamaSignalOutput
         {
-            Top10 = { BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 115m) }
+            Top10 = { BuildPick("AAA", entry: 100m, stop: 95m, target: 115m) }
         });
 
         var portfolio = new PortfolioService(new StubPortfolioRepository(), repository);
@@ -448,7 +469,7 @@ public sealed class SignalPipelineServiceTests
 
         var engine = new FakeSignalEngine(new OllamaSignalOutput
         {
-            Top10 = { BuildPick(1, "AAA", entry: 100m, stop: 95m, target: 115m) }
+            Top10 = { BuildPick("AAA", entry: 100m, stop: 95m, target: 115m) }
         });
 
         var portfolio = new PortfolioService(new BrokenPortfolioRepository(), repository);
@@ -492,10 +513,9 @@ public sealed class SignalPipelineServiceTests
             DeviationReason = string.Empty
         };
 
-    private static OllamaTopPick BuildPick(int rank, string ticker, decimal entry, decimal stop, decimal target) =>
+    private static OllamaTopPick BuildPick(string ticker, decimal entry, decimal stop, decimal target) =>
         new()
         {
-            Rank = rank,
             Ticker = ticker,
             ConvictionScore = 80,
             EntryPrice = entry,
@@ -856,12 +876,27 @@ public sealed class SignalPipelineServiceTests
 
         public OllamaSignalRequest? LastRequest { get; private set; }
 
-        public Task<OllamaSignalOutput> GenerateSignalAsync(
+        public Task<OllamaSignalResult> GenerateSignalAsync(
             OllamaSignalRequest request,
             CancellationToken cancellationToken = default)
         {
             LastRequest = request;
-            return Task.FromResult(_output);
+
+            var metadata = new OllamaGenerationMetadata(
+                EngineName,
+                "fake-model",
+                "fake-prompt-hash",
+                Temperature: 0.1m,
+                Seed: 42,
+                PromptCharacters: 12_000,
+                PromptTokens: 3_000,
+                CompletionTokens: 1_200,
+                RetryCount: 0,
+                LatencyMs: 4_200,
+                SchemaConstrained: true,
+                FastExtractionApplied: false);
+
+            return Task.FromResult(new OllamaSignalResult(_output, metadata));
         }
     }
 

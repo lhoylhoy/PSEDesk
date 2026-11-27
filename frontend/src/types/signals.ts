@@ -291,6 +291,10 @@ export interface SignalItem {
   orderTicket?: OrderTicket | null;
   /** The four-step exit roadmap; null on runs persisted before it existed. */
   wavePlan?: WaveTradePlan | null;
+  /** The deterministic screen score for this candidate on the run date. */
+  quantPreScore?: number;
+  /** Position in the quant table the model was shown, null before provenance tracking. */
+  quantRank?: number | null;
 }
 
 export interface SignalDrop {
@@ -314,6 +318,28 @@ export interface SignalRun {
   smallSizeCount: number;
   watchOnlyCount: number;
   breadth: MarketBreadth | null;
+  /** How the book was generated: model, prompt fingerprint, sampling settings, cost. */
+  modelProvenance?: ModelProvenance | null;
+}
+
+/**
+ * Audit provenance for one run. Rendered (if at all) as a quiet caption, never as advice:
+ * it says which model produced the list and what the call cost.
+ */
+export interface ModelProvenance {
+  engine: string;
+  model: string;
+  /** SHA-256 of the system + user prompt; equal hashes mean comparable runs. */
+  promptHash: string;
+  temperature: number;
+  seed: number | null;
+  retryCount: number;
+  latencyMs: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  promptCharacters: number;
+  schemaConstrained: boolean;
+  fastExtractionApplied: boolean;
 }
 
 export interface RegimeSnapshot {
@@ -511,6 +537,24 @@ export interface SignalScorecard {
   calibration: CalibrationBucket[];
   verdicts: VerdictBreakdown[];
   recentResolved: ResolvedSignal[];
+  /** Model-versus-screen ranking read; null until a graded run stores a quant rank. */
+  rankingQuality?: RankingQuality | null;
+}
+
+/**
+ * Did the model's order beat the deterministic screen? Spearman compares the model's order with
+ * the quant order among the picks it made; the top-three blocks compare realized results.
+ */
+export interface RankingQuality {
+  runsMeasured: number;
+  picksWithQuantRank: number;
+  meanSpearmanRho: number | null;
+  modelTop3Resolved: number;
+  modelTop3WinRate: number;
+  modelTop3AverageRealizedNetR: number;
+  quantTop3Resolved: number;
+  quantTop3WinRate: number;
+  quantTop3AverageRealizedNetR: number;
 }
 
 export interface ProblemDetails {

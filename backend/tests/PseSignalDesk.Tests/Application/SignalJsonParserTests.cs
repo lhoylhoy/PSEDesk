@@ -148,6 +148,35 @@ public sealed class SignalJsonParserTests
     }
 
     [Fact]
+    public void Parse_ignores_a_model_that_still_echoes_rank_and_drift_status()
+    {
+        // Older prompts asked for rank and drift_status. A model that keeps sending them (with a
+        // nonsense drift value) must not burn the one corrective retry on fields the server owns.
+        const string raw = """
+            {
+              "top_10": [
+                {
+                  "rank": 9,
+                  "ticker": "ICT",
+                  "conviction_score": 80,
+                  "entry_price": 10,
+                  "stop_loss": 9,
+                  "target_price": 12,
+                  "thesis": "a",
+                  "drift_status": "MOONSHOT",
+                  "previous_rank": 42
+                }
+              ]
+            }
+            """;
+
+        var result = _parser.Parse(raw);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Output!.Top10);
+    }
+
+    [Fact]
     public void Parse_fails_cleanly_when_there_is_no_json_object()
     {
         var result = _parser.Parse("I could not produce a list today.");

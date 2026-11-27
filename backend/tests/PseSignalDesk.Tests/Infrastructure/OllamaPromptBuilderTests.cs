@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PseSignalDesk.Application.Models;
 using PseSignalDesk.Domain.Enums;
 using PseSignalDesk.Infrastructure.AI;
@@ -353,6 +354,43 @@ public sealed class OllamaPromptBuilderTests
 
         Assert.DoesNotContain("DESK_TRACK_RECORD_AND_LEARNED_EDGE", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("RECENT_STOP_OUTS", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildSystemPrompt_makes_the_array_order_the_rank_and_stops_asking_for_fields_the_server_owns()
+    {
+        var prompt = OllamaPromptBuilder.BuildSystemPrompt(SignalHorizon.WEEK);
+
+        // The pipeline assigns rank from array order and recalculates drift itself, so asking the
+        // model for rank/drift_status only created validation failures and wasted retries.
+        Assert.Contains("array order IS the ranking", prompt, StringComparison.Ordinal);
+        Assert.Contains("no rank field", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"rank\":", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("drift_status", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResponseSchema_requires_the_trimmed_array_order_contract()
+    {
+        using var document = JsonDocument.Parse(OllamaPromptBuilder.ResponseSchemaJson);
+        var root = document.RootElement;
+
+        Assert.Equal("object", root.GetProperty("type").GetString());
+        Assert.Contains("top_10", root.GetProperty("required").EnumerateArray().Select(e => e.GetString()));
+
+        var pickProperties = root.GetProperty("properties")
+            .GetProperty("top_10")
+            .GetProperty("items")
+            .GetProperty("properties");
+
+        Assert.True(pickProperties.TryGetProperty("ticker", out _));
+        Assert.True(pickProperties.TryGetProperty("bear_case", out _));
+        Assert.False(pickProperties.TryGetProperty("rank", out _));
+        Assert.False(pickProperties.TryGetProperty("drift_status", out _));
+
+        // The fast pre-pass has its own, much smaller contract.
+        using var fast = JsonDocument.Parse(OllamaPromptBuilder.FastExtractionSchemaJson);
+        Assert.True(fast.RootElement.GetProperty("properties").TryGetProperty("summary", out _));
     }
 
     private static OllamaSignalRequest BuildRequest(decimal? marketFlow, decimal? candidateFlow) =>

@@ -17,9 +17,11 @@ public sealed class OllamaSignalOutput
 
 public sealed class OllamaTopPick
 {
-    [JsonPropertyName("rank")]
-    public int Rank { get; set; }
-
+    /// <summary>
+    /// Ticker of the pick. The array order of <see cref="OllamaSignalOutput.Top10"/> is the
+    /// ranking: the server assigns rank 1..n itself, so the model is no longer asked to echo a
+    /// rank the desk would overwrite.
+    /// </summary>
     [JsonPropertyName("ticker")]
     public string Ticker { get; set; } = string.Empty;
 
@@ -40,12 +42,6 @@ public sealed class OllamaTopPick
 
     [JsonPropertyName("deviation_reason")]
     public string? DeviationReason { get; set; }
-
-    [JsonPropertyName("drift_status")]
-    public string? DriftStatus { get; set; }
-
-    [JsonPropertyName("previous_rank")]
-    public int? PreviousRank { get; set; }
 
     /// <summary>
     /// Knowledge-base references the model used for the thesis, e.g.
@@ -78,6 +74,31 @@ public sealed class OllamaDrop
     [JsonPropertyName("reason")]
     public string Reason { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// What one generation actually cost and how it was produced. Persisted with the run so the
+/// ranking can be compared across models, prompts and settings instead of guessed at.
+/// </summary>
+public sealed record OllamaGenerationMetadata(
+    string EngineName,
+    string Model,
+    string PromptHash,
+    decimal Temperature,
+    int? Seed,
+    int PromptCharacters,
+    int? PromptTokens,
+    int? CompletionTokens,
+    int RetryCount,
+    int LatencyMs,
+    bool SchemaConstrained,
+    bool FastExtractionApplied);
+
+/// <summary>
+/// The engine's answer plus the provenance of the call that produced it.
+/// </summary>
+public sealed record OllamaSignalResult(
+    OllamaSignalOutput Output,
+    OllamaGenerationMetadata Metadata);
 
 /// <summary>
 /// The request sent into the signal engine. Kept provider-agnostic so test doubles

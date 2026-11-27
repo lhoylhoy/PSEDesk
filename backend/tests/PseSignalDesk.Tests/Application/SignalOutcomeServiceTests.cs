@@ -519,6 +519,109 @@ public sealed class SignalOutcomeServiceTests
         Assert.Equal(LiveDriftStatus.HALTED, drift.Status);
     }
 
+    [Fact]
+    public async Task BuildScorecardAsync_reports_a_perfect_rank_agreement_when_the_model_follows_the_screen()
+    {
+        var repository = new FakeSignalRepository();
+        repository.Runs.Add(new SignalRun
+        {
+            Id = 1,
+            RunDate = RunDate,
+            Horizon = SignalHorizon.WEEK,
+            CreatedAtUtc = DateTime.UtcNow,
+            Items = new List<SignalItem>
+            {
+                BuildQuantItem("AAA", rank: 1, quantRank: 1, SignalOutcomeStatus.WIN_TARGET, 1.5m),
+                BuildQuantItem("BBB", rank: 2, quantRank: 2, SignalOutcomeStatus.LOSS_STOP, -1m),
+                BuildQuantItem("CCC", rank: 3, quantRank: 3, SignalOutcomeStatus.WIN_TARGET, 2m)
+            }
+        });
+
+        var scorecard = await new SignalOutcomeService(repository).BuildScorecardAsync(SignalHorizon.WEEK);
+
+        var quality = scorecard.RankingQuality;
+        Assert.NotNull(quality);
+        Assert.Equal(1, quality!.RunsMeasured);
+        Assert.Equal(3, quality.PicksWithQuantRank);
+        Assert.Equal(1m, quality.MeanSpearmanRho);
+        Assert.Equal(3, quality.ModelTop3Resolved);
+        Assert.Equal(3, quality.QuantTop3Resolved);
+        Assert.Equal(0.6667m, quality.ModelTop3WinRate);
+        Assert.Equal(0.8333m, quality.ModelTop3AverageRealizedNetR);
+    }
+
+    [Fact]
+    public async Task BuildScorecardAsync_shows_when_the_models_top_three_beat_the_screens_top_three()
+    {
+        var repository = new FakeSignalRepository();
+        repository.Runs.Add(new SignalRun
+        {
+            Id = 1,
+            RunDate = RunDate,
+            Horizon = SignalHorizon.WEEK,
+            CreatedAtUtc = DateTime.UtcNow,
+            Items = new List<SignalItem>
+            {
+                // The model promoted AAA and CCC, which are mid-table in the quant ordering,
+                // and pushed the screen's second-best name (DDD) to the bottom.
+                BuildQuantItem("AAA", rank: 1, quantRank: 5, SignalOutcomeStatus.WIN_TARGET, 1.5m),
+                BuildQuantItem("BBB", rank: 2, quantRank: 1, SignalOutcomeStatus.LOSS_STOP, -1m),
+                BuildQuantItem("CCC", rank: 3, quantRank: 6, SignalOutcomeStatus.WIN_TARGET, 2m),
+                BuildQuantItem("DDD", rank: 4, quantRank: 2, SignalOutcomeStatus.LOSS_STOP, -1m)
+            }
+        });
+
+        var scorecard = await new SignalOutcomeService(repository).BuildScorecardAsync(SignalHorizon.WEEK);
+
+        var quality = scorecard.RankingQuality;
+        Assert.NotNull(quality);
+        Assert.Equal(0m, quality!.MeanSpearmanRho);
+        Assert.Equal(3, quality.ModelTop3Resolved);
+        Assert.Equal(0.6667m, quality.ModelTop3WinRate);
+        Assert.Equal(0.8333m, quality.ModelTop3AverageRealizedNetR);
+
+        // Quant's top three of the names the model actually picked: BBB and DDD only — neither
+        // of the screen's best two names paid, so the screen's own top three would have lost.
+        Assert.Equal(2, quality.QuantTop3Resolved);
+        Assert.Equal(0m, quality.QuantTop3WinRate);
+        Assert.Equal(-1m, quality.QuantTop3AverageRealizedNetR);
+    }
+
+    [Fact]
+    public async Task BuildScorecardAsync_omits_the_ranking_read_when_no_run_stored_a_quant_rank()
+    {
+        var repository = new FakeSignalRepository();
+        repository.Runs.Add(new SignalRun
+        {
+            Id = 1,
+            RunDate = RunDate,
+            Horizon = SignalHorizon.WEEK,
+            CreatedAtUtc = DateTime.UtcNow,
+            Items = new List<SignalItem>
+            {
+                BuildGradedItem("ICT", 0.55m, SignalOutcomeStatus.WIN_TARGET, 1.5m, EdgeVerdict.TRADE, RunDate.AddDays(3))
+            }
+        });
+
+        var scorecard = await new SignalOutcomeService(repository).BuildScorecardAsync(SignalHorizon.WEEK);
+
+        Assert.Null(scorecard.RankingQuality);
+    }
+
+    private static SignalItem BuildQuantItem(
+        string ticker,
+        int rank,
+        int quantRank,
+        SignalOutcomeStatus status,
+        decimal realizedNetR)
+    {
+        var item = BuildGradedItem(ticker, 0.55m, status, realizedNetR, EdgeVerdict.TRADE, RunDate.AddDays(3));
+        item.Rank = rank;
+        item.QuantRank = quantRank;
+        item.QuantPreScore = 100 - quantRank;
+        return item;
+    }
+
     private static TrainedHorizonModel BuildActiveModel() => new()
     {
         Horizon = SignalHorizon.WEEK,

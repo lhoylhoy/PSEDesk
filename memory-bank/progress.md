@@ -2,8 +2,63 @@
 
 **Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **538 backend tests green + 1 skipped (539 total) / 87 frontend tests green** (2026-11-26; the newest pass is the frontend **wayfinding pass** — keyboard shortcuts, the three-step "how to read this screen" strip, a skip link and honest list copy — on top of abuse-protection hardening, per-company PSE Edge disclosures, the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below).
- Backend behaviour is unchanged by that pass. The data-truth state is still per-company PSE Edge disclosures (`companyDisclosures/search.ax?keyword={cmpy_id}`, ≤25 per run, 8-way), which turned disclosure attribution from a name guess into a fact: live, that fan-out returned 22–47 filings per name where the market-wide page attributed 3 filings across 60 names. Everything past the LLM step remains unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+**Latest verification:** **548 backend tests green + 1 skipped (549 total) / 87 frontend tests green** (2026-11-26; the newest pass is the **LLM measurement + structured-output pass** — run provenance, `QuantPreScore`/`QuantRank` persistence, the model-vs-quant scorecard block, JSON-schema `format`, sampling/context controls and the removal of the dead `rank`/`drift_status` fields — on top of the `More ▾` **stacking fix**, the frontend **wayfinding pass**, abuse-protection hardening, per-company PSE Edge disclosures, the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below).
+ Backend behaviour changed only in the LLM seam: the request now carries a response schema and explicit sampling/context options, the stored run records how it was produced, and each pick records the quant rank it displaced. Everything past the LLM step is still unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+
+## Latest verification (2026-11-26 — LLM measurement + structured-output pass)
+
+Triggered by "make the signal LLM more intelligent". The model's rank order is the product, yet its skill
+was unmeasured and the request was a plain `format: "json"` chat with a hardcoded temperature, no seed and
+no context window. Two slices landed: **A (measure)** and **B.1–B.3 (contract + controls)**. No new
+dependency, no new layer, and every server-owned invariant is intact.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `cd backend && dotnet test PseSignalDesk.slnx --nologo -v q` | `Passed! - Failed: 0, Passed: 548, Skipped: 1, Total: 549` (8 s) — 538 → 548, **+10** (`OllamaSignalEngineTests` 4 → 8, `OllamaPromptBuilderTests` 16 → 18, `SignalJsonParserTests` 9 → 10, `SignalOutcomeServiceTests` 19 → 22) |
+| `dotnet ef migrations add AddSignalRankingProvenance --project src/PseSignalDesk.Infrastructure --startup-project src/PseSignalDesk.WebApi` | `20261126124346_AddSignalRankingProvenance` — 12 `SignalRuns` columns, 2 `SignalItems` columns, all defaulted |
+| `cd frontend && npx tsc --noEmit` | clean (exit 0) |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` — unchanged |
+
+**What it built:** `OllamaSignalResult` + `OllamaGenerationMetadata` on the engine seam →
+`SignalPipelineService.ApplyModelProvenance` → 12 stored provenance columns (`EngineName`, `ModelName`,
+`PromptHash`, `ModelTemperature`, `ModelSeed`, `ModelRetryCount`, `ModelLatencyMs`, `PromptTokens`,
+`CompletionTokens`, `PromptCharacters`, `SchemaConstrained`, `FastExtractionApplied`) and
+`SignalRunDto.ModelProvenance`; `SignalItem.QuantPreScore`/`QuantRank` (the ordinal in the candidate table
+the prompt prints) → `SignalItemDto`; `RankingQualityDto` on the scorecard (mean Spearman rho between the
+model order and the quant order re-ranked within the picks, plus each side's top-three win rate and mean R);
+`format` now carries a JSON schema (`OllamaPromptBuilder.ResponseSchemaJson`, `drop_category` as `enum`);
+`OllamaCloudOptions.Temperature/Seed/NumCtx/NumPredict/TopP/ReasoningEffort/UseStructuredOutput` with only
+configured knobs serialised; and the model-facing `rank`/`drift_status`/`previous_rank` fields deleted from
+the contract, the parser validation and the correction prompt. A `400` on schema-constrained output retries
+once in plain JSON mode and latches the schema off for the process.
+
+**Not run:** any live `run-now` (`OLLAMA_API_KEY` unset), so schema/seed/num_ctx/think support on Ollama
+Cloud is unverified; and the prompt archive + `eval-prompt-replay` endpoint were deliberately deferred.
+
+## Latest verification (2026-11-26 — `More ▾` stacking fix)
+
+Reported as "it is hiding under". The cause was the shell's layering, not the menu's positioning:
+`.panel` (`index.css`) applies `backdrop-blur`, so `<header>` is itself a stacking context; the menu's
+`absolute right-0 z-40` therefore ranked only *inside* it, and the header — `position: static;
+z-index: auto` — painted before the `.panel` cards beneath it (`HowToReadStrip`, `WelcomeSetupBanner`,
+`#market-call`, `AdviceCardList`), which covered the open menu. Fixed in
+`components/TerminalHeader.tsx` only: `<header>` is `panel relative z-30` (above in-flow panels, below
+the `z-50` portals) and `MoreMenu` gained one `document` listener pair (outside `pointerdown` in the
+capture phase, and `Escape` with focus returned to the summary). **No new dependency, no API or data
+change, no new component.**
+
+| Command / probe | Result |
+| --- | --- |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` (≈0.36 s, exit 0) |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ 135 modules transformed`, `✓ built in 239ms`, exit 0 (`index-*.js` 93.14 kB / 26.24 kB gzip, CSS 61.85 kB / 11.55 kB gzip) |
+| built-bundle audit | `grep -c "panel relative z-30" dist/assets/index-*.js` → `1` |
+| real built app — `dist/` on `127.0.0.1:5399`, legal flag + theme seeded, 1280×940 iframe, headless Chrome `elementsFromPoint` at `header.bottom+40` | natural state `menuOnTop=true`; with a `.panel` card inserted as `main`'s first child `CARD+FIX => P.type-eyebrow > DIV.absolute z-40 > SECTION.panel, menuOnTop=true`; forcing the pre-fix `header{position:static;z-index:auto}` back gives `CARD+BEFORE => SECTION.panel > menu, menuOnTop=false` — the reported defect, reproduced and then removed |
+| same page — dismissal | `pressInsideStaysOpen=true · pressOutsideClosed=true · escapeClosed=true · focusBackOnSummary=true · reopens=true` |
+
+Not run: `dotnet test` (no backend file changed) and a Safari/Firefox pass. No unit test was added —
+`npm test` is DOM-free `node:test` over `lib/`, so the layering contract is recorded in
+`systemPatterns.md` (*Conventions*) and pinned by the built-app probe above instead.
 
 ## Latest verification (2026-11-26 — frontend wayfinding pass)
 
@@ -156,10 +211,10 @@ explains an `Unknown` — `NoStore`, no credential reflected, and an unreadable 
 `storedFactsAvailable: false` instead of `500` (with a test that serialises the report and asserts the key
 string never appears).
 
-**Next** — slice 2 shipped (per-company PSE Edge disclosures, section above). Remaining: slice 3 (surface "trap
-flags are unenforced this session" through `SignalDtos.Warnings`) and slice 4 (measure the model:
-`QuantPreScore`/`QuantRank` migration, model-vs-quant scorecard, opt-in prompt replay). Details in
-`activeContext.md`.
+**Next** — slice 2 shipped (per-company PSE Edge disclosures, section above), and the measurement half of slice 4
+now ships too (`20261126124346_AddSignalRankingProvenance`, run provenance, model-vs-quant `rankingQuality`).
+Remaining: slice 3 (surface "trap flags are unenforced this session" through `SignalDtos.Warnings`) and the rest
+of slice 4 (opt-in prompt archive + `eval-prompt-replay`). Details in `activeContext.md`.
 
 
 ## Latest verification (2026-11-26 — hand cursor on every control)
@@ -320,43 +375,44 @@ Not run: a real-browser capture (headless Chrome still hangs on the seeded app i
   (`title` + `aria-description`): Simple lists the calls — tap a row for the why; Pro is the full quant
   table for readers who already think in odds, R:R and Kelly sizing.
 
-## Latest verification (2026-11-26 — typeface: Google Sans Flex)
+## Latest verification (2026-11-26 — typeface: Outfit)
 
-Frontend only: `src/index.css`, `index.html`, `package.json`, `scripts/fetch-fonts.mjs` (new),
-`public/fonts/` (new: the woff2 + `OFL.txt`), plus `README.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`
-and the memory bank. **No backend file, no API contract, no new dependency, no golden moved.**
+Frontend only: `src/index.css`, `index.html`, `scripts/fetch-fonts.mjs`, `public/fonts/` (the woff2 +
+`OFL.txt`; the previous face's binary was deleted), plus `README.md`, `PRIVACY.md`,
+`THIRD_PARTY_NOTICES.md` and the memory bank. **No backend file, no API contract, no new dependency,
+no golden moved** — `package.json` only kept its existing `npm run fonts`.
 
 | Command | Result |
 | --- | --- |
-| `node scripts/fetch-fonts.mjs` | `google-sans-flex-latin.woff2 49988 bytes` · `OFL.txt 4488 bytes`, exit 0; a second run reproduced the identical MD5 (`306cc19…`) |
-| `node scripts/fetch-fonts.mjs --check` | prints the upstream `fonts.gstatic.com` subsets URL without writing; the URL matches the committed binary |
-| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 231ms`; `grep -c @font-face dist/assets/index-*.css` → **1**; `dist/fonts/` = woff2 + `OFL.txt` only |
-| `cd frontend && npm test` | `ℹ tests 66 · ℹ pass 66 · ℹ fail 0` (≈0.25 s, exit 0) |
-| `npm run preview -- --port 5199` + `curl` | `/` `200 text/html`; `/fonts/google-sans-flex-latin.woff2` `200 font/woff2` (49,988 bytes) and `/fonts/OFL.txt` `200 text/plain` |
-| headless Chrome over `http://127.0.0.1:5290` (copy of `dist/`, legal gate seeded) | 1280px light Simple, 1280px dark Pro, 500px dark Pro — all render in the new face, header rows unwrapped, tabs intact; screenshots `/tmp/app-gsf.png`, `/tmp/app-gsf-dark.png`, `/tmp/app-gsf-phone.png` |
-| `document.fonts` + advance-width probe | one face, `loaded`, `U+0-FF …`; `A` = 26.81 px at 40 px vs 24.09 px for the Menlo fallback → the bundled face is applied |
+| `node scripts/fetch-fonts.mjs` | `outfit-latin.woff2 32228 bytes` · `OFL.txt 4389 bytes` (Copyright 2021 The Outfit Project Authors), exit 0 |
+| `node scripts/fetch-fonts.mjs --check` | prints the upstream `fonts.gstatic.com/s/outfit/v15/…` URL without writing |
+| `cd frontend && npm run build` | `tsc --noEmit` clean, `✓ built in 285ms`; `grep -c @font-face dist/assets/index-*.css` → **1**; `dist/fonts/` = woff2 + `OFL.txt` only; built CSS carries `--font-sans:"Outfit", "Inter", …` |
+| `cd frontend && npm test` | `ℹ tests 87 · ℹ pass 87 · ℹ fail 0` (≈0.37 s, exit 0) |
+| `python3 -m http.server` over a copy of `dist/` + `curl` | `/` `200 text/html`; `/fonts/outfit-latin.woff2` `200 font/woff2` (32,228 bytes) |
+| headless Chrome over `http://127.0.0.1:8732` (copy of `dist/`, legal gate seeded, dark Pro) | 1280px and 430px both render in the new face with no wrap/clip regression; screenshots `/tmp/outfit-desktop2.png`, `/tmp/outfit-mobile2.png` |
+| `document.fonts` + advance-width probe | exactly one face, `Outfit loaded`; `document.fonts.check("40px 'Outfit'")` → `true`; `A` = **27.84 px** at 40 px vs **25.78** for `ui-sans-serif, system-ui`; computed `body` font-family starts with `Outfit` |
+| upstream cmap parsed (`Outfit[wght].ttf`) | 360 glyphs; **no** U+20B1 `₱`, **no** U+25B2/U+25BC `▲ ▼`; U+2192 `→` present in the font but outside the served `latin` `unicode-range` |
 
-Not run: `dotnet test` (no backend file changed) and a real-device Safari/Firefox pass — the glyph-coverage
-finding below is Chrome-measured, and the official Google Fonts CSS behaves identically there.
+Not run: `dotnet test` (no backend file changed) and a real-device Safari/Firefox pass.
 
 **What changed**
 
-- **Vendored, not linked.** `public/fonts/google-sans-flex-latin.woff2` (variable `100 900`, 49,988 bytes)
-  is served by the app; `index.html` preloads it (`as="font"`, `crossorigin`) and `index.css` declares a
+- **Vendored, not linked.** `public/fonts/outfit-latin.woff2` (variable `100 900`, 32,228 bytes) is
+  served by the app; `index.html` preloads it (`as="font"`, `crossorigin`) and `index.css` declares a
   single `@font-face` (`font-display: swap`, the API's own `unicode-range`) with
-  `--font-sans: 'Google Sans Flex', 'Inter', ui-sans-serif, …`. No `fonts.googleapis.com` request exists,
-  so `PRIVACY.md` §5 ("no third-party script tags") stays literally true and the terminal still renders
-  with nothing but the API on loopback. `--font-mono` is untouched.
-- **One subset, on evidence.** The API's `latin-ext` and `symbols` subsets were fetched, rendered and
-  compared against the Menlo fallback: `₱` (U+20B1), `▲`/`▼` (U+25B2/U+25BC) and `→` came out
-  **pixel-identical to the fallback**, and the official CDN CSS did the same in the same browser. They were
-  dropped (~51 kB saved, zero glyphs lost); the system font supplies those few characters.
-- **`scripts/fetch-fonts.mjs` (new, zero dependencies).** Reads the Google Fonts CSS with a desktop UA,
-  extracts the subset URL, verifies the `wOF2` signature before overwriting (an HTML error page can never
-  replace a good binary), writes `OFL.txt`, and supports `--check`. `package.json` gained `npm run fonts`.
-- **Licence + notices.** OFL 1.1 ships beside the font (OFL §1 requires it); `THIRD_PARTY_NOTICES.md` §4
-  gained a *Bundled assets* table, `PRIVACY.md` §5 and `README.md` document the font and the command. No
-  reader-facing legal copy changed, so `CURRENT_LEGAL_VERSION` was not bumped.
+  `--font-sans: 'Outfit', 'Inter', ui-sans-serif, …`. No `fonts.googleapis.com` request exists, so
+  `PRIVACY.md` §5 stays literally true and the terminal still renders with nothing but the API on
+  loopback. `--font-mono` is untouched (tickers stay monospace).
+- **One subset, on evidence.** Outfit's `latin-ext` sheet lists U+20B1 inside its `unicode-range`, but
+  the upstream cmap carries no `₱`, `▲`/`▼` or (inside the served range) `→`; the subset is 14,760
+  bytes for zero usable glyphs, so only `latin` ships (14.8 kB smaller than Google Sans Flex's 49,988).
+  The system font supplies those few characters, exactly as it does behind the official CDN link.
+- **`scripts/fetch-fonts.mjs`.** Same zero-dependency fetcher (desktop UA, `wOF2` signature check before
+  overwriting, writes `OFL.txt`, supports `--check`), re-pointed at `family=Outfit` and `ofl/outfit`, and
+  writing `outfit-<subset>.woff2`.
+- **Licence + notices.** OFL 1.1 ships beside the font; `THIRD_PARTY_NOTICES.md` §4, `PRIVACY.md` §5 and
+  `README.md` now name Outfit and the measured coverage. No reader-facing legal copy changed, so
+  `CURRENT_LEGAL_VERSION` was not bumped.
 
 ## Latest verification (2026-11-26 — abuse-protection hardening)
 
@@ -742,7 +798,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 
 ### Frontend
 - [x] React 19 + TypeScript 7 + Vite 8 + Tailwind 4 shell with a typed API client (`ApiError`, ProblemDetails, abort signals, FormData uploads) and centralized formatters.
-- [x] **Google Sans Flex is the UI typeface, vendored rather than CDN-linked** (`public/fonts/…-latin.woff2`, variable 100–900, OFL 1.1 + `OFL.txt`, preloaded in `index.html`, `--font-sans` in `index.css`, refreshed by `npm run fonts`). A page load still talks to nothing but the API; `₱` and `▲ ▼` come from the system font because no Google-served subset carries them (measured, same as the official CDN link). `--font-mono` stays for tickers.
+- [x] **Outfit is the UI typeface, vendored rather than CDN-linked** (`public/fonts/outfit-latin.woff2`, variable 100–900, OFL 1.1 + `OFL.txt`, preloaded in `index.html`, `--font-sans` in `index.css`, refreshed by `npm run fonts`; it replaced Google Sans Flex on 2026-11-26 at the operator's request, 32,228 vs 49,988 bytes). A page load still talks to nothing but the API; `₱` and `▲ ▼` come from the system font because the upstream Outfit cmap has no such glyphs (measured), and `→` sits outside the served `latin` range. `--font-mono` stays for tickers.
 - [x] `Simple | Pro` view mode and light/dark theme, both persisted; Simple is a **list of trade signals** — one compact `MarketDirectionHero` call bar (traffic light, instruction, one sentence; gauge/reasons/sectors/trust line/tiles behind *Why this call*), then one `AdviceCardList` row per buyable pick (rank, verdict, buy/target/cut prices, entry chip) that **opens `TickerDetailDialog`** with the four-step plan, the server ticket, the odds, the desk-confidence line, the pre-mortem and the *Show the math* drawer. Pro's phone card opens the same dialog. The old top-three cards, the “show more” toggle, `RidingNowStrip` and the inline accordion are gone.
 - [x] Pro keeps the dense `SignalTable`/`ProSignalCard` views, regime tiles, rotation strip, governor/slippage tiles, `RiskSizerBar`, verdict/drift badges and the Knowledge Base action.
 - [x] `TickerDetailDialog` (thesis, plan, odds, factors, technicals, dividends, disclosures with trap badges, server-verified citations, rank history), `ResearchDialog` (buy plan vs "already holding it" with `HoldingVerdictCard`), `ScorecardDialog` (forward scorecard, dual-line benchmarked replay, `ModelTrainerPanel` with learned edge / desk memory and refit buttons).
@@ -763,7 +819,7 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 497 backend (496 executed + 1 skipped benchmark) + 71 frontend
+## Test inventory — 549 backend (548 executed + 1 skipped benchmark) + 87 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
@@ -781,11 +837,11 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | Application | `ProbabilisticEdgeServiceTests` — base rate, barrier geometry, tilts, clamps, verdict gates, hit rates, learned edge, calibration | 22 |
 | Application | `PseDisclosureClassifierTests` — categories, hard/soft traps, priority order, copy | 20 |
 | Application | `TickerResearchServiceTests` — live/stored paths, plan validity, `DAY` clamp, ticket/edge parity, regime, holding advice | 17 |
-| Application | `SignalOutcomeServiceTests` — entry gate, `UNFILLED`, stop tie, net R, scorecard, calibration, live-drift verdict + persistence, desk memory | 19 |
+| Application | `SignalOutcomeServiceTests` — entry gate, `UNFILLED`, stop tie, net R, scorecard, calibration, live-drift verdict + persistence, desk memory, and the model-vs-quant ranking read (rho = 1 when the model follows the screen, rho = 0 with the model's top three out-earning the screen's, null when no quant rank is stored) | 22 |
 | Application | `BacktestServiceTests` — prefix causality, book limits, governor, slippage, exits, benchmark metrics, walk-forward | 13 |
 | Application | `WaveTradePlanCalculatorTests` — plan levels, chase ceiling, entry status, ladder, trim size | 12 |
-| Application | `SignalPipelineServiceTests` — discards, gates, drift, drops, persistence, `502`, a rights offering that only the candidate's own company page names dropping it before the model | 13 |
-| Application | `SignalJsonParserTests` — fences, prose, brace-in-string, numeric strings, contract failure | 9 |
+| Application | `SignalPipelineServiceTests` — discards, gates, drift, drops, persistence, `502`, a rights offering that only the candidate's own company page names dropping it before the model; the quant rank and the engine provenance are persisted with the run | 13 |
+| Application | `SignalJsonParserTests` — fences, prose, brace-in-string, numeric strings, contract failure, an echoed `rank`/`drift_status` ignored | 10 |
 | Application | `LearnedEdgeModelTests` — activation gate, ±6pp tilt, Kelly rescale, probability clamp | 7 |
 | Application | `SectorRotationServiceTests` — mapping, leaders/laggards, strength | 7 |
 | Application | `MarketDirectionServiceTests` — pillar blend, clamp, bearish override, unreported dials | 6 |
@@ -796,8 +852,8 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | Infrastructure | `MarketDataOptionsTests` — the binder's collection doubling reproduced and undone, order-preserving de-duplication, case-insensitive `DistinctNonBlank` | 4 |
 | Infrastructure | `MarketDataCacheTests` — shared task under concurrency, no refetch inside the TTL, a failure is never served, TTL refetch, an abandoned caller cannot cancel, pre-cancelled does nothing, `Clear`, oldest-entry eviction, eviction safe against a concurrent `Clear()` | 9 |
 | Infrastructure | `FeedHealthRegistryTests` — every source unknown on a fresh registry, success→ok, lone failure→failed, failure+success→degraded, explicit degraded observation, only-skips→degraded, skips don't degrade a producing feed, `BeginRun` clears run-scoped counters but keeps embeddings, timestamps survive a run, 500 concurrent records counted exactly, 240-char detail truncation | 10 |
-| Infrastructure | `OllamaPromptBuilderTests` — horizon block, knowledge, feedback, cross-asset, desk memory, guardrails | 16 |
-| Infrastructure | `OllamaSignalEngineTests` — stub `HttpMessageHandler` routed by the request body's `model`: a fast-model `404` keeps the ranking, one `404` per engine across two horizons (latch), a ranking `404` still surfaces as `SignalGenerationException`, a blank fast model makes zero fast calls | 4 |
+| Infrastructure | `OllamaPromptBuilderTests` — horizon block, knowledge, feedback, cross-asset, desk memory, guardrails, the array-order ranking rule (no `rank`/`drift_status` in the contract) and both JSON schemas | 18 |
+| Infrastructure | `OllamaSignalEngineTests` — stub `HttpMessageHandler` routed by the request body's `model`: a fast-model `404` keeps the ranking, one `404` per engine across two horizons (latch), a ranking `404` still surfaces as `SignalGenerationException`, a blank fast model makes zero fast calls; plus the schema `format` + sampling options, `think` forwarding, the schema-`400` → JSON-mode fallback (latched), and the prompt fingerprint / token usage | 8 |
 | Infrastructure | `SqliteKnowledgeServiceTests` — reindex idempotency, guardrail retrieval, delete protection, search boosts | 8 |
 | Infrastructure | `KnowledgeDocumentParserTests` — chunking, section refs, content hash | 6 |
 | Infrastructure | `PseDailyQuotationParserTests` — header mapping, negatives, suspension, missing markers | 6 |
@@ -829,7 +885,7 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] **Pillar 2 remainder** — `TrainedHorizonModel.FeatureKeysJson` (+ loader refusal on schema mismatch) so a book cannot price a feature vector it was not trained on.
 - [ ] **Pillar 5 remainder** — `InvalidationFirstPlanBuilder`, pipeline inversion (invalidation before target), `TradeExitLadderPolicy` as the single ladder, `OllamaTopPick` audit-only fields.
 - [ ] **Pillar 4 remainder** — real walk-forward folds (disjoint rolling windows + fold report); today the replay refits one rolling model.
-- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 484 executed + 1 skipped / 71). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 548 executed + 1 skipped / 87). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
 
 ### Data truth — the 2026-11-26 assessment, slices 3–4 (next up)
 
@@ -837,7 +893,7 @@ The audit behind slice 1 found seven data sources and one LLM, and the failure m
 
 - [x] **Slice 2 — restore the disclosure/trap pillar.** `PseEdgeDisclosureSource` resolves `ticker → cmpy_id` through the existing `PseEdgeSymbolSearchUrl` and fetches **one page per screened candidate** (`companyDisclosures/search.ax?keyword={cmpy_id}`, ≤25/run, 8-way, 10-min cached), so attribution is correct by construction instead of guessed from a market-wide headline table. `DisclosureCompanyFanoutLimit = 25` is the setting; `0` is the rollback. The market-wide scrape stays as the fallback, and the same probe fixed it too (month-name announce dates, form/report identifier cells). Live: 22–47 filings per named company vs **3 of 60** names from the fallback. The planned `companyPage/companyDisclosures.do?cmpy_id=` route was probed and is **404** — it was never shipped.
 - [ ] **Slice 3 — surface the degradation in the run itself.** When disclosures answer but attribute nothing, emit the existing `SignalDtos.Warnings` line "trap flags are unenforced this session"; flag an index-proxy fallback the same way. The ledger reports it after the fact; this puts it on the screen the picks are read from.
-- [ ] **Slice 4 — measure the model.** The ranking call is a plain chat completion (temp 0.1, `deepseek-v4.1-flash`) — no fine-tuning anywhere, and its interpretive skill has never been measured: `BacktestService` has no `IOllamaSignalEngine` dependency and `SignalItem` does not persist the quant pre-score, so model Top 10 and quant Top 10 cannot be compared. Migration `AddQuantRankToSignalItems` (`QuantPreScore`, `QuantRank`); a model-vs-quant scorecard block (hit rate, Brier, mean realized R, model Top 10 vs quant Top 10 on the same sessions and barriers); opt-in prompt archive (`Signals:ArchivePrompts`, default false) + `POST /api/signals/eval-prompt-replay` behind the existing `Expensive` policy.
+- [~] **Slice 4 — measure the model.** **Shipped (2026-11-26, LLM pass):** `20261126124346_AddSignalRankingProvenance` (`SignalItems.QuantPreScore`/`QuantRank`, 12 run-provenance columns incl. `PromptHash`), `OllamaGenerationMetadata` on the engine seam, `SignalRunDto.ModelProvenance`, `SignalItemDto.QuantPreScore`/`QuantRank`, and `SignalScorecardDto.RankingQuality` (mean Spearman rho model-vs-screen + each side's top-three win rate / mean R). The ranking call is also no longer a bare JSON-mode chat: schema `format`, `seed`, `num_ctx`, `num_predict`, `top_p`, optional `think`, and the dead `rank`/`drift_status`/`previous_rank` fields are gone. **Still open:** opt-in prompt archive (`Signals:ArchivePrompts`, default false) + `POST /api/signals/eval-prompt-replay` behind the existing `Expensive` policy — deliberately deferred until a graded sample exists to replay against.
 - [ ] **Deliberately deferred:** `CorporateActionAdjuster` (unadjusted prices mean a split distorts ATR, RS63 and every barrier), the dividends feed (`null` today), embedding access (`/api/embed` answers `401` for this key, so retrieval is lexical), the DQR staying manual-only, and the F-03 prompt-fencing patch (`security_audit_report.md:1561`, drafted but unapplied — keep it separate so a prompt change is never conflated with a data fix).
 
 ### UI/UX follow-ups (2026-11-26 legibility pass)
@@ -863,7 +919,7 @@ The audit behind slice 1 found seven data sources and one LLM, and the failure m
 - **Done** — F-01/F-02 partly: `ComplianceGuardMiddleware` (loopback-only `PersonalLocal`, constant-time operator key on writes in `LicensedCommercial`), loopback `AllowedHosts`, `/health` bypass.
 - **Done** — F-13: `DeskWorkGate` (`409` on a concurrent expensive job) plus three fixed one-hour policies (`429` + `Retry-After`): `Expensive` on `run-now`/`backtest`/`train`/`train-all`, `Upstream` on `research/{symbol}`, and `Model` on `knowledge/upload|reindex`; `UseRateLimiter()` is placed after the compliance guard. The cross-site write guard (`403`) and the five-wrong-key `OperatorKeyThrottle` (`429` + `Retry-After`) are also landed. Verified live (`503, 503, 429`; concurrent `409`; `401 ×4 → 429`; cross-site `403`).
 - **P0/P1 open** — F-03 prompt fencing for retrieved text; F-06 `KnowledgeController` error detail; F-07 chunk bounds + batched embeddings; F-05 mostly closed (`IsTradablePrice` bounds every peso identity, `GetBracket` itself still unguarded). F-04 is closed at the HTTP edge (`DeskRequestLimits`, `400` outside `1..1825`).
-- **P2 open** — F-08 security headers/HSTS, F-09 unbounded free text (`PortfolioTrades.Notes` is still unfiltered, which is the DPA/PII ingress), F-10 regex timeout/response caps, F-11 SQLite file mode still `0644`, F-12 committed lock files + `NuGetAudit` + `PdfPig` bump, F-14 `GET` mutating state, F-15 raw model response persistence.
+- **P2 open** — F-08 security headers/HSTS, F-09 unbounded free text (`PortfolioTrades.Notes` is still unfiltered, which is the DPA/PII ingress), F-10 regex timeout/response caps, F-11 SQLite file mode still `0644`, F-12 committed lock files + `NuGetAudit` + `PdfPig` bump, F-14 `GET` mutating state, F-15 raw model response persistence (partially closed by the LLM pass: the parsed output is stored as `RawModelResponseJson` and each run now carries `PromptHash`/token/latency provenance, but the **raw prompt/thinking text archive** and the replay endpoint are still absent).
 - **Auth** — still no user authentication; the origin allowlist and the per-caller operator-key lockout now cover drive-by writes and key guessing, but the operator key remains a single-operator convenience (a bundle-shipped key is readable by anyone who loads the page). Keep the desk on `127.0.0.1` and treat `LicensedCommercial` as "one trusted operator behind their own network boundary", not as multi-user identity.
 
 ### Live verification (needs network + `OLLAMA_API_KEY`)

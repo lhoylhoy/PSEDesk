@@ -126,7 +126,12 @@ public sealed record SignalItemDto(
     OrderTicketDto? OrderTicket = null,
     // Ride-the-wave exit roadmap. Appended with a default so stored runs and older clients
     // keep deserializing; a null plan simply hides the roadmap.
-    WaveTradePlanDto? WavePlan = null);
+    WaveTradePlanDto? WavePlan = null,
+    // Deterministic screen context for this pick: the score it carried on the run date and its
+    // ordinal in the quant table the model was shown. Appended with defaults so older clients
+    // still deserialize; zero/null means the run predates quant provenance.
+    int QuantPreScore = 0,
+    int? QuantRank = null);
 
 public sealed record SignalDropDto(
     string Ticker,
@@ -146,7 +151,28 @@ public sealed record SignalRunDto(
     int TradeCount,
     int SmallSizeCount,
     int WatchOnlyCount,
-    MarketBreadthDto? Breadth);
+    MarketBreadthDto? Breadth,
+    // How the book was produced (model, prompt fingerprint, sampling settings, cost). Null on
+    // runs stored before provenance tracking, so an old run simply shows no provenance.
+    ModelProvenanceDto? ModelProvenance = null);
+
+/// <summary>
+/// The provenance of one generation: which engine and model, the prompt fingerprint, the
+/// sampling settings that shaped the answer, and what the call cost. Audit data, not advice.
+/// </summary>
+public sealed record ModelProvenanceDto(
+    string Engine,
+    string Model,
+    string PromptHash,
+    decimal Temperature,
+    int? Seed,
+    int RetryCount,
+    int LatencyMs,
+    int? PromptTokens,
+    int? CompletionTokens,
+    int PromptCharacters,
+    bool SchemaConstrained,
+    bool FastExtractionApplied);
 
 public sealed record MarketBreadthDto(
     decimal? AboveSma50Pct,
@@ -317,8 +343,25 @@ public sealed record ResolvedSignalDto(
     int? BarsHeld);
 
 /// <summary>
+/// Did the model add anything over the deterministic screen? Compares the model's order with
+/// the quant table the model was handed, on the picks both actually saw: the mean rank
+/// correlation across runs, and the realized record of each side's top three. Null when no run
+/// carries a stored quant rank yet.
+/// </summary>
+public sealed record RankingQualityDto(
+    int RunsMeasured,
+    int PicksWithQuantRank,
+    decimal? MeanSpearmanRho,
+    int ModelTop3Resolved,
+    decimal ModelTop3WinRate,
+    decimal ModelTop3AverageRealizedNetR,
+    int QuantTop3Resolved,
+    decimal QuantTop3WinRate,
+    decimal QuantTop3AverageRealizedNetR);
+
+/// <summary>
 /// Forward-outcome scorecard for one horizon: win rate, expectancy, profit factor,
-/// Brier calibration and the verdict breakdown.
+/// Brier calibration and the verdict breakdown, plus the model-vs-quant ranking read.
 /// </summary>
 public sealed record SignalScorecardDto(
     string Horizon,
@@ -332,5 +375,7 @@ public sealed record SignalScorecardDto(
     decimal BrierScore,
     IReadOnlyList<CalibrationBucketDto> Calibration,
     IReadOnlyList<VerdictBreakdownDto> Verdicts,
-    IReadOnlyList<ResolvedSignalDto> RecentResolved);
+    IReadOnlyList<ResolvedSignalDto> RecentResolved,
+    // Appended with a default so responses shaped before the ranking read existed still map.
+    RankingQualityDto? RankingQuality = null);
 

@@ -1,4 +1,4 @@
-import { useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import type { DateOption, Horizon } from '../types/signals';
 import { cn } from '../lib/cn';
 import { formatWeekday } from '../lib/formatters';
@@ -183,6 +183,40 @@ function MoreMenu({
   onOpenKnowledge: () => void;
   quotationImport?: ReactNode;
 }) {
+  const menuRef = useRef<HTMLDetailsElement>(null);
+
+  /**
+   * A native `<details>` closes only when its own summary is pressed, so an open menu used to
+   * stay on screen after a click anywhere else. One listener pair closes it on the next outside
+   * press (capture phase, so it lands before whatever is underneath acts) and on Escape — which
+   * also returns focus to the summary so the keyboard path continues where it started.
+   */
+  useEffect(() => {
+    const closeIfOutside = (event: PointerEvent) => {
+      const menu = menuRef.current;
+      if (!menu?.open || (event.target instanceof Node && menu.contains(event.target))) {
+        return;
+      }
+      menu.removeAttribute('open');
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      const menu = menuRef.current;
+      if (event.key !== 'Escape' || !menu?.open) {
+        return;
+      }
+      menu.removeAttribute('open');
+      menu.querySelector('summary')?.focus();
+    };
+
+    document.addEventListener('pointerdown', closeIfOutside, true);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeIfOutside, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
+
   const closeThen = (action: () => void) => (event: MouseEvent<HTMLButtonElement>) => {
     event.currentTarget.closest('details')?.removeAttribute('open');
     action();
@@ -196,7 +230,7 @@ function MoreMenu({
     'type-eyebrow px-3 pt-2.5 pb-1 text-fg-faint';
 
   return (
-    <details className="group relative">
+    <details ref={menuRef} className="group relative">
       <summary className="flex h-10 cursor-pointer list-none items-center gap-1 rounded-xl border border-line/80 bg-ink-900/80 px-3 text-xs font-semibold text-fg transition select-none ui-button hover:border-mint-400/40">
         More
         <span aria-hidden className="text-2xs text-fg-subtle transition group-open:rotate-180">
@@ -352,7 +386,12 @@ export function TerminalHeader({
     ) : null;
 
   return (
-    <header className="panel flex flex-col gap-3 p-4 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5 lg:gap-4">
+    // `.panel`'s backdrop-blur makes the header a stacking context, so the `More` panel's own
+    // z-40 only ranks *inside* it: without a rung of its own the header painted below the
+    // in-flow `.panel` cards it overlaps and the open menu was swallowed by the call bar.
+    // `relative z-30` lifts the whole header above them (z-auto = 0) while staying under every
+    // portalled overlay (Dialog / Select / Tooltip) on the z-50 rung.
+    <header className="panel relative z-30 flex flex-col gap-3 p-4 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5 lg:gap-4">
       {/* Phone & small tablet: two thumb-sized rows instead of nine wrapped controls. */}
       <div className="flex flex-col gap-2 lg:hidden">
         <div className="flex items-center gap-2">

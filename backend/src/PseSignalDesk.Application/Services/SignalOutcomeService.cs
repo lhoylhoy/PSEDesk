@@ -393,7 +393,105 @@ public sealed class SignalOutcomeService
             brier,
             calibration,
             verdicts,
-            recentResolved);
+            recentResolved,
+            BuildRankingQuality(runs, resolved));
+    }
+
+    /// <summary>
+    /// The model-versus-screen read. Two questions only: does the model's order agree with the
+    /// quant table it was handed (Spearman over the picks it actually made), and did the model's
+    /// top three pay better than the screen's top three among those same picks? The second is
+    /// only answerable when the model picked any quant top-three name, which is itself the
+    /// interesting fact. Picks stored before the quant columns existed are excluded, so the
+    /// comparison never mixes definitions.
+    /// </summary>
+    private static RankingQualityDto? BuildRankingQuality(
+        IReadOnlyList<SignalRun> runs,
+        IReadOnlyList<(SignalRun Run, SignalItem Item)> resolved)
+    {
+        var picksWithQuantRank = runs.Sum(run => run.Items.Count(item => item.QuantRank.HasValue));
+
+        if (picksWithQuantRank == 0)
+        {
+            return null;
+        }
+
+        // A correlation needs at least three observed pairs to mean anything.
+        var measuredRuns = runs
+            .Select(run => run.Items.Where(item => item.QuantRank.HasValue).ToList())
+            .Where(items => items.Count >= 3)
+            .ToList();
+
+        var rhos = measuredRuns.Select(SpearmanAgainstQuantOrder).ToList();
+
+        var modelTop3 = resolved.Where(entry => entry.Item.Rank <= 3).ToList();
+        var quantTop3 = resolved
+            .Where(entry => entry.Item.QuantRank is >= 1 and <= 3)
+            .ToList();
+
+        return new RankingQualityDto(
+            measuredRuns.Count,
+            picksWithQuantRank,
+            rhos.Count == 0
+                ? null
+                : decimal.Round(rhos.Average(), 4, MidpointRounding.AwayFromZero),
+            modelTop3.Count,
+            WinRateOf(modelTop3),
+            AverageRealizedROf(modelTop3),
+            quantTop3.Count,
+            WinRateOf(quantTop3),
+            AverageRealizedROf(quantTop3));
+    }
+
+    /// <summary>
+    /// Spearman's rho between the model's order (stored rank 1..n) and the screen's order,
+    /// re-ranked 1..n within the picks the model actually made. Re-ranking is what keeps the
+    /// coefficient a real correlation: comparing a pick's model rank with its position in the
+    /// full 25-name candidate table would produce values outside [-1, 1].
+    /// </summary>
+    private static decimal SpearmanAgainstQuantOrder(IReadOnlyList<SignalItem> items)
+    {
+        var quantOrder = items
+            .OrderBy(item => item.QuantRank!.Value)
+            .ThenBy(item => item.Ticker, StringComparer.Ordinal)
+            .Select((item, index) => (item.Ticker, Position: index + 1))
+            .ToDictionary(entry => entry.Ticker, entry => entry.Position, StringComparer.OrdinalIgnoreCase);
+
+        var squaredDifferences = items.Sum(item =>
+        {
+            var difference = item.Rank - quantOrder[item.Ticker];
+            return (decimal)(difference * difference);
+        });
+
+        var n = items.Count;
+        var rho = 1m - (6m * squaredDifferences) / (n * ((decimal)n * n - 1m));
+
+        return decimal.Round(rho, 4, MidpointRounding.AwayFromZero);
+    }
+
+    private static decimal WinRateOf(IReadOnlyList<(SignalRun Run, SignalItem Item)> picks)
+    {
+        if (picks.Count == 0)
+        {
+            return 0m;
+        }
+
+        var wins = picks.Count(entry =>
+            entry.Item.OutcomeStatus is SignalOutcomeStatus.WIN_TARGET or SignalOutcomeStatus.EXPIRED_WIN);
+
+        return decimal.Round((decimal)wins / picks.Count, 4, MidpointRounding.AwayFromZero);
+    }
+
+    private static decimal AverageRealizedROf(IReadOnlyList<(SignalRun Run, SignalItem Item)> picks)
+    {
+        var values = picks
+            .Where(entry => entry.Item.RealizedNetR is decimal)
+            .Select(entry => entry.Item.RealizedNetR!.Value)
+            .ToList();
+
+        return values.Count == 0
+            ? 0m
+            : decimal.Round(values.Average(), 4, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>Minimum graded forecasts before the ledger may nudge the live odds.</summary>

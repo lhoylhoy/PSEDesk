@@ -49,7 +49,7 @@ public static class OllamaPromptBuilder
         5. Be market-regime aware. BULLISH: favour breakouts and momentum leaders, but never chase RSI above 75. NEUTRAL: favour pullbacks to EMA20/SMA50 with defined risk. BEARISH: lower gross exposure, prefer defensives and tight stops, and cap conviction scores.
         6. Audit the PSE Edge disclosures and trap flags. Earnings beats, dividends, capex and index inclusion are supportive catalysts; rights offerings, placements, block sales, adverse guidance or governance issues are reasons to avoid a name. Ex-dividend drops are mechanical, not bearish.
         7. Day-over-day hysteresis ({{horizon}}): an incumbent from YESTERDAY_TOP_10 keeps its slot unless (a) a challenger's conviction is at least {{profile.HysteresisConvictionDelta}} points higher, (b) the incumbent's stop was invalidated by price, (c) its target was hit, or (d) a materially adverse disclosure was published.
-        8. Rank 1..10 by conviction, highest first, with unique ranks and unique tickers.
+        8. Order `top_10` by conviction, strongest first, with unique tickers. The array order IS the ranking (there is no rank field): choose the name that offers the best expected net reward per unit of risk against the alternatives still on the table, not merely the first that looks acceptable on its own.
         9. Conviction scores are integers 0-100 for the whole book (typically 55-92). Do not give every name the same score.
         10. Write `thesis` in clear, everyday English a non-technical investor can understand, at most 45 words: what the price is doing, why now, the Peso buy / target / cut-loss levels and the main risk. Never use raw indicator shorthand (RSI, EMA20, SMA50, VCP, CMF20, RS63, -1R) in the prose — describe what price and volume are actually doing instead. Use neutral, third-person analytical phrasing that describes the setup and the model's levels: never address the reader with direct commands ('buy now', 'you should buy', 'sell now', 'get out') and never promise or imply a guaranteed outcome. Keep `deviation_reason` to at most 30 words of everyday English comparing with yesterday, or start it with "New entrant".
         11. Cite grounding honestly: `cited_rules` lists up to four references copied exactly from the PLAYBOOK_GROUNDING headings. Omit a rule rather than paraphrasing it, and return an empty array when no section informed the thesis.
@@ -57,11 +57,10 @@ public static class OllamaPromptBuilder
         13. You do not own the odds. The server computes the fee-adjusted break-even rate, the win probability, the expected value in R, the Quarter-Kelly stake and the TRADE / SMALL_SIZE / WATCH_ONLY verdict. Your job is the thesis, the levels and the pre-mortem; over-promising in prose gains nothing. Write as an impersonal research note: describe what the model sees and where its levels sit, and never instruct the reader to buy, sell or hold.
         14. Return ONE JSON object and nothing else. No markdown fences, no commentary.
 
-        RESPONSE CONTRACT (snake_case keys exactly as shown):
+        RESPONSE CONTRACT (snake_case keys exactly as shown; the server assigns rank from array order):
         {
           "top_10": [
             {
-              "rank": 1,
               "ticker": "ICT",
               "conviction_score": 84,
               "entry_price": 430.00,
@@ -70,8 +69,6 @@ public static class OllamaPromptBuilder
               "thesis": "Setup, catalyst, levels and risk in one sentence.",
               "bear_case": "A close below 410 on volume breaks the base and caps the rebound at 448.",
               "deviation_reason": "Why the rank changed versus yesterday.",
-              "drift_status": "HELD",
-              "previous_rank": 1,
               "cited_rules": ["pse_rules#orderable-prices-tick-sizes-and-board-lots"]
             }
           ],
@@ -86,9 +83,92 @@ public static class OllamaPromptBuilder
         }
 
         drop_category must be one of INVALIDATED, TARGET_HIT or DISPLACED.
-        drift_status must be one of NEW, HELD, UPGRADED or DOWNGRADED. The server recalculates drift deterministically, so provide your best estimate.
         If there is no yesterday list, return an empty dropped_from_yesterday array.
         """;
+    }
+
+    /// <summary>
+    /// The strict response contract as a JSON schema, sent in the request's <c>format</c>
+    /// field. Schema-constrained generation keeps the model inside the contract; plain JSON
+    /// mode only promises "valid JSON", not this shape.
+    /// </summary>
+    public const string ResponseSchemaJson = """
+        {
+          "type": "object",
+          "properties": {
+            "top_10": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ticker": { "type": "string" },
+                  "conviction_score": { "type": "number" },
+                  "entry_price": { "type": "number" },
+                  "stop_loss": { "type": "number" },
+                  "target_price": { "type": "number" },
+                  "thesis": { "type": "string" },
+                  "bear_case": { "type": "string" },
+                  "deviation_reason": { "type": "string" },
+                  "cited_rules": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": [
+                  "ticker",
+                  "conviction_score",
+                  "entry_price",
+                  "stop_loss",
+                  "target_price",
+                  "thesis",
+                  "bear_case"
+                ]
+              }
+            },
+            "dropped_from_yesterday": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ticker": { "type": "string" },
+                  "previous_rank": { "type": "integer" },
+                  "drop_category": {
+                    "type": "string",
+                    "enum": ["INVALIDATED", "TARGET_HIT", "DISPLACED"]
+                  },
+                  "reason": { "type": "string" }
+                },
+                "required": ["ticker", "drop_category", "reason"]
+              }
+            }
+          },
+          "required": ["top_10", "dropped_from_yesterday"]
+        }
+        """;
+
+    /// <summary>
+    /// The cheap pre-pass contract: one short summary and the trap flags it actually found.
+    /// </summary>
+    public const string FastExtractionSchemaJson = """
+        {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "trap_flags": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["summary"]
+        }
+        """;
+
+    /// <summary>
+    /// Stable fingerprint of the exact prompt a run was generated from. Two runs with the same
+    /// hash saw the same instructions and the same candidate table, which is what makes a
+    /// ranking difference attributable to the model or its settings rather than the inputs.
+    /// </summary>
+    public static string ComputePromptHash(string systemPrompt, string userPrompt)
+    {
+        var bytes = Encoding.UTF8.GetBytes(systemPrompt + "\n\n" + userPrompt);
+
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
     }
 
     public static string BuildUserPrompt(OllamaSignalRequest request)
@@ -191,6 +271,7 @@ public static class OllamaPromptBuilder
         builder.AppendLine();
         builder.AppendLine(
             $"TASK: Build today's {request.Horizon} Top 10 for the PSE from CANDIDATES. {profile.Mission} " +
+            "Compare the whole candidate set before choosing: order top_10 by conviction, strongest first, because the array order is the rank. " +
             "Every level must be orderable on the PSE tick grid, inside the static band for DAY ideas, and must clear " +
             "the reward-to-risk rule. Give every pick a bear_case of at most 30 words naming the invalidation level. " +
             "Reconcile every departure in dropped_from_yesterday with a category and a short " +
@@ -485,7 +566,8 @@ public static class OllamaPromptBuilder
             "Fix exactly these problems and return the COMPLETE JSON object again. Reminders: only tickers from " +
             $"CANDIDATES ({string.Join(", ", request.Candidates.Select(c => c.Ticker))}); " +
             "target_price > entry_price > stop_loss; reward-to-risk at least 2.0; prices must sit on the PSE tick grid " +
-            "and inside the static band for DAY ideas; drop_category must be INVALIDATED, TARGET_HIT or DISPLACED; " +
+            "and inside the static band for DAY ideas; top_10 is ordered strongest first with no rank field; " +
+            "drop_category must be INVALIDATED, TARGET_HIT or DISPLACED; " +
             "cited_rules may only contain PLAYBOOK_GROUNDING references; every pick needs a bear_case of at most " +
             "30 words; no markdown and no prose.");
         return builder.ToString();

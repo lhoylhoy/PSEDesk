@@ -209,7 +209,7 @@ public sealed class SignalPipelineService
             sectorRotation,
             await LoadDeskMemoryAsync(horizon, cancellationToken),
             await LoadTrainedModelSummaryAsync(horizon, cancellationToken));
-        var output = await _signalEngine.GenerateSignalAsync(request, cancellationToken);
+        var result = await _signalEngine.GenerateSignalAsync(request, cancellationToken);
 
         var run = BuildRun(
             runDate,
@@ -217,7 +217,7 @@ public sealed class SignalPipelineService
             horizonMetrics,
             candidates,
             previousRun,
-            output,
+            result.Output,
             playbooks,
             snapshot.MarketRegime,
             marketBreadth,
@@ -226,6 +226,10 @@ public sealed class SignalPipelineService
             snapshot.NetForeignFlowPhp,
             await LoadLearnedEdgeModelAsync(horizon, cancellationToken),
             await LoadCalibrationOffsetPctAsync(horizon, cancellationToken));
+
+        // Provenance travels with the book: which model, which prompt, which sampling settings
+        // and what it cost. Without it a ranking can never be compared with another one.
+        ApplyModelProvenance(run, result.Metadata);
         await _repository.SaveSignalRunAsync(run, cancellationToken);
 
         _logger.LogInformation(
@@ -613,6 +617,16 @@ public sealed class SignalPipelineService
         var profile = HorizonProfile.For(horizon);
         var metricByTicker = metrics.ToDictionary(m => m.Ticker, StringComparer.OrdinalIgnoreCase);
         var candidateByTicker = candidates.ToDictionary(c => c.Ticker, StringComparer.OrdinalIgnoreCase);
+
+        // The prompt prints the candidate table ordered by quant score (then turnover, then
+        // ticker), so this is the ordinal the model actually saw. Persisting it is what lets the
+        // scorecard compare the model's order with the screen's own instead of guessing.
+        var quantRankByTicker = candidates
+            .OrderByDescending(c => c.QuantPreScore)
+            .ThenByDescending(c => c.AvgTurnover20dPhp)
+            .ThenBy(c => c.Ticker, StringComparer.Ordinal)
+            .Select((candidate, index) => (candidate.Ticker, Rank: index + 1))
+            .ToDictionary(entry => entry.Ticker, entry => entry.Rank, StringComparer.OrdinalIgnoreCase);
         var priorByTicker = previousRun?.Items.ToDictionary(i => i.Ticker, StringComparer.OrdinalIgnoreCase)
                             ?? new Dictionary<string, SignalItem>(StringComparer.OrdinalIgnoreCase);
         var bearCaseByTicker = (output.Top10 ?? new List<OllamaTopPick>())
@@ -704,7 +718,8 @@ public sealed class SignalPipelineService
                 pick.Thesis,
                 pick.DeviationReason,
                 priorByTicker,
-                BuildCitations(pick.CitedRules, playbooks)));
+                BuildCitations(pick.CitedRules, playbooks),
+                quantRankByTicker.TryGetValue(ticker, out var quantRank) ? quantRank : null));
         }
 
         if (items.Count == 0)
@@ -874,6 +889,27 @@ public sealed class SignalPipelineService
         return metric.ClosePrice <= prior.StopLoss;
     }
 
+    /// <summary>
+    /// Copies the engine's provenance onto the run before it is persisted, so the stored book
+    /// always says how it was produced. Kept separate from <see cref="BuildRun"/> because the
+    /// run's content must be a pure function of the server inputs and the parsed output.
+    /// </summary>
+    private static void ApplyModelProvenance(SignalRun run, OllamaGenerationMetadata metadata)
+    {
+        run.EngineName = metadata.EngineName;
+        run.ModelName = metadata.Model;
+        run.PromptHash = metadata.PromptHash;
+        run.ModelTemperature = metadata.Temperature;
+        run.ModelSeed = metadata.Seed;
+        run.ModelRetryCount = metadata.RetryCount;
+        run.ModelLatencyMs = metadata.LatencyMs;
+        run.PromptTokens = metadata.PromptTokens;
+        run.CompletionTokens = metadata.CompletionTokens;
+        run.PromptCharacters = metadata.PromptCharacters;
+        run.SchemaConstrained = metadata.SchemaConstrained;
+        run.FastExtractionApplied = metadata.FastExtractionApplied;
+    }
+
     private static SignalItem CreateItem(
         StockDailyMetric metric,
         int rank,
@@ -882,7 +918,8 @@ public sealed class SignalPipelineService
         string thesis,
         string? deviationReason,
         IReadOnlyDictionary<string, SignalItem> priorByTicker,
-        IReadOnlyList<string> citations)
+        IReadOnlyList<string> citations,
+        int? quantRank = null)
     {
         priorByTicker.TryGetValue(metric.Ticker, out var prior);
 
@@ -901,6 +938,8 @@ public sealed class SignalPipelineService
             DriftStatus = drift,
             PreviousRank = prior?.Rank,
             ConvictionScore = (int)Math.Clamp(convictionScore, 0m, 100m),
+            QuantPreScore = metric.QuantPreScore,
+            QuantRank = quantRank,
             EntryPrice = plan.Entry,
             StopLoss = plan.StopLoss,
             TargetPrice = plan.Target,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Refreshes the bundled typeface — Google Sans Flex — from the Google Fonts API.
+ * Refreshes the bundled typeface — Outfit — from the Google Fonts API.
  *
  *   node scripts/fetch-fonts.mjs            # rewrite public/fonts/*.woff2 + OFL.txt
  *   node scripts/fetch-fonts.mjs --check    # report only; exit 1 if a subset is missing
@@ -11,11 +11,12 @@
  * nothing else. Committing the binary keeps that promise, and this script is the only accepted
  * way to change it, so the exact bytes are reproducible instead of hand-downloaded.
  *
- * One subset, deliberately. The API also serves `latin-ext` and `symbols`, but a measured pass on
- * 2026-11-26 showed neither carries the glyphs this desk prints — the peso sign (U+20B1), the
- * direction triangles (U+25B2/U+25BC) and → all still resolve through the system font, exactly as
- * they do behind the official Google Fonts `<link>`. Adding them cost ~51 kB and changed nothing,
- * so SUBSETS stays at `latin`; widen it only with a measurement that shows a gain.
+ * One subset, deliberately. The API also serves `latin-ext`, and its `unicode-range` even claims
+ * the peso sign (U+20B1, inside U+20AD-20C4), but the upstream `Outfit[wght].ttf` was measured on
+ * 2026-11-26: its cmap has 360 glyphs and no U+20B1, no direction triangles (U+25B2/U+25BC) and no
+ * → (U+2192, which the served `latin` range omits) — a `unicode-range` is a claim, not coverage.
+ * Those characters therefore keep resolving through the system font at ~14.8 kB less, so SUBSETS
+ * stays at `latin`; widen it only with a measurement that shows a real gain.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -25,9 +26,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fontDir = resolve(here, '../public/fonts');
 
 /** The variable-weight CSS endpoint. `wght@100..900` is what keeps one file per subset. */
-const CSS_URL =
-  'https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@100..900&display=swap';
-const LICENCE_URL = 'https://raw.githubusercontent.com/google/fonts/main/ofl/googlesansflex/OFL.txt';
+const CSS_URL = 'https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap';
+const LICENCE_URL = 'https://raw.githubusercontent.com/google/fonts/main/ofl/outfit/OFL.txt';
 
 /** The subsets index.css declares. Keep this list and the @font-face blocks in step. */
 const SUBSETS = ['latin'];
@@ -40,7 +40,7 @@ const DESKTOP_UA =
 const checkOnly = process.argv.includes('--check');
 
 function fileFor(subset) {
-  return join(fontDir, `google-sans-flex-${subset}.woff2`);
+  return join(fontDir, `outfit-${subset}.woff2`);
 }
 
 /**
@@ -70,7 +70,7 @@ async function main() {
 
   const css = await fetch(CSS_URL, { headers: { 'User-Agent': DESKTOP_UA } });
   if (!css.ok) {
-    throw new Error(`Google Fonts answered HTTP ${css.status} for the Google Sans Flex sheet.`);
+    throw new Error(`Google Fonts answered HTTP ${css.status} for the Outfit sheet.`);
   }
 
   const faces = parseFontFaces(await css.text());
@@ -101,7 +101,7 @@ async function main() {
     }
 
     writeFileSync(fileFor(subset), bytes);
-    console.log(`${`google-sans-flex-${subset}.woff2`.padEnd(34)} ${bytes.length} bytes`);
+    console.log(`${`outfit-${subset}.woff2`.padEnd(34)} ${bytes.length} bytes`);
   }
 
   if (missing.length > 0) {

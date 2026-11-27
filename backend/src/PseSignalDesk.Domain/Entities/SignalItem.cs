@@ -24,6 +24,20 @@ public class SignalItem
 
     public int ConvictionScore { get; set; }
 
+    /// <summary>
+    /// The deterministic screen score this candidate carried on the run date. Persisted so a
+    /// model pick can be compared with what the quant screen would have chosen without
+    /// re-deriving yesterday's metrics.
+    /// </summary>
+    public int QuantPreScore { get; set; }
+
+    /// <summary>
+    /// The candidate's 1-based position in the quant table handed to the model (ordered by
+    /// <see cref="QuantPreScore"/>, then turnover, then ticker). Null on runs persisted before
+    /// the field existed.
+    /// </summary>
+    public int? QuantRank { get; set; }
+
     public decimal EntryPrice { get; set; }
 
     public decimal StopLoss { get; set; }

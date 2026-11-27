@@ -482,6 +482,12 @@ namespace PseSignalDesk.Infrastructure.Migrations
                     b.Property<int?>("PreviousRank")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("QuantPreScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("QuantRank")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("QuarterKellyFraction")
                         .HasColumnType("TEXT");
 
@@ -540,16 +546,71 @@ namespace PseSignalDesk.Infrastructure.Migrations
                     b.Property<decimal?>("BreadthAboveSma50Pct")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CompletionTokens")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("EngineName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
                     b.Property<int?>("EvaluatedStockCount")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("FastExtractionApplied")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("Horizon")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("ModelLatencyMs")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("ModelName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.Property<int>("ModelRetryCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
+
+                    b.Property<int?>("ModelSeed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("ModelTemperature")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("PromptCharacters")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("PromptHash")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.Property<int?>("PromptTokens")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("RawModelResponseJson")
                         .IsRequired()
@@ -562,6 +623,11 @@ namespace PseSignalDesk.Infrastructure.Migrations
 
                     b.Property<DateOnly>("RunDate")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("SchemaConstrained")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
 
                     b.Property<int?>("Stage2Count")
                         .HasColumnType("INTEGER");
