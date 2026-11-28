@@ -1,7 +1,14 @@
 import type { Horizon, SignalItem } from '../types/signals';
 import { cn } from '../lib/cn';
-import { formatCompactPeso, formatInteger, formatPrice, formatRatio } from '../lib/formatters';
+import {
+  formatCompactPeso,
+  formatDeltaPercent,
+  formatInteger,
+  formatPrice,
+  formatRatio,
+} from '../lib/formatters';
 import { horizonMeta } from '../lib/horizons';
+import { describePriceDeltaTone } from '../lib/plainAdvice';
 import { computeRiskSizing, formatProbability, formatR } from '../lib/riskSizing';
 import { preloadTickerDetailDialog } from '../lib/preloaders';
 import { DriftBadge, driftAccent } from './DriftBadge';
@@ -64,6 +71,16 @@ interface ProSignalCardProps {
  */
 function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardProps) {
   const sizing = computeRiskSizing(item);
+  const closePrice =
+    item.metrics && Number.isFinite(item.metrics.closePrice) && item.metrics.closePrice > 0
+      ? item.metrics.closePrice
+      : null;
+  const changePct =
+    closePrice != null &&
+    typeof item.metrics?.changePct === 'number' &&
+    Number.isFinite(item.metrics.changePct)
+      ? item.metrics.changePct
+      : null;
   const openDetails = () => onSelect(item.ticker);
 
   return (
@@ -126,7 +143,18 @@ function ProSignalCard({ item, horizon, onSelect, onTakeTrade }: ProSignalCardPr
         </div>
       </div>
 
-      <dl className="mt-2.5 grid grid-cols-3 gap-1.5">
+      <dl className="mt-2.5 grid grid-cols-2 gap-1.5 xs:grid-cols-4">
+        <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2.5 py-2">
+          <dt className="type-eyebrow text-fg-subtle">Close</dt>
+          <dd className="tabular type-caption mt-0.5 font-semibold text-fg">
+            {formatPrice(closePrice)}
+          </dd>
+          {changePct != null ? (
+            <dd className={cn('tabular text-2xs', describePriceDeltaTone(changePct))}>
+              {formatDeltaPercent(changePct, 2)}
+            </dd>
+          ) : null}
+        </div>
         <div className="rounded-lg border border-line/60 bg-ink-850/60 px-2.5 py-2">
           <dt className="type-eyebrow text-fg-subtle">Entry</dt>
           <dd className="tabular type-caption mt-0.5 font-semibold text-fg">
@@ -224,7 +252,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
           </ul>
 
           <div className="scroll-x hidden md:block">
-            <table className="w-full min-w-248 border-collapse text-left">
+            <table className="w-full min-w-268 border-collapse text-left">
             <thead>
               <tr className="type-eyebrow text-fg-subtle">
                 <th className="sticky-col w-12 px-3 py-2.5 font-medium">#</th>
@@ -233,6 +261,7 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                 <th className="px-3 py-2.5 font-medium">Conviction</th>
                 <th className="px-3 py-2.5 font-medium">Verdict</th>
                 <th className="px-3 py-2.5 text-right font-medium">P(win) / EV</th>
+                <th className="px-3 py-2.5 text-right font-medium">Close</th>
                 <th className="px-3 py-2.5 text-right font-medium">Entry</th>
                 <th className="px-3 py-2.5 text-right font-medium">Stop</th>
                 <th className="px-3 py-2.5 text-right font-medium">Target</th>
@@ -246,6 +275,16 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
             <tbody>
               {items.map((item) => {
                 const sizing = computeRiskSizing(item);
+                const closePrice =
+                  item.metrics && Number.isFinite(item.metrics.closePrice) && item.metrics.closePrice > 0
+                    ? item.metrics.closePrice
+                    : null;
+                const changePct =
+                  closePrice != null &&
+                  typeof item.metrics?.changePct === 'number' &&
+                  Number.isFinite(item.metrics.changePct)
+                    ? item.metrics.changePct
+                    : null;
 
                 return (
                 <tr
@@ -342,6 +381,16 @@ export function SignalTable({ items, horizon, onSelect, onTakeTrade, recommended
                     >
                       {formatR(item.expectedValueR)} EV
                     </p>
+                  </td>
+                  <td className="tabular px-3 py-3.5 text-right type-caption">
+                    <span className={closePrice != null ? 'font-semibold text-fg' : 'text-fg-subtle'}>
+                      {formatPrice(closePrice)}
+                    </span>
+                    {changePct != null ? (
+                      <p className={cn('type-caption mt-1', describePriceDeltaTone(changePct))}>
+                        {formatDeltaPercent(changePct, 2)}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="tabular px-3 py-3.5 text-right type-caption text-fg">
                     {formatPrice(item.entryPrice)}

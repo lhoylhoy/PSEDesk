@@ -5,6 +5,7 @@ import { cn } from '../lib/cn';
 import {
   formatCompactPeso,
   formatDate,
+  formatDeltaPercent,
   formatInteger,
   formatPercent,
   formatPrice,
@@ -15,6 +16,7 @@ import {
   describeConviction,
   describeOrderGuide,
   describePlainVerdict,
+  describePriceDeltaTone,
   describeWinChance,
 } from '../lib/plainAdvice';
 import { companyLabel } from '../lib/pseNicknames';
@@ -225,6 +227,14 @@ export function TickerDetailDialog({
   }, [open, ticker, horizon]);
 
   const metrics = item?.metrics ?? null;
+  const closePrice =
+    metrics && Number.isFinite(metrics.closePrice) && metrics.closePrice > 0
+      ? metrics.closePrice
+      : null;
+  const changePct =
+    closePrice != null && typeof metrics?.changePct === 'number' && Number.isFinite(metrics.changePct)
+      ? metrics.changePct
+      : null;
   const guide = item ? describeOrderGuide(item) : null;
 
   return (
@@ -258,11 +268,24 @@ export function TickerDetailDialog({
                   allowed to wrap, so a long “Record in blotter · 1,240 sh” label cannot push
                   the close button off a 320px sheet. */}
               <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end sm:gap-4">
-                <div className="text-right">
-                  <p className="type-eyebrow text-fg-subtle">
-                    {simple ? 'Confidence' : 'Conviction'}
-                  </p>
-                  <p className="tabular text-lg font-semibold text-mint-400">{item.convictionScore}</p>
+                <div className="flex items-start gap-4">
+                  <div className="text-right">
+                    <p className="type-eyebrow text-fg-subtle">
+                      {simple ? 'Last close' : 'Close'}
+                    </p>
+                    <p className="tabular text-lg font-semibold text-fg">{formatPrice(closePrice)}</p>
+                    {changePct != null ? (
+                      <p className={cn('tabular type-caption', describePriceDeltaTone(changePct))}>
+                        {formatDeltaPercent(changePct, 2)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="text-right">
+                    <p className="type-eyebrow text-fg-subtle">
+                      {simple ? 'Confidence' : 'Conviction'}
+                    </p>
+                    <p className="tabular text-lg font-semibold text-mint-400">{item.convictionScore}</p>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button

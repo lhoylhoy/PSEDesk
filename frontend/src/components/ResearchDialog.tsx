@@ -6,6 +6,7 @@ import { cn } from '../lib/cn';
 import {
   formatCompactPeso,
   formatDate,
+  formatDeltaPercent,
   formatInteger,
   formatPercent,
   formatPrice,
@@ -17,6 +18,7 @@ import {
   describeFriendlyError,
   describeHoldingVerdict,
   describePlainVerdict,
+  describePriceDeltaTone,
   describeWinChance,
   translateTicketWarnings,
 } from '../lib/plainAdvice';
@@ -174,28 +176,49 @@ function ResearchBody({
 }) {
   const metrics = research.metrics;
   const ticket = research.orderTicket;
+  const closePrice =
+    metrics && Number.isFinite(metrics.closePrice) && metrics.closePrice > 0
+      ? metrics.closePrice
+      : null;
+  const changePct =
+    closePrice != null && typeof metrics?.changePct === 'number' && Number.isFinite(metrics.changePct)
+      ? metrics.changePct
+      : null;
 
   return (
     <div className="mt-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-lg font-semibold text-fg">{companyLabel(research.ticker, research.companyName)}</h3>
-        <span className="font-mono text-xs tracking-wider text-fg-muted">{research.ticker}</span>
-        {companyLabel(research.ticker, research.companyName) === research.companyName ? null : (
-          <span className="text-xs text-fg-muted">{research.companyName}</span>
-        )}
-        <span className="rounded border border-line/70 px-1 py-0.5 type-badge text-fg-subtle">
-          {research.sector}
-        </span>
-        <Tooltip label={verdictDescription(research.edgeVerdict)}>
-          <span tabIndex={0}>
-            <VerdictBadge verdict={research.edgeVerdict} friendly={simple} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-lg font-semibold text-fg">{companyLabel(research.ticker, research.companyName)}</h3>
+          <span className="font-mono text-xs tracking-wider text-fg-muted">{research.ticker}</span>
+          {companyLabel(research.ticker, research.companyName) === research.companyName ? null : (
+            <span className="text-xs text-fg-muted">{research.companyName}</span>
+          )}
+          <span className="rounded border border-line/70 px-1 py-0.5 type-badge text-fg-subtle">
+            {research.sector}
           </span>
-        </Tooltip>
-        <span className="text-2xs text-fg-faint">
-          {simple
-            ? `as of ${formatDate(research.asOfDate)}`
-            : `${horizonMeta[horizon].label} book · as of ${formatDate(research.asOfDate)} · ${research.dataSource}`}
-        </span>
+          <Tooltip label={verdictDescription(research.edgeVerdict)}>
+            <span tabIndex={0}>
+              <VerdictBadge verdict={research.edgeVerdict} friendly={simple} />
+            </span>
+          </Tooltip>
+          <span className="text-2xs text-fg-faint">
+            {simple
+              ? `as of ${formatDate(research.asOfDate)}`
+              : `${horizonMeta[horizon].label} book · as of ${formatDate(research.asOfDate)} · ${research.dataSource}`}
+          </span>
+        </div>
+        {closePrice != null ? (
+          <div className="shrink-0 text-right leading-tight">
+            <p className="type-eyebrow text-fg-subtle">{simple ? 'Last close' : 'Close'}</p>
+            <p className="tabular text-base font-semibold text-fg">{formatPrice(closePrice)}</p>
+            {changePct != null ? (
+              <p className={cn('tabular type-caption', describePriceDeltaTone(changePct))}>
+                {formatDeltaPercent(changePct, 2)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {focus === 'own' ? <HoldingVerdictCard research={research} /> : null}

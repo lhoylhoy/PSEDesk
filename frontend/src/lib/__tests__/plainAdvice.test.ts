@@ -22,6 +22,7 @@ import {
   describePlainVerdict,
   describePortfolioAlert,
   describePositionAction,
+  describePriceDeltaTone,
   describeProfitFactor,
   describePyramidCount,
   describeRiskPerTrade,
@@ -477,6 +478,48 @@ test('an unreported price renders a dash on the row, never a zero', () => {
 
   assert.match(row.headline, /^Buy —/);
   assert.doesNotMatch(row.headline, /₱0/);
+});
+
+test('price delta tone pairs gain/loss colours with zero and missing values as subtle', () => {
+  assert.equal(describePriceDeltaTone(1.45), 'text-mint-400');
+  assert.equal(describePriceDeltaTone(-2.57), 'text-rose-400');
+  assert.equal(describePriceDeltaTone(0), 'text-fg-subtle');
+  assert.equal(describePriceDeltaTone(null), 'text-fg-subtle');
+  assert.equal(describePriceDeltaTone(undefined), 'text-fg-subtle');
+  assert.equal(describePriceDeltaTone(Number.NaN), 'text-fg-subtle');
+});
+
+test('signal row formats the session close price and direction-glyphed delta when metrics exist', () => {
+  const up = describeSignalRow({ ...ROW_BASE, metrics: { closePrice: 82, changePct: 0.8 } });
+  assert.equal(up.closePriceLabel, '₱82.00');
+  assert.equal(up.changePctLabel, '▲0.80%');
+  assert.equal(up.changeTone, 'text-mint-400');
+  assert.equal(up.headline, 'Buy ₱245.00 · Target ₱268.00 · Cut-loss ₱231.00');
+
+  const down = describeSignalRow({ ...ROW_BASE, metrics: { closePrice: 0.49, changePct: -2.57 } });
+  assert.equal(down.closePriceLabel, '₱0.4900');
+  assert.equal(down.changePctLabel, '▼2.57%');
+  assert.equal(down.changeTone, 'text-rose-400');
+
+  const flat = describeSignalRow({ ...ROW_BASE, metrics: { closePrice: 98, changePct: 0 } });
+  assert.equal(flat.closePriceLabel, '₱98.00');
+  assert.equal(flat.changePctLabel, '0.00%');
+  assert.equal(flat.changeTone, 'text-fg-subtle');
+});
+
+test('signal row hides close price instead of printing ₱0.00 when metrics are missing or non-positive', () => {
+  for (const metrics of [
+    undefined,
+    null,
+    { closePrice: 0, changePct: 0 },
+    { closePrice: -5, changePct: 1.2 },
+    { closePrice: Number.NaN, changePct: 1.2 },
+  ]) {
+    const row = describeSignalRow({ ...ROW_BASE, metrics });
+    assert.equal(row.closePriceLabel, null);
+    assert.equal(row.changePctLabel, null);
+    assert.equal(row.changeTone, 'text-fg-subtle');
+  }
 });
 
 test('the next step names the control a reader can actually press', () => {

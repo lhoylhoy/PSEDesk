@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import type { Horizon, SignalItem, WaveTradePlan } from '../types/signals';
 import { cn } from '../lib/cn';
-import { formatCompactPeso, formatInteger, formatPrice, formatRatio, formatWeekday } from '../lib/formatters';
+import {
+  formatCompactPeso,
+  formatDeltaPercent,
+  formatInteger,
+  formatPrice,
+  formatRatio,
+  formatWeekday,
+} from '../lib/formatters';
 import { horizonMeta } from '../lib/horizons';
 import {
   computePlanPercentages,
   describeEntryTiming,
   describeNextStep,
   describePlainVerdict,
+  describePriceDeltaTone,
   describeSignalRow,
   plainVerdictBadgeClass,
   type PlainOrderGuide,
@@ -393,10 +401,21 @@ function SignalRow({ item, horizon, onSelect }: SignalRowProps) {
               ambiguous and the chevron alone is invisible to a screen reader. */}
           <span className="sr-only">Opens the full plan in a detail sheet.</span>
         </span>
-        <span className="type-caption mt-0.5 flex shrink-0 items-center gap-1 whitespace-nowrap font-semibold text-fg-muted simple-label">
-          {/* Always visible: a lone chevron was the only hint that a row was tappable. */}
-          <span>View plan</span>
-          <span aria-hidden>▸</span>
+        <span className="mt-0.5 flex shrink-0 flex-col items-end gap-1 text-right">
+          {row.closePriceLabel ? (
+            <span className="flex flex-col items-end leading-tight">
+              <span className="sr-only">Last close </span>
+              <span className="type-figure text-sm text-fg">{row.closePriceLabel}</span>
+              {row.changePctLabel ? (
+                <span className={cn('tabular type-caption', row.changeTone)}>{row.changePctLabel}</span>
+              ) : null}
+            </span>
+          ) : null}
+          <span className="type-caption flex items-center gap-1 whitespace-nowrap font-semibold text-fg-muted simple-label">
+            {/* Always visible: a lone chevron was the only hint that a row was tappable. */}
+            <span>View plan</span>
+            <span aria-hidden>▸</span>
+          </span>
         </span>
       </button>
     </li>
@@ -428,26 +447,47 @@ function WatchList({ items, onSelect }: { items: SignalItem[]; onSelect: (ticker
 
       {open ? (
         <ul className="grid gap-2.5 border-t border-line/60 px-3.5 py-3.5 @md:grid-cols-2 @5xl:grid-cols-3">
-          {items.map((item) => (
-            <li key={item.ticker} className="rounded-lg border border-line/70 bg-ink-900/70 px-3.5 py-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => onSelect(item.ticker)}
-                  className="type-body text-left font-semibold text-fg transition hover:text-mint-400"
-                >
-                  {companyLabel(item.ticker, item.companyName)}
-                </button>
-                <span className="tabular type-caption text-fg-subtle simple-note">{formatPrice(item.entryPrice)}</span>
-              </div>
-              <p className="truncate font-mono text-2xs text-fg-subtle simple-note">
-                {item.ticker} · {item.companyName}
-              </p>
-              <p className="type-caption measure mt-1.5 text-fg-muted simple-note">
-                {describePlainVerdict(item.edgeVerdict).explanation}
-              </p>
-            </li>
-          ))}
+          {items.map((item) => {
+            const rawClose = item.metrics?.closePrice;
+            const hasClose = typeof rawClose === 'number' && Number.isFinite(rawClose) && rawClose > 0;
+            const rawChange = item.metrics?.changePct;
+            const hasChange = hasClose && typeof rawChange === 'number' && Number.isFinite(rawChange);
+
+            return (
+              <li key={item.ticker} className="rounded-lg border border-line/70 bg-ink-900/70 px-3.5 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(item.ticker)}
+                    className="type-body text-left font-semibold text-fg transition hover:text-mint-400"
+                  >
+                    {companyLabel(item.ticker, item.companyName)}
+                  </button>
+                  <div className="shrink-0 text-right leading-tight">
+                    <span className="tabular type-caption block font-semibold text-fg">
+                      {formatPrice(hasClose ? rawClose : item.entryPrice)}
+                    </span>
+                    {hasChange ? (
+                      <span className={cn('tabular type-caption block', describePriceDeltaTone(rawChange))}>
+                        {formatDeltaPercent(rawChange, 2)}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <p className="truncate font-mono text-2xs text-fg-subtle simple-note">
+                  {item.ticker} · {item.companyName}
+                </p>
+                {hasClose && item.entryPrice > 0 && Math.abs(rawClose - item.entryPrice) >= 0.0001 ? (
+                  <p className="tabular type-caption mt-1 text-fg-subtle simple-note">
+                    Plan entry {formatPrice(item.entryPrice)}
+                  </p>
+                ) : null}
+                <p className="type-caption measure mt-1.5 text-fg-muted simple-note">
+                  {describePlainVerdict(item.edgeVerdict).explanation}
+                </p>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </div>

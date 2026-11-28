@@ -7,10 +7,11 @@ import type {
   PositionAdvice,
   SignalItem,
   SignalOutcomeStatus,
+  TechnicalMetrics,
   TrustPulse,
 } from '../types/signals';
 import type { PositionAction, PortfolioSettingsUpdate } from '../types/portfolio';
-import { formatPercent, formatPrice } from './formatters.ts';
+import { formatDeltaPercent, formatPercent, formatPrice } from './formatters.ts';
 import { computeRiskSizing } from './riskSizing.ts';
 
 /**
@@ -1085,6 +1086,15 @@ export function describeEntryTiming(
  * prices, the server's own entry status and the calibrated odds — so a row can never
  * disagree with the drawer that opens beneath it.
  */
+/** Colour tone paired with a direction glyph for daily percent changes. */
+export function describePriceDeltaTone(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) {
+    return 'text-fg-subtle';
+  }
+
+  return value > 0 ? 'text-mint-400' : 'text-rose-400';
+}
+
 export interface PlainSignalRow {
   /** Verdict badge text, e.g. "Qualifies (Full)". */
   verdictLabel: string;
@@ -1094,6 +1104,12 @@ export interface PlainSignalRow {
   subline: string;
   /** Chip shown only when the server says the price is already inside the band. */
   entryChip: string | null;
+  /** Formatted session close price (e.g. "₱82.00"), or null when unreported/non-positive. */
+  closePriceLabel: string | null;
+  /** Direction-glyphed session % change (e.g. "▲0.80%"), or null when close or change is missing. */
+  changePctLabel: string | null;
+  /** Tailwind tone class paired with `changePctLabel`. */
+  changeTone: string;
 }
 
 /** The fields a row needs; kept narrow so the list can be tested without a whole run. */
@@ -1102,6 +1118,7 @@ export type PlainSignalRowSource = Pick<
   'edgeVerdict' | 'entryPrice' | 'targetPrice' | 'stopLoss' | 'winProbability' | 'breakEvenWinRate'
 > & {
   wavePlan?: SignalItem['wavePlan'];
+  metrics?: Pick<TechnicalMetrics, 'closePrice' | 'changePct'> | null;
 };
 
 /** Counts the session produced, for the one-sentence next step. */
@@ -1135,6 +1152,10 @@ export function describeSignalRow(item: PlainSignalRowSource): PlainSignalRow {
   const timing = item.wavePlan
     ? describeEntryTiming(item.wavePlan.entryStatus, item.wavePlan.idealBuyPrice, item.wavePlan.maxChasePrice)
     : null;
+  const rawClose = item.metrics?.closePrice;
+  const hasClose = typeof rawClose === 'number' && Number.isFinite(rawClose) && rawClose > 0;
+  const rawChange = item.metrics?.changePct;
+  const hasChange = hasClose && typeof rawChange === 'number' && Number.isFinite(rawChange);
 
   return {
     verdictLabel: verdict.label,
@@ -1143,6 +1164,9 @@ export function describeSignalRow(item: PlainSignalRowSource): PlainSignalRow {
       ? timing?.detail ?? describeWinChance(item.winProbability, item.breakEvenWinRate)
       : verdict.explanation,
     entryChip: verdict.buyable && timing && !timing.wait ? timing.label : null,
+    closePriceLabel: hasClose ? formatPrice(rawClose) : null,
+    changePctLabel: hasChange ? formatDeltaPercent(rawChange, 2) : null,
+    changeTone: hasChange ? describePriceDeltaTone(rawChange) : 'text-fg-subtle',
   };
 }
 
