@@ -29,7 +29,7 @@ dotnet run --project src/PseSignalDesk.WebApi        # http://localhost:5236
 
 # Backend tests
 cd backend
-dotnet test PseSignalDesk.slnx                        # 439 passing, 1 skipped (the manual benchmark)
+dotnet test PseSignalDesk.slnx                        # 561 passing, 1 skipped (the manual benchmark)
 
 # Golden snapshots (output-equivalence guard: replay + quantitative filter)
 dotnet test PseSignalDesk.slnx --filter "FullyQualifiedName~Golden"
@@ -44,7 +44,7 @@ cd frontend
 npm install
 npm run dev                                          # http://localhost:5173 (strict port)
 npm run build                                        # tsc --noEmit && vite build
-npm test                                             # node --test "src/lib/__tests__/*.test.ts" (60 passing)
+npm test                                             # node --test "src/lib/__tests__/*.test.ts" (87 passing)
 npm run icons                                        # regenerate public/favicon.{svg,ico} + apple-touch-icon.png
 npm run fonts                                        # re-download the bundled Outfit woff2 + OFL.txt
 node scripts/fetch-fonts.mjs --check                 # print the upstream subset URLs without writing (offline → error)
@@ -100,9 +100,9 @@ curl -X DELETE http://localhost:5236/api/knowledge/7        # upload → 204, bu
 | `OllamaCloud:Temperature` | `0.1` | Ranking-call sampling temperature (decimal) |
 | `OllamaCloud:Seed` | `42` | Fixed sampling seed where the provider honours it; null leaves provider seeding |
 | `OllamaCloud:NumCtx` | `16384` | Context window requested. The 25-candidate prompt is ~8k tokens, so too small a window silently truncates the tail (yesterday's list, the TASK line) |
-| `OllamaCloud:NumPredict` | `4096` | Completion cap; null = provider default |
+| `OllamaCloud:NumPredict` | `4096` | Completion cap covering the answer **and** a thinking model's reasoning trace; null = provider default. Too small a value lets the trace consume the whole budget and leave `content` empty — the engine recovers with one `think: false` retry |
 | `OllamaCloud:TopP` | null | Nucleus cut-off; null = provider default (1.0) |
-| `OllamaCloud:ReasoningEffort` | empty | `think` field: blank = omit, `off`/`false`/`none`/`disabled` → `false`, `on`/`true` → `true`, `low`/`medium`/`high`/`max` → forwarded as-is. **Unknown values are omitted rather than sent** so a typo cannot fail a live run |
+| `OllamaCloud:ReasoningEffort` | empty | `think` field: blank = omit (provider default), `off`/`false`/`none`/`disabled` → `false`, `on`/`true` → `true`, `low`/`medium`/`high`/`max` → forwarded as-is. **Unknown values are omitted rather than sent** so a typo cannot fail a live run. A model that answers with an empty message because its trace consumed `num_predict` is retried once with `think: false` and stays on that setting for the rest of the engine instance (one run) |
 | `OllamaCloud:UseStructuredOutput` | `true` | `format` carries the response JSON schema instead of `"json"`; an endpoint that answers `400` to the schema is retried once in JSON mode and the schema is latched off for the process |
 | `KnowledgeBase:RootPath` | `knowledge-base` | Markdown library folder (content root, then `AppContext.BaseDirectory`) |
 | `KnowledgeBase:MaxSnippets` | `6` | Sections injected per prompt (mandatory guardrails included) |
@@ -258,6 +258,7 @@ the API at all.
 - **Tick rounding is bracket-sensitive.** Rounding can cross into a coarser tick bracket; always go through `PseBoardLotService` (15 tiers) rather than rounding ad hoc.
 - **The static band only clamps `DAY`.** `NormalizeTradePlanWithinStaticLimits` keeps day plans inside `+50%/-30%` of the reference close; other horizons keep the plain tick/`target > entry > stop` normalization.
 - **An unknown Ollama model name is a configuration error, not a run failure.** `OllamaSignalEngine.SendChatAsync` now raises an internal `ChatResponseException` carrying the status code: the ranking path re-wraps it as `SignalGenerationException` (the `502` contract is unchanged), while the optional fast-extraction pass reads `404` as "this endpoint does not serve that model" and, after one warning naming the setting and the reasoning model, latches the pass off for the life of the engine so the four horizons stop repeating the call. Verified 2026-11-26 against the live account: `GET /api/tags` lists 25 models, `qwen3.5:4b` → `404 "model … not found"`, `deepseek-v4.1-flash` / `glm-5.3-flash` / `mimo-v2.6-flash` → `200`, and `glm-5.3-flash` returned a valid `{summary, trap_flags}` object for the fast prompt. `POST /api/embed` answered `401 unauthorized` for `nomic-embed-text` *and* for a chat model with the same key, so embeddings stay unavailable (retrieval is lexical) until the account has embed access.
+- **A thinking model can answer with an empty `content`.** `num_predict` caps the reasoning trace and the answer together, and `deepseek-v4.1-flash` thinks by default when `think` is omitted, so a 4,096-token budget can be spent entirely inside `message.thinking` (`done_reason: "length"`) with no JSON emitted. Observed live on 2026-11-28; the engine now logs the stop reason and body, retries once with `think: false`, and latches that model to no-thinking for the rest of that engine instance (one run). Pinned by three `OllamaSignalEngineTests` cases (recovery + latch, unrecoverable-with-reason, no retry when thinking was already off). If it recurs, set `OllamaCloud:ReasoningEffort=off` or raise `NumPredict`.
 - **Retrieval is an enhancement, never a failure mode.** A missing embedding model, a dead Ollama embeddings call or an unreadable folder degrades to lexical + tag retrieval (or an ungrounded prompt) instead of failing the run.
 - **Built-in knowledge documents are immutable from the API.** Edit the Markdown file and re-index; `DELETE /api/knowledge/{id}` returns `409` for `Source = "builtin"`.
 - **Drift and drop classification are server-owned.** Model-supplied `drift_status` / `previous_rank` are persisted only inside the raw audit JSON, never used for the final item.

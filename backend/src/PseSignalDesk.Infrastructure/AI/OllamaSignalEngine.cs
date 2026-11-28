@@ -18,7 +18,9 @@ namespace PseSignalDesk.Infrastructure.AI;
 /// <summary>
 /// Thin, typed client for Ollama Cloud's chat API. It sends the response contract as a JSON
 /// schema, controls the sampling/context knobs the desk needs to reproduce a run, enforces the
-/// strict JSON contract and performs exactly one corrective retry when parsing fails.
+/// strict JSON contract and performs exactly one corrective retry when parsing fails. A thinking
+/// model that spends the whole completion budget on its reasoning trace and answers with an empty
+/// message is retried once without thinking instead of failing the book.
 /// </summary>
 public sealed class OllamaSignalEngine : IOllamaSignalEngine
 {
@@ -54,6 +56,15 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
     /// mode once and stays there, so one unsupported knob cannot fail every horizon.
     /// </summary>
     private volatile bool _structuredOutputUnavailable;
+
+    /// <summary>
+    /// The model that answered an empty assistant message because its reasoning trace consumed
+    /// the whole completion budget. <c>num_predict</c> caps thinking <em>and</em> answer tokens, so
+    /// once one call proves the trace can exhaust it, this engine instance asks that model not to
+    /// think again (the corrective retry and an evaluation loop reuse it). Per model, because the
+    /// cheap fast-extraction model is a different caller.
+    /// </summary>
+    private volatile string? _reasoningOverrunModel;
 
     public OllamaSignalEngine(
         HttpClient httpClient,
@@ -98,7 +109,7 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
 
         var completion = await SendRankingChatAsync(messages, cancellationToken);
         var parse = _parser.Parse(completion.Content);
-        var retryCount = 0;
+        var retryCount = completion.RetryCount;
 
         if (!parse.IsSuccess)
         {
@@ -106,11 +117,12 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
                 "Ollama Cloud response failed validation ({Errors}). Sending one corrective retry.",
                 string.Join(" | ", parse.Errors));
 
-            retryCount = 1;
+            retryCount++;
             messages.Add(new ChatMessage("assistant", completion.Content));
             messages.Add(new ChatMessage("user", OllamaPromptBuilder.BuildCorrectionPrompt(parse.Errors, enriched)));
 
             completion = await SendRankingChatAsync(messages, cancellationToken);
+            retryCount += completion.RetryCount;
             parse = _parser.Parse(completion.Content);
 
             if (!parse.IsSuccess)
@@ -241,7 +253,7 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
             _structuredOutputUnavailable = true;
             _logger.LogWarning(
                 "Ollama Cloud rejected the response schema (HTTP 400). Falling back to JSON mode for the " +
-                "rest of this process. Detail: {Detail}",
+                "rest of this run. Detail: {Detail}",
                 Truncate(ex.Message, 300));
 
             return await SendChatAsync(messages, model, JsonMode, schemaConstrained: false, cancellationToken);
@@ -251,10 +263,18 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
     /// <summary>
     /// Maps <see cref="OllamaCloudOptions.ReasoningEffort"/> onto the request's <c>think</c>
     /// field. Blank or unrecognised values are omitted rather than sent, so a typo in
-    /// configuration degrades to the provider default instead of failing a live run.
+    /// configuration degrades to the provider default instead of failing a live run. A model
+    /// that already exhausted its completion budget on a reasoning trace is asked not to think
+    /// for the rest of this engine instance: repeating the overrun would just lose another call.
     /// </summary>
-    private object? ResolveThinkingMode()
+    private object? ResolveThinkingMode(string model)
     {
+        if (_reasoningOverrunModel is { } overrun &&
+            string.Equals(overrun, model, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         var effort = _options.ReasoningEffort.Trim().ToLowerInvariant();
 
         return effort switch
@@ -301,11 +321,35 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         return options;
     }
 
+    /// <summary>
+    /// Sends one chat call. A thinking model can spend the whole completion budget
+    /// (<see cref="OllamaCloudOptions.NumPredict"/>) inside its reasoning trace and return an
+    /// empty <c>content</c>; that is a recoverable configuration mismatch, not a missing book.
+    /// The call is retried once with <c>think: false</c> so the whole budget is available for
+    /// the JSON answer, and that model is not asked to think again on this engine instance.
+    /// </summary>
+    private Task<ChatCompletion> SendChatAsync(
+        IReadOnlyList<ChatMessage> messages,
+        string model,
+        JsonNode format,
+        bool schemaConstrained,
+        CancellationToken cancellationToken)
+        => SendChatAsync(
+            messages,
+            model,
+            format,
+            schemaConstrained,
+            thinkingOverride: null,
+            retriedWithoutThinking: false,
+            cancellationToken);
+
     private async Task<ChatCompletion> SendChatAsync(
         IReadOnlyList<ChatMessage> messages,
         string model,
         JsonNode format,
         bool schemaConstrained,
+        object? thinkingOverride,
+        bool retriedWithoutThinking,
         CancellationToken cancellationToken)
     {
         var endpoint = new Uri(new Uri(_options.BaseUrl.TrimEnd('/') + "/"), "api/chat");
@@ -318,7 +362,8 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
             ["format"] = format
         };
 
-        if (ResolveThinkingMode() is { } thinking)
+        var thinking = thinkingOverride ?? ResolveThinkingMode(model);
+        if (thinking is not null)
         {
             body["think"] = thinking;
         }
@@ -376,16 +421,76 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
             var reply = envelope?.Message?.Content;
             if (string.IsNullOrWhiteSpace(reply))
             {
+                var reasoningCharacters = envelope?.Message?.Thinking?.Length ?? 0;
+                var completionTokens = envelope?.EvalCount;
+                var reportedReason = envelope?.DoneReason;
+                var doneReason = string.IsNullOrWhiteSpace(reportedReason) ? "unreported" : reportedReason;
+
+                // The reasoning trace and the stop reason are what explain an empty answer, so
+                // they belong in the operator log. The caller gets an actionable sentence
+                // instead of the upstream body (which is model output, not a diagnosis).
+                _logger.LogWarning(
+                    "Ollama Cloud returned an empty assistant message for '{Model}' (done_reason: {DoneReason}, " +
+                    "completion tokens: {CompletionTokens}, thinking characters: {ThinkingCharacters}). Body: {Body}",
+                    model,
+                    doneReason,
+                    completionTokens,
+                    reasoningCharacters,
+                    Truncate(payload, 2_000));
+
+                if (!retriedWithoutThinking && thinking is not false)
+                {
+                    // num_predict caps thinking + answer tokens together. Retrying with thinking
+                    // off leaves the whole budget for the JSON contract, and remembering the
+                    // model keeps a corrective retry or evaluation loop from paying the same
+                    // overrun again.
+                    _reasoningOverrunModel = model;
+
+                    _logger.LogWarning(
+                        "Retrying '{Model}' once with thinking disabled so its completion budget can be used " +
+                        "for the answer. Set OllamaCloud:ReasoningEffort=off (or lower it) or raise " +
+                        "OllamaCloud:NumPredict to skip this extra call.",
+                        model);
+
+                    return await SendChatAsync(
+                        messages,
+                        model,
+                        format,
+                        schemaConstrained,
+                        thinkingOverride: false,
+                        retriedWithoutThinking: true,
+                        cancellationToken);
+                }
+
                 throw new SignalGenerationException(
-                    "Ollama Cloud returned an empty assistant message. " + Truncate(payload, 400));
+                    DescribeEmptyMessage(model, doneReason, completionTokens, retriedWithoutThinking));
             }
 
-            return new ChatCompletion(
+            var completion = new ChatCompletion(
                 reply,
                 envelope!.PromptEvalCount,
                 envelope.EvalCount,
                 schemaConstrained);
+
+            return retriedWithoutThinking ? completion with { RetryCount = 1 } : completion;
         }
+    }
+
+    private static string DescribeEmptyMessage(
+        string model,
+        string doneReason,
+        int? completionTokens,
+        bool retriedWithoutThinking)
+    {
+        var tokens = completionTokens is int count ? $", {count} completion tokens" : string.Empty;
+        var recovery = retriedWithoutThinking
+            ? " It also answered with an empty message after one retry with thinking disabled."
+            : string.Empty;
+
+        return $"Ollama Cloud returned an empty assistant message for '{model}' " +
+            $"(the provider stopped with '{doneReason}'{tokens}).{recovery} A reasoning model can spend the " +
+            "whole completion budget before writing an answer: set OllamaCloud:ReasoningEffort=off (or lower " +
+            "it) or raise OllamaCloud:NumPredict.";
     }
 
     private static string Truncate(string value, int maxLength) =>
@@ -502,13 +607,15 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
 
     /// <summary>
     /// One accepted assistant answer plus the usage figures the endpoint reported, so a run can
-    /// record what it actually cost.
+    /// record what it actually cost. <see cref="RetryCount"/> counts the calls spent recovering
+    /// an empty answer, so <c>ModelRetryCount</c> reflects every retry the engine actually made.
     /// </summary>
     private sealed record ChatCompletion(
         string Content,
         int? PromptTokens,
         int? CompletionTokens,
-        bool SchemaConstrained);
+        bool SchemaConstrained,
+        int RetryCount = 0);
 
     private sealed class OllamaChatEnvelope
     {
@@ -520,12 +627,27 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
 
         [JsonPropertyName("eval_count")]
         public int? EvalCount { get; set; }
+
+        /// <summary>
+        /// Why the generation stopped: <c>stop</c> for a finished answer, <c>length</c> when the
+        /// completion budget (<c>num_predict</c>) ran out — the signal that a reasoning trace
+        /// consumed the whole allowance before the answer was written.
+        /// </summary>
+        [JsonPropertyName("done_reason")]
+        public string? DoneReason { get; set; }
     }
 
     private sealed class OllamaChatMessage
     {
         [JsonPropertyName("content")]
         public string? Content { get; set; }
+
+        /// <summary>
+        /// The model's reasoning trace when thinking is enabled. It is never returned as the
+        /// answer, but its length and the stop reason are what explain an empty <c>content</c>.
+        /// </summary>
+        [JsonPropertyName("thinking")]
+        public string? Thinking { get; set; }
     }
 }
 

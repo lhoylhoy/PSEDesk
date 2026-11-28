@@ -55,7 +55,10 @@ public sealed class OllamaCloudOptions
     public int NumCtx { get; set; } = 16_384;
 
     /// <summary>
-    /// Upper bound on the completion length. Null leaves the provider default.
+    /// Upper bound on the completion length. It covers the assistant's answer <em>and</em> a thinking
+    /// model's reasoning trace, so a value that is too small can leave a model with nothing but
+    /// thinking tokens and an empty answer; the engine then retries once with thinking disabled.
+    /// Null leaves the provider default.
     /// </summary>
     public int? NumPredict { get; set; } = 4_096;
 
@@ -68,7 +71,9 @@ public sealed class OllamaCloudOptions
     /// Reasoning effort for models that support thinking: blank leaves the provider default,
     /// <c>off</c>/<c>false</c> disables it, and <c>on</c>/<c>true</c>/<c>low</c>/<c>medium</c>/
     /// <c>high</c>/<c>max</c> are forwarded as the <c>think</c> request field. An unrecognised
-    /// value is ignored rather than sent, so a typo cannot fail a live run.
+    /// value is ignored rather than sent, so a typo cannot fail a live run. A model that answers
+    /// with an empty message because its reasoning trace consumed the whole completion budget is
+    /// retried once with thinking disabled and then left on that setting for this engine instance.
     /// </summary>
     public string ReasoningEffort { get; set; } = string.Empty;
 

@@ -1,9 +1,49 @@
 # Progress — PSE Signal Desk
 
-**Status snapshot:** 2026-11-26 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
+**Status snapshot:** 2026-11-28 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **548 backend tests green + 1 skipped (549 total) / 87 frontend tests green** (2026-11-26; the newest pass is the **LLM measurement + structured-output pass** — run provenance, `QuantPreScore`/`QuantRank` persistence, the model-vs-quant scorecard block, JSON-schema `format`, sampling/context controls and the removal of the dead `rank`/`drift_status` fields — on top of the `More ▾` **stacking fix**, the frontend **wayfinding pass**, abuse-protection hardening, per-company PSE Edge disclosures, the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below).
- Backend behaviour changed only in the LLM seam: the request now carries a response schema and explicit sampling/context options, the stored run records how it was produced, and each pick records the quant rank it displaced. Everything past the LLM step is still unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+**Latest verification:** **561 backend tests green + 1 skipped (562 total) / 87 frontend tests green** (2026-11-28; the newest pass is the **empty Ollama answer recovery** — `done_reason`/`message.thinking` parsing, one no-thinking retry plus a per-model per-run latch, actionable `502` detail — on top of the 2026-11-28 **forecast accuracy Phases 1–3** pass, the 2026-11-26 **LLM measurement + structured-output** pass, the `More ▾` **stacking fix**, the frontend **wayfinding pass**, abuse-protection hardening, per-company PSE Edge disclosures, the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below).
+ Backend behaviour changed only in the LLM seam: the request now carries a response schema and explicit sampling/context options, an empty reasoning-only answer is retried once without thinking, the stored run records how it was produced, and each pick records the quant rank it displaced. Everything past the LLM step is still unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+
+## Latest verification (2026-11-28 — an empty Ollama answer no longer fails the run)
+
+Reported as `Signal generation failed — Ollama Cloud returned an empty assistant message` with
+`message.content: ""` and a `message.thinking` trace cut off mid-sentence. `num_predict` caps the
+reasoning trace **and** the answer together, and `deepseek-v4.1-flash` thinks by default when
+`think` is omitted, so a horizon's whole budget went into the trace. `OllamaSignalEngine` read only
+`content`, ignored `done_reason`, and threw `SignalGenerationException` (`502`) — identically for
+every horizon.
+
+Backend only: `Infrastructure/AI/OllamaSignalEngine.cs`, `Configuration/OllamaCloudOptions.cs`
+(doc comments), **3 new tests** in `Infrastructure/OllamaSignalEngineTests.cs`, `README.md` and this
+memory bank. No DTO, schema, fee, indicator, golden snapshot or dependency change.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && NUGET_PACKAGES=$PWD/.nuget/packages dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test … --filter 'FullyQualifiedName~OllamaSignalEngineTests'` | `Passed! - Failed: 0, Passed: 11` — 8 → 11, **+3** |
+| `cd backend && dotnet test PseSignalDesk.slnx --no-build --nologo -v q` | `Passed! - Failed: 0, Passed: 561, Skipped: 1, Total: 562` (8 s) — 558 → 561, all Golden tests green |
+
+**What changed**
+
+- **The envelope explains the empty answer.** `OllamaChatEnvelope.DoneReason` (`stop`, `length`, …)
+  and `OllamaChatMessage.Thinking` are deserialized, so `content: ""` is diagnosable.
+- **One recovery call, then a latch.** On an empty `content` the engine logs the stop reason,
+  completion tokens, reasoning length and body (the upstream body is no longer echoed in the `502`
+  detail), retries **once** with `think: false`, and sets `_reasoningOverrunModel` so every later
+  call on that engine instance sends `think: false` from the start — a corrective retry or an
+  evaluation loop does not repeat the overrun. The typed client is resolved per run, so the latch is
+  per run, not per process.
+- **Provenance and the error stay honest.** The recovery is added to `ModelRetryCount` (on top of a
+  corrective parse retry, if any). A second empty answer throws a `SignalGenerationException` naming
+  `done_reason`, the token count and the two settings that prevent it; when thinking was already off,
+  there is no retry because the identical request would only cost another call.
+- **Docs.** `README.md` documents the `ReasoningEffort`/`num_predict` interaction and the recovery;
+  `systemPatterns.md` and `techContext.md` carry the rule and the live observation.
+
+**Not run:** a live `run-now` (still needs `OLLAMA_API_KEY`, unset in this shell), so the recovery is
+proven against a stub response that reproduces the exact live envelope, not against the provider.
+
 
 ## Latest verification (2026-11-26 — LLM measurement + structured-output pass)
 

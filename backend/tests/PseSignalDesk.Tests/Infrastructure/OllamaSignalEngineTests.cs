@@ -206,6 +206,107 @@ public sealed class OllamaSignalEngineTests
         Assert.Equal(first.Metadata.PromptHash, second.Metadata.PromptHash);
     }
 
+    [Fact]
+    public async Task GenerateSignalAsync_retries_without_thinking_when_the_reasoning_trace_used_the_whole_budget()
+    {
+        var handler = new CapturingHandler((_, call) => call == 1 ? EmptyReasoning() : ChatOk(ValidPayload));
+        var engine = CreateEngine(handler);
+
+        var result = await engine.GenerateSignalAsync(BuildRequest());
+
+        // A model that thought for too long must not fail the book: the retry leaves the whole
+        // completion budget for the JSON answer.
+        Assert.Single(result.Output.Top10);
+        Assert.Equal(1, result.Metadata.RetryCount);
+        Assert.Equal(2, handler.Bodies.Count);
+
+        using (var first = JsonDocument.Parse(handler.Bodies[0]))
+        {
+            Assert.False(first.RootElement.TryGetProperty("think", out _));
+        }
+
+        using (var retry = JsonDocument.Parse(handler.Bodies[1]))
+        {
+            Assert.False(retry.RootElement.GetProperty("think").GetBoolean());
+        }
+
+        // Remembered on this engine instance: the next generation does not pay for another overrun.
+        var second = await engine.GenerateSignalAsync(BuildRequest() with { Horizon = SignalHorizon.DAY });
+
+        Assert.Equal(0, second.Metadata.RetryCount);
+        Assert.Equal(3, handler.Bodies.Count);
+
+        using var later = JsonDocument.Parse(handler.Bodies[2]);
+        Assert.False(later.RootElement.GetProperty("think").GetBoolean());
+    }
+
+    [Fact]
+    public async Task GenerateSignalAsync_reports_an_empty_answer_it_could_not_recover_with_the_stop_reason()
+    {
+        var handler = new CapturingHandler((_, _) => EmptyReasoning());
+        var engine = CreateEngine(handler);
+
+        var error = await Assert.ThrowsAsync<SignalGenerationException>(
+            () => engine.GenerateSignalAsync(BuildRequest()));
+
+        // One retry with thinking disabled, then a sentence the operator can act on instead of
+        // the upstream reasoning trace.
+        Assert.Equal(2, handler.Bodies.Count);
+        Assert.Contains("empty assistant message", error.Message, StringComparison.Ordinal);
+        Assert.Contains("'length'", error.Message, StringComparison.Ordinal);
+        Assert.Contains("4096 completion tokens", error.Message, StringComparison.Ordinal);
+        Assert.Contains("one retry with thinking disabled", error.Message, StringComparison.Ordinal);
+        Assert.Contains("OllamaCloud:ReasoningEffort=off", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("We need build JSON", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateSignalAsync_does_not_retry_an_empty_answer_when_thinking_was_already_off()
+    {
+        var handler = new CapturingHandler((_, _) => EmptyReasoning());
+        var engine = CreateEngine(handler, new OllamaCloudOptions
+        {
+            BaseUrl = "https://ollama.test",
+            ApiKey = "test-key",
+            Model = ReasoningModel,
+            FastExtractionModel = string.Empty,
+            ReasoningEffort = "off"
+        });
+
+        var error = await Assert.ThrowsAsync<SignalGenerationException>(
+            () => engine.GenerateSignalAsync(BuildRequest()));
+
+        // Repeating an identical no-thinking request would only cost another call.
+        Assert.Single(handler.Bodies);
+        Assert.Contains("empty assistant message", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("one retry with thinking disabled", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The exact live failure this pass fixes: the model spent its whole <c>num_predict</c>
+    /// budget on the reasoning trace, so <c>content</c> is empty and the trace is cut off.
+    /// </summary>
+    private static HttpResponseMessage EmptyReasoning(
+        string thinking = "We need build JSON top_10 from candidates, week horizon, bearish regime.",
+        string doneReason = "length",
+        int completionTokens = 4_096)
+    {
+        var envelope = JsonSerializer.Serialize(new
+        {
+            model = ReasoningModel,
+            message = new { role = "assistant", content = string.Empty, thinking },
+            done = true,
+            done_reason = doneReason,
+            prompt_eval_count = 8_123,
+            eval_count = completionTokens
+        });
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(envelope, Encoding.UTF8, "application/json")
+        };
+    }
+
     private static HttpResponseMessage ChatOk(
         string content,
         int? promptTokens = null,

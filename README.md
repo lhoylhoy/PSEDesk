@@ -58,7 +58,7 @@ backend/
                                    # Ollama clients, RAG store, scheduler
     PseSignalDesk.WebApi/           # controllers (signals, research, portfolio, knowledge), compliance + 499
                                    # middleware, DI wiring, appsettings, EF migrations
-  tests/PseSignalDesk.Tests/        # 440 xUnit cases (439 run + 1 skipped manual benchmark): board lot, quant,
+  tests/PseSignalDesk.Tests/        # 562 xUnit cases (561 run + 1 skipped benchmark): board lot, quant,
                                    # edge, tickets, portfolio, research/backtest, golden snapshots, outcome/training,
                                    # drift policy, market direction/wave, classifier, parser, pipeline, knowledge,
                                    # provider + download cache, prompt, compliance, cancellation middleware
@@ -79,8 +79,8 @@ frontend/
     lib/       # formatters, horizons, viewMode, theme, legalConsent, plainAdvice, pseNicknames, sessionSelection,
                # riskSizing, queryCache (SWR client cache), preloaders, cn,
                # deskMarkGeometry (the one candlestick drawing the badge and both icons are rendered from)
-    lib/__tests__/ # node:test suites (plainAdvice, legalConsent, queryCache, formatters, deskMark);
-                   # excluded from the browser build
+    lib/__tests__/ # node:test suites (plainAdvice, legalConsent, queryCache, formatters, deskMark,
+                   # shortcuts, howToRead, operatorKey); excluded from the browser build
     types/     # API contract types
 ```
 
@@ -109,6 +109,15 @@ export OLLAMA_EMBEDDING_MODEL="nomic-embed-text"  # optional knowledge embedding
 Every model name must exist in your account's catalogue (`GET https://ollama.com/api/tags`, or
 `ollama ls` against the cloud). An unknown **fast** model is logged once and the optional pass is
 switched off, so the book still ranks; an unknown **reasoning** model fails the run with `502`.
+
+`OllamaCloud:ReasoningEffort` controls the `think` field (blank leaves the provider default,
+`off` disables it, `low`/`medium`/`high`/`max` forward the level). `num_predict` caps the reasoning
+trace *and* the answer together, so a thinking model can spend the whole completion budget before it
+writes a single JSON character. When that happens the engine logs the stop reason
+(`done_reason: length`) and retries that call once with thinking disabled, then keeps that model on
+the no-thinking setting for the rest of the run — the book still ranks, and the extra call is
+recorded in the run's `modelRetryCount`. Set `OllamaCloud:ReasoningEffort=off` (or raise
+`OllamaCloud:NumPredict`) to avoid the retry altogether.
 
 Without a key every `run-now` answers `400` with a configuration problem; the desk never fabricates a ranking.
 
@@ -313,8 +322,8 @@ Failures use RFC 7807 `ProblemDetails`: `400` missing Ollama key, bad input, emp
 ## Tests
 
 ```bash
-cd backend && dotnet test PseSignalDesk.slnx    # 496 passing + 1 skipped (manual replay benchmark)
-cd frontend && npm test                       # 71 passing (node:test, no DOM)
+cd backend && dotnet test PseSignalDesk.slnx    # 561 passing + 1 skipped (manual replay benchmark)
+cd frontend && npm test                       # 87 passing (node:test, no DOM)
 cd frontend && npm run build                  # tsc --noEmit + vite build
 ```
 

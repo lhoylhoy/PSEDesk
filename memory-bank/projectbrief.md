@@ -45,8 +45,8 @@ The product is research tooling, **not investment advice**, and it is **not a li
 
 ## Success criteria
 
-- `dotnet test backend/PseSignalDesk.slnx` passes (**451 tests + 1 skipped manual benchmark** as of 2026-11-26), including the golden snapshots that pin the replay's published numbers byte-for-byte.
-- `npm test` in `frontend/` passes (**60 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `lib/__tests__/legalConsent.test.ts`, `lib/__tests__/queryCache.test.ts`, `lib/__tests__/formatters.test.ts` (a value always carries its unit, unreported renders `—` and never `0`) and `lib/__tests__/deskMark.test.ts`, which pins the desk mark — three ascending candles that never touch, exactly one full-strength candle, every shape inside the 32-unit tile — so a geometry tweak cannot quietly turn the 16px tab icon into a smudge).
+- `dotnet test backend/PseSignalDesk.slnx` passes (**561 tests + 1 skipped manual benchmark** as of 2026-11-28), including the golden snapshots that pin the replay's published numbers byte-for-byte.
+- `npm test` in `frontend/` passes (**87 `node:test` cases**: `lib/__tests__/plainAdvice.test.ts`, which also covers `lib/pseNicknames.ts`, `lib/sessionSelection.ts` and the `riskSizing.ts` formatters, plus `legalConsent`, `queryCache`, `formatters` (a value always carries its unit, unreported renders `—` and never `0`), `deskMark` (three ascending candles that never touch, exactly one full-strength candle, every shape inside the 32-unit tile), `shortcuts`, `howToRead` and `operatorKey`).
 - `npm run build` in `frontend/` passes (`tsc --noEmit` + Vite build), with each dialog and the Pro table in their own chunk.
 - The terminal is usable one-thumbed on a 320px phone and dense on a 2560px desktop from the **same payload**: dialogs become bottom sheets, wide tables fall back to cards, and no mobile variant fetches a different endpoint. Simple mode carries its own type floor (12px labels, 13px explanatory notes, both scoped to `[data-view-mode='simple']`) and one polite live region announces every run, result and failure.
 - With network + `OLLAMA_API_KEY`, `run-now` for two consecutive sessions produces all four drift states and all three drop categories from real history, for every horizon.
@@ -77,7 +77,7 @@ backend/
                                    # with its per-URL download cache, Ollama clients, RAG, scheduler
     PseSignalDesk.WebApi/          # controllers (signals, research, portfolio, knowledge), compliance + 499 middleware,
                                    # DI wiring, appsettings, EF migrations
-  tests/PseSignalDesk.Tests/        # 452 cases (451 run + 1 skipped benchmark): board lot, quant, edge, tickets,
+  tests/PseSignalDesk.Tests/        # 562 cases (561 run + 1 skipped benchmark): board lot, quant, edge, tickets,
                                    # portfolio, research/backtest, golden snapshots, outcome, training, drift policy,
                                    # direction/wave, classifier, parser, pipeline, knowledge, provider + download cache,
                                    # prompt, compliance, cancellation middleware

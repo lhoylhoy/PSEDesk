@@ -1,8 +1,51 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-28 (Forecast accuracy Phases 1–3: trainer CMEPA/gap-stop/liquidity/promotion-gate/causal-prior fixes, BEARISH OOD guard, live `BarrierStats` wiring, horizon-score prompt ordering + ATR reference anchors + F-03 fencing, RAG embedding repair, `PromptEvalService` + `POST /api/signals/eval-llm`, Scorecard/Trainer UI clarity — backend **558 + 1 skipped**, frontend **87**)
-**Last feature pass:** 2026-11-28 (Forecast accuracy Phases 1–3, following the 2026-11-26 LLM measurement pass)
-**Current task:** Phases 1–3 of the forecast accuracy remediation & LLM benchmarking plan are implemented and verified (uncommitted per repo convention). Phase 4 (corporate-action split adjuster, dividend feed audit, and live DB migration/retrain + live `eval-llm` run once `OLLAMA_API_KEY` is set) remains open.
+**Last updated:** 2026-11-28 (empty Ollama answer recovery: `done_reason`/`thinking` parsing, one no-thinking retry + per-run model latch, actionable `502` detail — backend **561 + 1 skipped**, frontend **87**)
+**Last feature pass:** 2026-11-28 (empty Ollama answer recovery, following the forecast-accuracy Phases 1–3 pass)
+**Current task:** The empty-answer recovery is implemented and verified (uncommitted per repo convention). Phase 4 of the forecast-accuracy plan (corporate-action split adjuster, dividend feed audit, and live DB migration/retrain + live `eval-llm` run once `OLLAMA_API_KEY` is set) remains open.
+
+## Session note (2026-11-28) — an empty Ollama answer no longer fails the run
+
+Reported as `Signal generation failed — Ollama Cloud returned an empty assistant message` with a
+payload whose `message.content` was `""` and whose `message.thinking` stopped mid-sentence. Cause:
+`num_predict` (4,096) caps the reasoning trace **and** the answer together, and
+`deepseek-v4.1-flash` thinks by default when `think` is omitted, so a whole horizon's budget went
+into the trace and no JSON was ever emitted. `OllamaSignalEngine` read only `content`, ignored
+`done_reason`, and threw `SignalGenerationException` (`502`) — so every horizon failed the same way.
+
+Backend only: `OllamaSignalEngine` + `OllamaCloudOptions` doc comments, three new tests, `README.md`
+and this memory bank. No DTO, schema, fee, indicator, golden snapshot or dependency change.
+
+| Command | Result |
+| --- | --- |
+| `cd backend && NUGET_PACKAGES=$PWD/.nuget/packages dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test … --filter 'FullyQualifiedName~OllamaSignalEngineTests'` | `Passed! - Failed: 0, Passed: 11` — 8 → 11, **+3** |
+| `dotnet test PseSignalDesk.slnx --no-build --nologo -v q` | `Passed! - Failed: 0, Passed: 561, Skipped: 1, Total: 562` (8 s) — 558 → 561, all Golden tests green |
+
+**What changed**
+
+1. **The envelope now says why.** `OllamaChatEnvelope` reads `done_reason` (`stop`, `length`, …) and
+   `OllamaChatMessage` reads `thinking`, so an empty `content` is diagnosable instead of opaque.
+2. **Recovery, not a hard failure.** On an empty answer the engine logs the stop reason, completion
+   tokens, reasoning length and the upstream body (the body is no longer copied into the `502`
+   detail), then retries **once** with `think: false` so the whole budget is available for the JSON
+   contract. The model is remembered (`_reasoningOverrunModel`) and every later call on that engine
+   instance sends `think: false` from the first request, so a corrective retry or an evaluation loop
+   does not pay for the same overrun. (The typed client is resolved per run, so the latch is per
+   run, not per process.)
+3. **Provenance stays honest.** The recovery increments `ModelRetryCount` (it is added to the
+   corrective-retry count, not substituted for it). A second empty answer throws an actionable
+   `SignalGenerationException` naming `done_reason`, the token count and the two settings that
+   prevent it. When thinking was already off, an empty answer is not retried — repeating the same
+   request would only cost another call.
+
+**Next**
+
+- With `OLLAMA_API_KEY` set, one `run-now` per horizon to confirm the live account now returns a
+  book (`modelProvenance.modelRetryCount` reports `1` for a run whose thinking call overran and was
+  retried, `0` when `ReasoningEffort=off` avoided it), then Phase 4.
+- If the reasoning trace regularly overruns, prefer `OllamaCloud:ReasoningEffort=off` (deterministic,
+  no extra call) or raise `OllamaCloud:NumPredict`; the retry is a safety net, not a budget.
 
 ## Session note (2026-11-28) — Forecast accuracy remediation & LLM benchmark harness (Phases 1–3)
 
