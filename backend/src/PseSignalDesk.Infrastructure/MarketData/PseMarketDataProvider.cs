@@ -164,6 +164,12 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     /// </summary>
     private readonly PseEdgeDisclosureSource _companyDisclosures;
 
+    /// <summary>
+    /// The exchange's own dividends table, used to give a PSE name the cash dividends Yahoo no
+    /// longer publishes. Null when <see cref="MarketDataOptions.EnablePseEdgeDividends"/> is off.
+    /// </summary>
+    private readonly PseEdgeDividendSource? _edgeDividends;
+
     public PseMarketDataProvider(
         HttpClient httpClient,
         IOptions<MarketDataOptions> options,
@@ -187,6 +193,11 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
             ? new PseEdgeHistorySource(httpClient, _options, _cache, logger, _feedHealth)
             : null;
         _companyDisclosures = new PseEdgeDisclosureSource(httpClient, _options, _cache, logger, _feedHealth);
+        _edgeDividends = _options.EnablePseEdgeHistory && _options.EnablePseEdgeDividends
+            ? new PseEdgeDividendSource(httpClient, _options, _cache, logger, _feedHealth)
+            : null;
+
+
     }
 
     /// <summary>
@@ -359,6 +370,8 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
             _options.LookbackCalendarDays,
             MinimumStockBars,
             cancellationToken);
+
+        chart = await WithEdgeDividendsAsync(chart, ticker, tradeDate, cancellationToken);
 
         if (chart.SymbolUnavailable || chart.Bars.Count < MinimumStockBars)
         {
@@ -1466,7 +1479,36 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
     }
 
     /// <summary>
+    /// Gives a PSE name the cash dividends the exchange attributes to it. Yahoo's
+    /// <c>events.dividends</c> block no longer serves PSE-listed equities, so a chart arrives with
+    /// an empty list and every trailing yield is reported as unreported; the exchange's own
+    /// dividends table is the only public replacement.
+    /// <para>
+    /// A chart that already carries dividends is left untouched — that is a feed which answered,
+    /// and replacing it with a second source would make the yield depend on which fetch ran. A
+    /// failed lookup leaves the list empty, exactly the state it was in before, and is reported
+    /// through the feed ledger rather than thrown into the run.
+    /// </para>
+    /// </summary>
+    private async Task<ChartFetch> WithEdgeDividendsAsync(
+        ChartFetch chart,
+        string ticker,
+        DateOnly sessionDate,
+        CancellationToken cancellationToken)
+    {
+        if (_edgeDividends is null || chart.Dividends.Count > 0)
+        {
+            return chart;
+        }
+
+        var dividends = await _edgeDividends.FetchCashDividendsAsync(ticker, sessionDate, cancellationToken);
+
+        return dividends.Count == 0 ? chart : chart with { Dividends = dividends };
+    }
+
+    /// <summary>
     /// Fetches every tracked <c>{TICKER}.PS</c> chart with bounded concurrency. Symbols
+
     /// without a chart, without 200 bars or without a bar on the PSE session date are
     /// skipped with a warning; transport failures are fatal. Fewer than ten surviving
     /// names means the universe is not tradeable, so the run fails.
@@ -1527,6 +1569,8 @@ public sealed class PseMarketDataProvider : IMarketDataProvider
                 lookbackDays,
                 MinimumStockBars,
                 cancellationToken);
+
+            chart = await WithEdgeDividendsAsync(chart, info.Ticker, sessionDate, cancellationToken);
 
             if (chart.SymbolUnavailable)
             {

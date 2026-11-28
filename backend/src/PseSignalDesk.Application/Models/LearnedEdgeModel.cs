@@ -59,7 +59,7 @@ public sealed record LearnedEdgeModel(
 
     /// <summary>
     /// The learned log-odds beyond the structural prior: <c>intercept + w · z</c> over the
-    /// twelve standardized factors. A missing input is mean-imputed, which is exactly zero after
+    /// standardized factors. A missing input is mean-imputed, which is exactly zero after
     /// standardization, so it contributes nothing instead of inventing a level.
     /// </summary>
     public double ResidualLogOdds(decimal?[] features)

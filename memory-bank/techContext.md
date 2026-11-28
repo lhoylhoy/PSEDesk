@@ -116,6 +116,9 @@ curl -X DELETE http://localhost:5236/api/knowledge/7        # upload → 204, bu
 | `MarketData:PseEdgeAnnouncementsUrl` | `https://edge.pse.com.ph/announcements/search.ax` | Disclosure page (fail-fast contract) |
 | `MarketData:PseEdgeCompanyDisclosuresUrl` | `https://edge.pse.com.ph/companyDisclosures/search.ax` | Per-company disclosure table. Called with `?keyword={cmpy_id}` (the page's own search form field); without that query it answers a company-less market-wide listing |
 | `MarketData:EnablePseEdgeHistory` | `true` | When a Yahoo chart carries no usable PSE series, read the daily bars from PSE Edge instead. `false` restores the strict Yahoo-only contract (and the old `503`) |
+| `MarketData:PseEdgeDividendsUrl` | `https://edge.pse.com.ph/companyPage/dividends_and_rights_list.ax` | Per-company dividends table, called with `?DividendsOrRights=Dividends` and a `cmpy_id` form POST. The only public source of PSE cash dividends |
+| `MarketData:EnablePseEdgeDividends` | `true` | Re-read a chart that carries no dividend events from the Edge table. Rides with `EnablePseEdgeHistory` (Edge off = zero Edge traffic); `false` keeps the Edge bars and stops the dividend fan-out |
+| `MarketData:PseEdgeDividendsCacheMinutes` | `360` | TTL of the dividends table. Declarations are quarterly, so four horizon runs in a session download it once; `< 1` falls back to the source default |
 | `MarketData:PseEdgeChartUrl` | `https://edge.pse.com.ph/common/DisclosureCht.ax` | Edge daily-history POST (`{cmpy_id, security_id, startDate, endDate}` → `chartData[]`) |
 | `MarketData:PseEdgeSymbolSearchUrl` | `https://edge.pse.com.ph/autoComplete/searchCompanyNameSymbol.ax` | `?term=TICKER` → `cmpyId` for the history source |
 | `MarketData:PseEdgeCompanyPageUrl` | `https://edge.pse.com.ph/companyPage/stockData.do` | `?cmpy_id=N` → the common security's `security_id` |
@@ -231,6 +234,32 @@ the API at all.
   - **Market-wide** (`https://edge.pse.com.ph/announcements/search.ax`, plus the company-less `companyDisclosures/search.ax` listing, `DisclosurePagesToScan` pages each): scraped rows matched to tracked companies. Non-2xx, empty page or timeout on the announcements page → 503 (disclosures are part of the live contract). As of 2026-11-26 the announcements listing answers `200` with a "no records found" body, and this market-wide read attributed filings to **3 of 60** names in a live run — a subject line usually does not repeat the issuer's name, so this is coverage-by-luck and is kept only as the fallback.
   - **Per company** (`PseEdgeDisclosureSource`, route settled by live probe on 2026-11-26): `GET companyDisclosures/search.ax?keyword={cmpy_id}` → 50-row table of *that* company's filings (`Total 424` for JFC). The planned `companyPage/companyDisclosures.do?cmpy_id=86` route is **HTTP 404**; `?keyword=` is the field the page's own search form posts. Ticker → id via `autoComplete/searchCompanyNameSymbol.ax?term=TICKER` (`EdgeSymbolSearch.ReadCompanyId`, shared with the history source). Announce cells print `Nov 26, 2026 11:53 AM` — the parser accepts that *and* `11/26/2026`, and a row the parser cannot date is dropped rather than back-dated to the session. A company with no search hit is a **skip**, never a failure. Both responses cached ten minutes (`edge-symbol:{ticker}`, `edge-company-disclosures:{id}`); failures are soft (`MarketDataUnavailableException`/`JsonException` → empty map) because the market-wide read still stands.
   - Live comparison, same run (2026-11-25 session): fan-out over four names returned 41 (BDO) / 47 (JFC) / 22 (SM) / 40 (TEL) filings with real dates; the market-wide page attributed 3 filings across 60 names. That gap is the trap pillar.
+- **PSE Edge dividends** (`PseEdgeDividendSource`, route settled by live probe on 2026-11-28):
+  `POST companyPage/dividends_and_rights_list.ax?DividendsOrRights=Dividends` with form fields
+  `cmpy_id`, `keyword`, `security_id`, `pageNo=1` → an HTML row table
+  `Type of Security | Type of Dividend | Dividend Rate | Ex-Dividend Date | Record Date | Payment Date | Circular Number`.
+  The page shell (`companyPage/dividends_and_rights_form.do?cmpy_id=`) is not the data; the parallel
+  `DividendsOrRights=Rights` call answers the entitlement-ratio table (not read). Parser rules, all
+  observed live: **only `Type of Security = COMMON` is money** (JFC prints `JFCPB` at Php10.60 beside
+  `COMMON` at Php2.11; GLO prints `GLOBA`/`GLOBB` coupon sentences); only `Type of Dividend = Cash`
+  (ABA's property dividend is prose); the rate cell is free text and the amount is read from the leading
+  token — `Php2.11`, `Php 0.11`, `P0.133/Share`, `Php0.11733697`, `Php25 per common share`, bare `0.63` —
+  while `N/A`, a `%` coupon and a long sentence with no leading amount are dropped; ex-dates parse
+  `Nov 23, 2026` / `May 04, 2026` / `Jul 2, 2026` (and `M/d/yyyy`), and an ex-date after the session is
+  excluded. One circular is one declaration (re-published rows collapse), two declarations sharing an
+  ex-date are summed. **No pagination** (`pageNo` is inert) and **uneven coverage**: SCC and PXP answer
+  `no data.` (a skip, yield `null`), and MAC's 21% stock dividend is not published here at all — every row
+  across the catalog is `Cash`, so this feed cannot adjust a series for a split. Cached
+  `PseEdgeDividendsCacheMinutes` (360) under `edge-dividends:{cmpy_id}`; symbol search reuses
+  `edge-symbol:{ticker}`; ledger `FeedSource.PseEdgeDividends`; failures soft. Live spot-check: JFC 5.55
+  (2.11 + 1.33 + 2.11), GLO 100.00 (4 × 25, preferred coupons excluded), TEL 92.00 (2 × 46), MAC 0.11,
+  SCC `null`.
+  **The table's history is shallow — about one year.** Probed live on 2026-11-28 the oldest listed ex-date
+  was `Dec 16, 2025` (JFC, whose newest is `Nov 23, 2026`), `Dec 5, 2025` (GLO), and `Apr 16, 2026` (TEL), so
+  no session before roughly December 2025 can have a trailing dividend at all. That is why the trainer's
+  70% slice (ending `2025-03-03` on a five-year tape) sees the yield column in zero trades and stores it
+  with a zero weight under `MinimumFeatureObservations`; the exchange page is not a multi-year dividend
+  archive and must not be treated as one.
 
 - **Official PSE Daily Quotation Report**: the only source of net foreign flow. Fetched from `MarketData:PseDailyQuotationUrlTemplates` when configured (`{yyyy}` / `{MMddyyyy}` / `{MMddyy}` tokens) or supplied by an operator through `POST /api/signals/quotation-report`. Parsed by `PseDailyQuotationParser` (PDF text via PdfPig, CSV, TXT, TSV). Every failure is best-effort and leaves foreign flow `null`; provenance is stored in `ForeignFlowSource` (`pse-dqr-live` / `pse-dqr-upload`).
 - **Yahoo Finance macro symbols** (`^TNX`, `BZ=F`, `EPHE`): fetched concurrently with the same chart client (`roundToTick: false`), best-effort. `^TNX` is a percent yield (20-day change reported in bps), `BZ=F` is USD per barrel, `EPHE` is the MSCI Philippines ETF in USD.

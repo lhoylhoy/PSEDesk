@@ -439,6 +439,85 @@ public sealed class QuantitativeFilterServiceTests
 
         Assert.Equal(8m, improvedScore - baselineScore);
     }
+    [Fact]
+    public void ComputeHorizonScore_penalises_an_entry_stretched_far_above_ema20()
+    {
+        // 2.5 ATRs above the 20-day mean is a chase: the next few weeks of noise is give-back.
+        var baseline = BuildMetric("ICT", 50);
+        var stretched = BuildMetric("ICT", 50);
+        stretched.Ema20 = 9m;
+
+        var weekProfile = HorizonProfile.For(SignalHorizon.WEEK);
+
+        Assert.Equal(
+            -6m,
+            QuantitativeFilterService.ComputeHorizonScore(stretched, weekProfile) -
+            QuantitativeFilterService.ComputeHorizonScore(baseline, weekProfile));
+    }
+
+    [Fact]
+    public void ComputeHorizonScore_lets_the_yearly_book_buy_an_extended_name()
+    {
+        // A position held through a cycle is not entered for the next month's range, so the
+        // yearly book keeps its score where the shorter books pay for chasing.
+        var baseline = BuildMetric("ICT", 50);
+        var stretched = BuildMetric("ICT", 50);
+        stretched.Ema20 = 9m;
+
+        var yearProfile = HorizonProfile.For(SignalHorizon.YEAR);
+
+        Assert.Equal(
+            0m,
+            QuantitativeFilterService.ComputeHorizonScore(stretched, yearProfile) -
+            QuantitativeFilterService.ComputeHorizonScore(baseline, yearProfile));
+    }
+
+    [Fact]
+    public void ComputeHorizonScore_rewards_a_pullback_inside_a_rising_trend()
+    {
+        // A close at its 20-day mean, in a name above its 200-day average, is the entry a longer
+        // horizon gets paid for. The daily book is excluded: it needs a range, not a pullback.
+        var baseline = BuildMetric("ICT", 50);
+        var pullback = BuildMetric("ICT", 50);
+        pullback.Ema20 = pullback.ClosePrice;
+
+        var monthProfile = HorizonProfile.For(SignalHorizon.MONTH);
+        var dayProfile = HorizonProfile.For(SignalHorizon.DAY);
+
+        Assert.Equal(
+            5m,
+            QuantitativeFilterService.ComputeHorizonScore(pullback, monthProfile) -
+            QuantitativeFilterService.ComputeHorizonScore(baseline, monthProfile));
+
+        Assert.Equal(
+            0m,
+            QuantitativeFilterService.ComputeHorizonScore(pullback, dayProfile) -
+            QuantitativeFilterService.ComputeHorizonScore(baseline, dayProfile));
+    }
+
+    [Fact]
+    public void ComputeHorizonScore_needs_a_rising_200_day_trend_for_a_pullback_to_count()
+    {
+        // Both fixtures sit below the 200-day average, so the structural-trend sleeve is zero for
+        // both and only the pullback condition can differ.
+        var baseline = BuildMetric("ICT", 50);
+        baseline.Sma50 = 5m;
+        baseline.Sma200 = 12m;
+
+        var broken = BuildMetric("ICT", 50);
+        broken.Sma50 = 5m;
+        broken.Sma200 = 12m;
+        broken.Ema20 = broken.ClosePrice;
+
+        var monthProfile = HorizonProfile.For(SignalHorizon.MONTH);
+
+        Assert.Equal(
+            0m,
+            QuantitativeFilterService.ComputeHorizonScore(broken, monthProfile) -
+            QuantitativeFilterService.ComputeHorizonScore(baseline, monthProfile));
+    }
+
+
 
     [Fact]
     public void ComputeTrailingDividends_sums_only_the_last_three_hundred_sixty_five_days()

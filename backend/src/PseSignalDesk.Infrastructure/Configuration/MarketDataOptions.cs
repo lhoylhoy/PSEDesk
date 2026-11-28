@@ -86,6 +86,39 @@ public sealed class MarketDataOptions
         "https://edge.pse.com.ph/companyDisclosures/search.ax";
 
     /// <summary>
+    /// PSE Edge per-company dividends table. The page shell
+    /// (<c>companyPage/dividends_and_rights_form.do?cmpy_id=</c>) loads this list endpoint by
+    /// <c>POST</c> with the company's numeric <c>cmpy_id</c>, answering an HTML row table
+    /// (<c>Type of Security | Type of Dividend | Dividend Rate | Ex-Dividend Date | Record Date |
+    /// Payment Date | Circular Number</c>). It is the only public source of PSE cash dividends:
+    /// Yahoo's chart <c>events.dividends</c> no longer serves PSE names, which is why every
+    /// trailing yield was reported as unreported.
+    /// </summary>
+    public string PseEdgeDividendsUrl { get; set; } =
+        "https://edge.pse.com.ph/companyPage/dividends_and_rights_list.ax";
+
+    /// <summary>
+    /// Whether a ticker whose chart carries no dividend events is re-read from the exchange's own
+    /// dividends table. On by default: without it the trailing yield, the cash-yield sleeve and
+    /// the dividend-versus-US10Y dial are all inert. Set it to <c>false</c> to make no dividend
+    /// request at all.
+    /// <para>
+    /// The read also rides with <see cref="EnablePseEdgeHistory"/>: both are the same exchange
+    /// host, and turning the Edge history off restores a Yahoo-only run with no Edge traffic at
+    /// all. This switch is the narrower rollback — keep the Edge bars, stop the dividend fan-out.
+    /// </para>
+    /// </summary>
+    public bool EnablePseEdgeDividends { get; set; } = true;
+
+    /// <summary>
+    /// How long the dividends table stays cached, in minutes. Dividends are declared a few times
+    /// a year, so this is measured in hours (default six) rather than the ten minutes a daily bar
+    /// gets: four horizon runs in one session would otherwise download the same unchanged table
+    /// four times. Values below one fall back to the source's own default.
+    /// </summary>
+    public int PseEdgeDividendsCacheMinutes { get; set; } = 360;
+
+    /// <summary>
     /// How many of the highest-scoring names that clear the liquidity floor are re-read through
     /// their own PSE Edge company page, so a filing is attributed by the exchange's <c>cmpy_id</c>
     /// instead of by matching its headline to a company name.

@@ -12,6 +12,12 @@ public enum FeedSource
     /// <summary>PSE Edge announcements and company disclosures. Load-bearing for trap flags.</summary>
     PseEdgeDisclosures,
 
+    /// <summary>
+    /// PSE Edge per-company dividends table. Load-bearing for trailing cash yield; a name with no
+    /// cash dividend on record is reported as a skip, never as a zero payout.
+    /// </summary>
+    PseEdgeDividends,
+
     /// <summary>Yahoo Finance v8 charts. Today only the FX series is expected to answer.</summary>
     YahooCharts,
 

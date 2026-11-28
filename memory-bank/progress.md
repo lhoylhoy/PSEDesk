@@ -2,8 +2,135 @@
 
 **Status snapshot:** 2026-11-28 — a four-horizon probabilistic PSE research desk: live-only ingestion behind a per-URL download cache with one fan-out per session (**PSE series now read from PSE Edge daily history**, because Yahoo stopped publishing PSE equities), deterministic point-in-time screening and tick-grid plans, server-owned odds / EV / Quarter-Kelly, one self-trained money-manager book per horizon (promoted only through a held-out gate, λ picked on a nested inner split), server-sized order tickets that settle real fees, a paper blotter with legal pyramiding and partial trims, a forward-outcome ledger, a benchmarked causal replay priced at its own dates, on-demand research for any ticker, an official-DQR foreign pillar, cross-asset dials, a SQLite RAG library (8 documents / 46 sections), and a Simple/Pro terminal that reflows from 320px to 2560px.
 
-**Latest verification:** **561 backend tests green + 1 skipped (562 total) / 87 frontend tests green** (2026-11-28; the newest pass is the **empty Ollama answer recovery** — `done_reason`/`message.thinking` parsing, one no-thinking retry plus a per-model per-run latch, actionable `502` detail — on top of the 2026-11-28 **forecast accuracy Phases 1–3** pass, the 2026-11-26 **LLM measurement + structured-output** pass, the `More ▾` **stacking fix**, the frontend **wayfinding pass**, abuse-protection hardening, per-company PSE Edge disclosures, the feed-ledger, hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening, responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics, performance, accuracy and live-drift passes — each keeps its own section below).
- Backend behaviour changed only in the LLM seam: the request now carries a response schema and explicit sampling/context options, an empty reasoning-only answer is retried once without thinking, the stored run records how it was produced, and each pick records the quant rank it displaced. Everything past the LLM step is still unverified live here because `OLLAMA_API_KEY` is unset in the shell; the open security remediation is listed under *Remaining*.
+**Latest verification:** **578 backend tests green + 1 skipped (579 total) / 90 frontend tests green**
+(2026-11-28; the newest pass is the **`train-all` refit + observable-coverage floor** — the four books now
+carry 14 weights, the stale pre-gate `MONTH` row is gone, and a factor the training slice cannot see is
+structurally weightless — on top of the 2026-11-28 **dividend truth + entry geometry**, the
+2026-11-28 **empty Ollama answer recovery**, the 2026-11-28 **forecast accuracy Phases 1–3** pass, the
+2026-11-26 **LLM measurement + structured-output** pass, the `More ▾` **stacking fix**, the frontend
+**wayfinding pass**, abuse-protection hardening, per-company PSE Edge disclosures, the feed-ledger,
+hand-cursor, row-opens-modal, typography/colour/whitespace, signal-list, typeface, compliance-hardening,
+responsive, brand-mark, header-organization, legibility, fast-model, Yahoo-delisting, feed-diagnostics,
+performance, accuracy and live-drift passes — each keeps its own section below).
+ Backend behaviour changed in three places: a chart with no dividend events is now re-read from the exchange's
+own dividends table, the horizon score carries an entry-geometry sleeve, and the learned model has two more
+columns. Everything past the LLM step is still unverified live here because `OLLAMA_API_KEY` is unset in the
+shell; the open security remediation is listed under *Remaining*.
+
+## Latest verification (2026-11-28 — the `train-all` refit, and a dividend column that cannot learn yet)
+
+Next step of the Pillar 1A/2A note: refit the four stored books so they learn the two new columns, then decide
+the ±12pp tilt widening **from the numbers**. The refit ran on the real `pse_signals.db` (no other instance was
+listening on `:5236`/`:5299`), and measuring it turned up something that had to be fixed before the numbers
+could be believed: the trailing-dividend column came back **inert** on all four books.
+
+**1 edited source file, 1 extended test file**, plus `README.md` and this memory bank. No new dependency, no
+migration, no DTO change, no golden snapshot moved, no frontend file.
+
+| Command / probe | Result |
+| --- | --- |
+| `dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test tests/PseSignalDesk.Tests/PseSignalDesk.Tests.csproj --nologo -v q` | `Passed! - Failed: 0, Passed: 578, Skipped: 1, Total: 579` (9 s) — 577 → 578, **+1** |
+| `POST /api/signals/train-all` on `:5299` (real DB, stopped after) | **200** in **39–41 s**, four report cards, every book at **14 weights** |
+| same, after the guard | identical numbers — the guarded column already carried weight `0`, so the rule locks in the honest state instead of changing it |
+| `GET /api/health/feeds` during the refit | `Ok 2026-11-27` — `PseEdgeHistory Ok 76/0/0`, `PseEdgeDividends Ok 50/14/0`, `YahooCharts Ok 5/76/0` |
+| regression bite check | with the floor temporarily forced back to the old `< 2` rule, the new test **fails** (`Failed: 1, Passed: 0`), so it is a real guard rather than a restatement |
+| live depth probe of the dividends table (`/tmp/probe_dividend_depth.py`) | JFC `Dec 16 2025 → Nov 23 2026`, TEL `Apr 16 → Aug 27 2026`, GLO `Dec 5 2025 → Nov 20 2026`, SM `May 2026`, BDO `Dec 29 2025 → Dec 4 2026`, MEG `Aug–Sep 2026` — **no ex-date older than December 2025** |
+| `lsof -ti :5299` | empty — the operator's instance and DB were left alone |
+
+**Before → after (stored `TrainedHorizonModels`, 2026-11-26 12-key fits → 2026-11-28 14-key fits)**
+
+| Horizon | Brier (vs baseline) before → after | Log-loss before → after | Status before → after |
+| --- | --- | --- | --- |
+| DAY | `0.22911` (0.23113) → **`0.22346` (0.22984)** | `0.65180` → `0.63868` | `PRIOR_FALLBACK` → `PRIOR_FALLBACK` |
+| WEEK | `0.24912` (0.24310) → **`0.23518` (0.23863)** | `0.69303` → `0.66301` | `PRIOR_FALLBACK` → `PRIOR_FALLBACK` |
+| MONTH | `0.25016` (0.25838) → **`0.24155` (0.24254)** | `0.69435` → `0.67630` | `LEARNED` → **`PRIOR_FALLBACK`** |
+| YEAR | `0.23733` (0.24295) → **`0.23138` (0.23569)** | `0.66832` → `0.65538` | `LEARNED` → `LEARNED` |
+
+Every book improved its held-out Brier and log-loss with the two new columns. The stale pre-gate `MONTH` row
+(`0.25016`, fitted 2026-11-26) is gone, and it was replaced by a **rejected** fit rather than a promoted one:
+the funded-policy expectancy gate (`policyExpectancyR > 0`, the expectancy of the held-out trades the model
+would actually have *funded*) fails on DAY/WEEK/MONTH, so `MONTH` rejoins `DAY`/`WEEK` as `PRIOR_FALLBACK` and
+cannot price. Only `YEAR` remains `LEARNED` (raw held-out expectancy `−0.0271R`, but its funded subset is
+positive).
+
+**What changed**
+
+1. **`MoneyManagerTrainingService.MinimumFeatureObservations = 25`** — `FitFeatureStats` now also returns the
+   per-column observation count; a column under the floor keeps a neutral mean (`0`) and unit scale, its design
+   column is zeroed in both slices, and its stored weight is written as `0`. So a factor the fit never faced
+   cannot price a live pick, instead of a handful of rows being standardised into a distribution that does not
+   exist. `Standardize(features, means, scales, usable)` carries the mask.
+2. **`Fit_gives_no_weight_to_a_factor_the_training_slice_barely_observed`** (new). Four in-slice declarations
+   of `±100` in a 200-trade tape produce weight `0` and stats `(0, 1)` for that column, while a fully reported
+   column keeps its fitted mean — and the test fails under the old `< 2` rule.
+
+**Decision — the ±12pp widening does not ship.** The one learned book (`YEAR`) still has negative raw held-out
+expectancy, and three of four books cannot price at all; widening a tilt bound that only one book can use, on
+this evidence, would be manufacturing confidence. `README.md`, `systemPatterns.md` and this file now say the
+bound was re-tested and stays.
+
+**Why the dividend column is inert (the finding).** The trailing yield is real at the metric level — a probe
+counted **371 of 7,038** evaluated sessions with a non-null yield, first `ICT 2026-06-15 1.88%` — but the
+exchange's dividends table only lists about **one year** of ex-dates (oldest seen `Dec 5 2025`), while the
+trainer's 70% slice on a five-year tape ends `2025-03-03`. The train slice therefore observes the column
+**zero** times, `dist_from_ema20_atr` observes it in every trade (mean `1.12–1.40` ATR, real scale), and only
+the held-out slice ever sees a yield. The column starts pricing when the training slice itself reaches
+December 2025; until then the dividend influence on live odds is the **structural** tilt in
+`ProbabilisticEdgeService`, not a learned weight.
+
+**Not run:** a `run-now` (needs `OLLAMA_API_KEY`), a full-market `FetchAsync` outside training (the refit did
+exercise the dividend fan-out across all 61 catalog names), and the golden diff — the goldens are JSON replays
+that never read `pse_signals.db`, so the refit cannot move them (all four still match).
+
+## Latest verification (2026-11-28 — dividend truth (Pillar 1A) + entry geometry and 14 features (Pillar 2A))
+
+Triggered by the four-pillar plan ("shift the desk from capital preservation to long-horizon PSE wealth
+compounding"). This pass ships the two slices that were independent of the blocked decisions: **the
+dividend feed the desk never had** and **the two PSE-native features plus the entry-geometry sleeve**.
+Split adjustment, the ±12pp tilt widening, Pillar 3 (uncapped runners / total-return ledger) and the
+retrain comparison are **not** in this pass (see *Remaining*).
+
+**1 new source file, 1 new test file, 3 edited test files, 9 edited source files**, plus `README.md`,
+`appsettings.json` and this memory bank. No new dependency, no EF migration, no DTO shape change, no
+golden snapshot moved (the feature vector grew 12 → 14, and every golden still matches).
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test tests/PseSignalDesk.Tests/PseSignalDesk.Tests.csproj --nologo -v q` | `Passed! - Failed: 0, Passed: 577, Skipped: 1, Total: 578` (8 s) — 561 → 577, **+16** (`PseEdgeDividendsTests` 9 new, `LearnedEdgeModelTests` +3, `QuantitativeFilterServiceTests` +4), all Golden tests green |
+| `cd frontend && npx tsc --noEmit && npm test` | `tsc` clean, `ℹ tests 90 · ℹ pass 90 · ℹ fail 0` — untouched, no frontend file changed |
+| live instance on `:5299` (`--no-launch-profile`, **copy** of `pse_signals.db` at `/tmp/pc-live.db`, stopped after) | `GET /api/research/{JFC,GLO,SCC,MAC,TEL}` → **200 ×5**; `metrics.trailingDividendPerShare/YieldPct/lastExDividendDate` = **JFC 5.55 / 3.78% / 2026-11-23**, **GLO 100.00 / 7.78% / 2026-11-20**, **TEL 92.00 / 9.78% / 2026-08-27**, **MAC 0.11 / 3.37% / 2026-09-09**, **SCC `null`** |
+| same instance, `GET /api/health/feeds` | **7 feeds in enum order**, `PseEdgeDividends Ok — successes 4, skips 1, failures 0`, `lastDetail: "TEL: 2 cash ex-date(s) from its own Edge page."` |
+| live Edge cross-check (`/tmp/probe*.py`, outside the repo) | JFC COMMON rows `2.11 (Nov 23 2026) + 1.33 (May 04 2026) + 2.11 (Nov 27 2025)` = **5.55** ✓; GLO `4 × Php25` = **100** with the `GLOBA`/`GLOBB` coupon sentences excluded ✓; TEL `2 × P46.00` = **92** ✓; SCC `no data.` ✓; **every row across 12 checked names is `Type of Dividend = Cash`** — MAC's 21% stock dividend is not published on this table at all |
+| `lsof -ti :5299` | empty — the verification instance was stopped; the operator's `:5236` instance and DB were not touched |
+
+**What it built**
+
+1. **`PseEdgeDividendSource`** (Infrastructure, `internal`) — the route, filters and parser described in
+   `techContext.md` (*PSE Edge dividends*): `POST dividends_and_rights_list.ax?DividendsOrRights=Dividends`
+   with `cmpy_id`; `COMMON` + `Cash` only; defensive peso parser (`Php2.11` / `Php 0.11` / `P0.133/Share` /
+   `Php0.11733697` / bare `0.63`, rejecting `N/A`, `%` coupons and prose); `Nov 23, 2026` / `May 04, 2026` /
+   `Jul 2, 2026` ex-dates; one circular = one declaration; same-ex-date declarations summed; future ex-dates
+   dropped; `no data.` = skip. Cached `PseEdgeDividendsCacheMinutes` (360) under `edge-dividends:{cmpy_id}`.
+2. **`PseMarketDataProvider.WithEdgeDividendsAsync`** — called after `WithEdgeHistoryAsync` in the single-stock
+   and daily-batch paths; merges only when the chart carries **no** dividends, so a live Yahoo answer always
+   wins. Failure is soft and ledgered under the new `FeedSource.PseEdgeDividends`; the read rides with
+   `EnablePseEdgeHistory` (Edge off = zero Edge traffic, preserving `EnablePseEdgeHistory_false_keeps_the_strict_yahoo_only_contract`)
+   and `EnablePseEdgeDividends` is the narrower rollback.
+3. **`QuantitativeFilterService.ScoreEntryGeometrySleeve`** — `(Close − Ema20) / Atr14`: `≥ 2.5` ATRs costs 6
+   points on DAY/WEEK/MONTH (YEAR exempt), `−0.5 … 1.0` ATRs above a rising `Sma200` earns 5 on
+   WEEK/MONTH/YEAR (DAY exempt). Reads persisted columns only — no fetch, no migration.
+4. **`TrainedModelFeatures` 12 → 14** — `dist_from_ema20_atr` and `trailing_dividend_yield_pct` appended;
+   `FromMetric` computes both (null when `Atr14`/`Ema20` is zero, null when the yield is unreported). The
+   trainer, the walk-forward fit and the live residual tilt pick them up unchanged; a 12-key stored fit still
+   prices identically because `ResidualLogOdds` resolves weights by key.
+
+**Superseded by the refit above.** `POST /api/signals/train-all` has since run (that section carries the
+before/after numbers and the observable-coverage floor it exposed). Still not run: any `run-now` (needs
+`OLLAMA_API_KEY`).
+
+
 
 ## Latest verification (2026-11-28 — an empty Ollama answer no longer fails the run)
 
@@ -859,17 +986,17 @@ Not run: `dotnet ef database update` (startup applies migrations), any network c
 - [x] `.gitignore` audited (build/test output, NuGet caches, local secrets, SQLite + sidecars + `.bak`, Node/Vite, `.env` overrides, editor/OS noise) with `git ls-files -i -c --exclude-standard` empty.
 - [x] `README.md`, the three legal notices, `security_audit_report.md`, the six memory-bank files and `.clinerules/memory-bank.md`, with the sync rules recorded in `techContext.md`.
 
-## Test inventory — 549 backend (548 executed + 1 skipped benchmark) + 87 frontend
+## Test inventory — 579 backend (578 executed + 1 skipped benchmark) + 90 frontend
 
 Counts are the executed `dotnet test --list-tests` rows per class (parameterised rows included) and the `ℹ tests` figure per frontend file.
 
-### Backend — `backend/tests/PseSignalDesk.Tests` (38 files)
+### Backend — `backend/tests/PseSignalDesk.Tests` (39 files)
 
 | Layer | Suite | Cases |
 | --- | --- | --- |
 | Domain | `PseBoardLotServiceTests` — 15 tier/tick rows, bracket crossing, static band, plan repair, dated per-leg fees + commission floor, net R:R in pesos, break-even, EV, Quarter-Kelly, risk budget, gap fills, ADV, slippage | 78 |
 | Domain | `LiveDriftPolicyTests` — standard errors, required gaps, multipliers, classification thresholds, hysteresis, `Describe` copy | 8 |
-| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, mean+median liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring, the disclosure fan-out (equals the pre-trap candidate list; illiquid names and a zero limit yield none), point-in-time scoping, O(n) `ComputeEmaSeries` parity on every prefix, `IsAscendingByDate` | 40 |
+| Application | `QuantitativeFilterServiceTests` — indicators, stages, weighted score, mean+median liquidity floor, top-N cap, breadth, macro dials, rotation, disclosure trap wiring, the disclosure fan-out (equals the pre-trap candidate list; illiquid names and a zero limit yield none), point-in-time scoping, O(n) `ComputeEmaSeries` parity on every prefix, `IsAscendingByDate`, and the entry-geometry sleeve (chase penalty on DAY/WEEK/MONTH, YEAR exempt, pullback bonus above a rising 200D, no bonus below it) | 44 |
 | Application | `BacktestGoldenTests` — the four-horizon replay serialised against checked-in snapshots (plus a `Skip`ped benchmark that only prints time/allocations) | 5 |
 | Application | `QuantitativeFilterGoldenTests` — `EvaluateStock`'s metrics against a checked-in snapshot | 1 |
 | Application | `OrderTicketCalculatorTests` — sizing, verdicts, governor band, drift multiplier (incl. `HALTED` → 0), lot step-down and the risk-budget refusal, heat/sector/cash caps, slippage, execution guidance, all seven pyramid rules | 31 |
@@ -882,13 +1009,14 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 | Application | `WaveTradePlanCalculatorTests` — plan levels, chase ceiling, entry status, ladder, trim size | 12 |
 | Application | `SignalPipelineServiceTests` — discards, gates, drift, drops, persistence, `502`, a rights offering that only the candidate's own company page names dropping it before the model; the quant rank and the engine provenance are persisted with the run | 13 |
 | Application | `SignalJsonParserTests` — fences, prose, brace-in-string, numeric strings, contract failure, an echoed `rank`/`drift_status` ignored | 10 |
-| Application | `LearnedEdgeModelTests` — activation gate, ±6pp tilt, Kelly rescale, probability clamp | 7 |
+| Application | `LearnedEdgeModelTests` — activation gate, ±6pp tilt, Kelly rescale, probability clamp, the 14-column order (append-only), `dist_from_ema20_atr`/yield null handling, and a stored 12-key fit still pricing identically | 10 |
 | Application | `SectorRotationServiceTests` — mapping, leaders/laggards, strength | 7 |
 | Application | `MarketDirectionServiceTests` — pillar blend, clamp, bearish override, unreported dials | 6 |
 | Application | `DailyQuotationImportServiceTests` — live/upload paths, overlays, unmatched tickers, size guard | 4 |
-| Application | `MoneyManagerTrainingServiceTests` — promotion gate, purged split, inactive fallback | 3 |
+| Application | `MoneyManagerTrainingServiceTests` — promotion gate, purged split, inactive fallback, and the observable-coverage floor (a column observed in 4 of 140 training trades keeps weight `0` and stats `(0,1)` while a fully reported column keeps its fitted mean) | 4 |
 | Infrastructure | `PseMarketDataProviderTests` — symbol normalisation, candle sanitation, zero-volume echoes, proxy fallback, FX staleness, macro dials, chart-cache reuse, `InvalidateCache`, distinct-constituent counting, ordered failure reasons, the seven Edge-fallback cases (delisted Yahoo symbol, peso-`VALUE` volume, duplicate sessions, both-feed diagnostic, a full session from Edge, short-series diagnostic, `EnablePseEdgeHistory = false`), and the four feed-ledger cases (empty disclosure page → degraded, Edge ok + Yahoo ok-with-skips, a 500 Edge chart → failed, one observation per name per run on a cached body), and the captured live disclosure row (a month-name announce date read as a date, the form/report numbers never read as subjects) | 34 |
 | Infrastructure | `PseEdgeCompanyDisclosuresTests` — `cmpy_id` resolved through `autoComplete` and the `?keyword=` route (never a bare `search.ax` query), rolling-window filter, an undatable row dropped rather than back-dated, no company page → skip not failure, `500` → failed, limit 0 → zero requests, the cap honoured with distinct ids, ten-minute cache reuse | 8 |
+| Infrastructure | `PseEdgeDividendsTests` — the live dividends table read end to end through the provider: the `COMMON` row kept and the `JFCPB` preferred rows ignored, every rate spelling (`Php 0.11`, `P0.133/Share`, `Php0.11733697`, bare `0.63`), `N/A`/property prose/percentage coupons dropped, a future ex-date excluded, one circular counted once with same-ex-date declarations summed, `no data.` → skip with a `null` yield, `500` → reported failure, `EnablePseEdgeDividends = false` making no dividend request, and the six-hour table cache reused across calls | 9 |
 | Infrastructure | `MarketDataOptionsTests` — the binder's collection doubling reproduced and undone, order-preserving de-duplication, case-insensitive `DistinctNonBlank` | 4 |
 | Infrastructure | `MarketDataCacheTests` — shared task under concurrency, no refetch inside the TTL, a failure is never served, TTL refetch, an abandoned caller cannot cancel, pre-cancelled does nothing, `Clear`, oldest-entry eviction, eviction safe against a concurrent `Clear()` | 9 |
 | Infrastructure | `FeedHealthRegistryTests` — every source unknown on a fresh registry, success→ok, lone failure→failed, failure+success→degraded, explicit degraded observation, only-skips→degraded, skips don't degrade a producing feed, `BeginRun` clears run-scoped counters but keeps embeddings, timestamps survive a run, 500 concurrent records counted exactly, 240-char detail truncation | 10 |
@@ -925,7 +1053,7 @@ Counts are the executed `dotnet test --list-tests` rows per class (parameterised
 - [ ] **Pillar 2 remainder** — `TrainedHorizonModel.FeatureKeysJson` (+ loader refusal on schema mismatch) so a book cannot price a feature vector it was not trained on.
 - [ ] **Pillar 5 remainder** — `InvalidationFirstPlanBuilder`, pipeline inversion (invalidation before target), `TradeExitLadderPolicy` as the single ladder, `OllamaTopPick` audit-only fields.
 - [ ] **Pillar 4 remainder** — real walk-forward folds (disjoint rolling windows + fold report); today the replay refits one rolling model.
-- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 548 executed + 1 skipped / 87). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
+- [ ] **Frontend + docs** — mirror new server fields in `types/signals.ts` / `plainAdvice.ts`, extend `PseDisclosureClassifier` categories, and keep the README/memory-bank counts in sync (now 577 executed + 1 skipped / 90). `signalsApi.orderTicket` still has no caller and no `horizon` argument, so the manual sizing endpoint stays unthrottled by design.
 
 ### Data truth — the 2026-11-26 assessment, slices 3–4 (next up)
 
@@ -934,7 +1062,9 @@ The audit behind slice 1 found seven data sources and one LLM, and the failure m
 - [x] **Slice 2 — restore the disclosure/trap pillar.** `PseEdgeDisclosureSource` resolves `ticker → cmpy_id` through the existing `PseEdgeSymbolSearchUrl` and fetches **one page per screened candidate** (`companyDisclosures/search.ax?keyword={cmpy_id}`, ≤25/run, 8-way, 10-min cached), so attribution is correct by construction instead of guessed from a market-wide headline table. `DisclosureCompanyFanoutLimit = 25` is the setting; `0` is the rollback. The market-wide scrape stays as the fallback, and the same probe fixed it too (month-name announce dates, form/report identifier cells). Live: 22–47 filings per named company vs **3 of 60** names from the fallback. The planned `companyPage/companyDisclosures.do?cmpy_id=` route was probed and is **404** — it was never shipped.
 - [ ] **Slice 3 — surface the degradation in the run itself.** When disclosures answer but attribute nothing, emit the existing `SignalDtos.Warnings` line "trap flags are unenforced this session"; flag an index-proxy fallback the same way. The ledger reports it after the fact; this puts it on the screen the picks are read from.
 - [~] **Slice 4 — measure the model.** **Shipped (2026-11-26, LLM pass):** `20261126124346_AddSignalRankingProvenance` (`SignalItems.QuantPreScore`/`QuantRank`, 12 run-provenance columns incl. `PromptHash`), `OllamaGenerationMetadata` on the engine seam, `SignalRunDto.ModelProvenance`, `SignalItemDto.QuantPreScore`/`QuantRank`, and `SignalScorecardDto.RankingQuality` (mean Spearman rho model-vs-screen + each side's top-three win rate / mean R). The ranking call is also no longer a bare JSON-mode chat: schema `format`, `seed`, `num_ctx`, `num_predict`, `top_p`, optional `think`, and the dead `rank`/`drift_status`/`previous_rank` fields are gone. **Still open:** opt-in prompt archive (`Signals:ArchivePrompts`, default false) + `POST /api/signals/eval-prompt-replay` behind the existing `Expensive` policy — deliberately deferred until a graded sample exists to replay against.
-- [ ] **Deliberately deferred:** `CorporateActionAdjuster` (unadjusted prices mean a split distorts ATR, RS63 and every barrier), the dividends feed (`null` today), embedding access (`/api/embed` answers `401` for this key, so retrieval is lexical), the DQR staying manual-only, and the F-03 prompt-fencing patch (`security_audit_report.md:1561`, drafted but unapplied — keep it separate so a prompt change is never conflated with a data fix).
+- [x] **Refit + observable coverage (2026-11-28 refit).** `POST /api/signals/train-all` ran against the real store: all four books now carry 14 weights, every held-out Brier improved, the stale pre-gate `MONTH` row (`0.25016`) is replaced, and `MONTH` is now honestly `PRIOR_FALLBACK`. `MoneyManagerTrainingService.MinimumFeatureObservations = 25` makes a thinly-observed factor weightless (neutral mean, unit scale, zero weight, zeroed design column), which is why the dividend-yield column is inert until the training slice reaches December 2025 — see the top section and `systemPatterns.md`.
+- [ ] **±12pp tilt widening — decided: not shipped (2026-11-28).** Only `YEAR` is `LEARNED` and its raw held-out expectancy is `−0.0271R`; widening a bound that three of four books cannot use would be manufacturing confidence. Revisit when more than one book clears the funded-policy expectancy gate with positive expectancy.
+- [ ] **Deliberately deferred:** `CorporateActionAdjuster` (unadjusted prices mean a split distorts ATR, RS63 and every barrier; the Edge dividends table publishes **cash only** — every row across the catalog is `Type of Dividend = Cash` and MAC's 21% stock dividend is absent — so no split ratio may be inferred from it), embedding access (`/api/embed` answers `401` for this key, so retrieval is lexical), the DQR staying manual-only, and the F-03 prompt-fencing patch (`security_audit_report.md:1561`, drafted but unapplied — keep it separate so a prompt change is never conflated with a data fix).
 
 ### UI/UX follow-ups (2026-11-26 legibility pass)
 
@@ -993,16 +1123,17 @@ The audit behind slice 1 found seven data sources and one LLM, and the failure m
 ## Known issues and limitations
 
 - **The drift verdict is invisible in the UI.** Sizing changes and the ticket carries the `Describe` warning, but no DTO exposes `LiveDriftStatus`, so the pages cannot badge it.
-- **Trailing dividend yield is unreported on the live tape.** Yields are parsed from the Yahoo chart `events.dividends` block, and Yahoo no longer publishes PSE charts; the Edge history carries prices and turnover only. The desk reports `null` (UI `—`) rather than assuming a yield, so the dividend tilt is dormant until a dividend source lands.
+- **Trailing dividend yield is now live, with an upstream ceiling.** `PseEdgeDividendSource` reads the exchange's own per-company dividends table and the yield reaches `StockDailyMetric.TrailingDividendYieldPct` (verified live 2026-11-28: JFC 5.55/share 3.78%, GLO 100.00 7.78%, TEL 92.00 9.78%, MAC 0.11, SCC `null`). Limits that must not be papered over: coverage is uneven (SCC/PXP answer `no data.`, `PHEN` has no Edge company page), the table lists **cash only** (property dividends print as prose, stock dividends are not published at all), no pagination exists (`pageNo` is inert), and — measured 2026-11-28 — **its history is only about one year** (oldest ex-date seen `Dec 5 2025`), so no session before December 2025 can have a trailing dividend. A name with no row reports `null` (UI `—`), never 0%. The 4.5% cash-yield sleeve threshold is still a product default, not a fitted number.
+- **The learned book is one of four, and the dividend weight is honestly zero.** After the 2026-11-28 refit only `YEAR` is `LEARNED`; `DAY`/`WEEK`/`MONTH` are `PRIOR_FALLBACK` because the funded-policy expectancy gate fails (their held-out Brier still improved, to `0.2235` / `0.2352` / `0.2415`). `trailing_dividend_yield_pct` carries weight `0` and neutral stats on all four books: the exchange's ~1-year dividend history does not reach the 70% training slice (which ends `2025-03-03`), and `MinimumFeatureObservations = 25` now makes that structural rather than accidental. The column starts pricing once the training slice itself reaches December 2025.
 - **The live disclosure pillar currently yields nothing.** `edge.pse.com.ph/announcements/search.ax` answers `200` with a "no records found" page (2.4 KB) and `companyDisclosures/search.ax` returns rows with **no company column** (filing type, timestamp, form, reference only), so `AttributeFilings` cannot attach a headline to a ticker. The code path and its tests are intact; the upstream layout changed. Fixing it means reading a per-company disclosure listing (or the filing's own company id) rather than the market-wide table.
 - **Edge history stops where the exchange stops printing.** `VLL` (newest bar 2026-06-01), `RRHI` (2026-07-10) and `VREIT` (2026-06-01) have no recent Edge sessions and are skipped honestly (`no live daily series … PSE Edge: 160 bar(s), newest 2026-06-01.`); `RCB` lags one session. Expect those names missing from a session until the exchange resumes them.
 - **The drift read costs one full ledger pass.** `EvaluateLiveDriftAsync` loads the horizon's runs *with* their items on every book build (so `GET /api/signals/latest` pays for it too) and writes only when the verdict or the graded count changed. That is one query per book, not per ticket, but it is the expensive part of a list render; a `LIMIT 30` projection over graded rows is the obvious next optimisation.
-- **Prices are unadjusted.** History is raw OHLC; a split inside a lookback still distorts ATR/RS/barriers until `CorporateActionAdjuster` lands.
+- **Prices are unadjusted.** History is raw OHLC; a split inside a lookback still distorts ATR/RS/barriers until `CorporateActionAdjuster` lands. The Edge dividends feed cannot help: it publishes cash rows only, so a stock dividend (MAC's 21%) has no ratio to read anywhere on it.
 - **Unverified live feeds.** Yahoo no longer serves PSE equities at all (every `{TICKER}.PS` → `404`, `PSEI.PS` → a sparse legacy series plus a live price), so the PSE tape now comes from PSE Edge daily history, which **is** verified end-to-end here (283 real bars per ticker, proxy index, `GET /api/research/JFC` `200`). Still unobserved live: anything past the LLM step (`OLLAMA_API_KEY` unset), the DQR live templates and the replay's PSEi benchmark (the index has no Edge series either). By design a failure is a `503`, never synthetic data.
 - **The `MarketDataOptions` lists are additive.** `ConfigurationBinder` appends a bound section to the collection the class already initialized, so `appsettings.json` entries *extend* the code defaults and cannot remove one. `MarketDataOptions.Normalize()` (applied in `Program.cs` and again in the provider constructor) makes that harmless by de-duplicating, which is why the shipped file can keep listing the same 12 heavyweights the class already declares.
 - **No UI automation.** Responsiveness and the Simple/Pro switch are verified by reading code and by `tsc`, not by a test.
 - **Deliberately in-sample walk-forward.** `WalkForwardEdge` accepts its residual model by comparing it to the base rate on its own trades; it is a replay aid, not a validated out-of-sample result — and it never writes `TrainedHorizonModels`.
-- **Bootstrap success path unobserved.** Only the failure branch (`cold-boot refit skipped`) has been seen; the `LEARNED` path still needs a network run.
+- **Bootstrap success path unobserved.** Only the failure branch (`cold-boot refit skipped: every horizon already carries a fitted model`) has been seen. A promoted book has been produced — `POST /api/signals/train-all` on 2026-11-28 promoted `YEAR` — but never by the scheduler's own cold-boot branch.
 - **SQLite decimals.** Amounts are `decimal` and read back through SQLite's `TEXT` provider; the desk treats values as advisory and rounds at the board lot.
 - **Calendar, not exchange calendar.** The scheduler fires on weekdays 15:35 Asia/Manila and does not know PSE holidays.
 - **Thin books start on the prior.** Below 25 held-out trades (training) or 20 graded picks (calibration) the desk prices off the structural prior with small tilts, so a fresh database reports `PRIOR_FALLBACK`.

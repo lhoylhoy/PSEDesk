@@ -1,8 +1,122 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-28 (empty Ollama answer recovery: `done_reason`/`thinking` parsing, one no-thinking retry + per-run model latch, actionable `502` detail — backend **561 + 1 skipped**, frontend **87**)
-**Last feature pass:** 2026-11-28 (empty Ollama answer recovery, following the forecast-accuracy Phases 1–3 pass)
-**Current task:** The empty-answer recovery is implemented and verified (uncommitted per repo convention). Phase 4 of the forecast-accuracy plan (corporate-action split adjuster, dividend feed audit, and live DB migration/retrain + live `eval-llm` run once `OLLAMA_API_KEY` is set) remains open.
+**Last updated:** 2026-11-28 (the `train-all` refit + observable-coverage floor — backend **578 + 1 skipped**, frontend **90**)
+**Last feature pass:** 2026-11-28 (`MoneyManagerTrainingService.MinimumFeatureObservations`, four books refit to 14 weights)
+**Current task:** Pillars 1A and 2A are implemented, verified and now **refit** (uncommitted per repo convention). Open: split adjustment (still blocked on the corporate-action outcome rule), the ±12pp tilt widening (**decided against** on the 2026-11-28 numbers), Pillar 3 (runners / total-return ledger, blocked on label-ledger parity) and Pillar 4 (verification sweep).
+
+## Session note (2026-11-28) — the refit, and a dividend column that cannot learn yet
+
+Executing step 1 of the previous note (`POST /api/signals/train-all`, then decide the ±12pp widening **from the
+numbers**). The refit ran on the real `pse_signals.db` — nothing was listening on `:5236` or `:5299` — and the
+measurement exposed a problem that had to be fixed before its numbers meant anything: the trailing-dividend
+column came back **inert** (weight `0`, stats `mean 0 / scale 1`) on all four books, even though the dividend
+feed reported 50 successes in that very run.
+
+| Command / probe | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test tests/PseSignalDesk.Tests/PseSignalDesk.Tests.csproj --nologo -v q` | `Passed! - Failed: 0, Passed: 578, Skipped: 1, Total: 579` (9 s) — 577 → 578, **+1** |
+| `POST /api/signals/train-all` on `:5299` (real DB, stopped after) | **200** in **39–41 s**; four books, **14 weights each** |
+| `GET /api/health/feeds` during the refit | `Ok 2026-11-27` — `PseEdgeDividends Ok 50/14/0`, `PseEdgeHistory Ok 76/0/0`, `YahooCharts Ok 5/76/0` |
+| instrumented run (temporary log, then removed) | `stocks 61, withDividends 47`; `metrics 7038, withYield 371`, first `ICT 2026-06-15 1.88%` → the *metric* has yields, the *fit* never sees them |
+| live depth probe of the dividends table (`/tmp/probe_dividend_depth.py`) | oldest ex-date anywhere: **`Dec 5 2025`** (GLO), `Dec 16 2025` (JFC), `Apr 16 2026` (TEL), `Dec 29 2025` (BDO) |
+| regression bite check | with the floor temporarily reverted to the old `< 2` rule the new test **fails** (`Failed: 1`) |
+| `lsof -ti :5299` | empty — operator's instance and DB untouched |
+
+**Before → after** (stored fits; `PRIOR_FALLBACK` cannot price)
+
+| Horizon | Brier before → after | Log-loss before → after | Status |
+| --- | --- | --- | --- |
+| DAY | `0.22911` → **`0.22346`** (baseline `0.22984`) | `0.65180` → `0.63868` | `PRIOR_FALLBACK` → `PRIOR_FALLBACK` |
+| WEEK | `0.24912` → **`0.23518`** (`0.23863`) | `0.69303` → `0.66301` | `PRIOR_FALLBACK` → `PRIOR_FALLBACK` |
+| MONTH | `0.25016` → **`0.24155`** (`0.24254`) | `0.69435` → `0.67630` | `LEARNED` → **`PRIOR_FALLBACK`** |
+| YEAR | `0.23733` → **`0.23138`** (`0.23569`) | `0.66832` → `0.65538` | `LEARNED` → `LEARNED` |
+
+**What changed**
+
+1. **`MoneyManagerTrainingService.MinimumFeatureObservations = 25`** — `FitFeatureStats` now returns the
+   per-column observation count; a column under the floor keeps a neutral mean (`0`) and unit scale, is zeroed
+   in the design matrix for **both** slices, and is stored with weight `0`. `Standardize` takes the mask.
+2. **`Fit_gives_no_weight_to_a_factor_the_training_slice_barely_observed`** — four in-slice declarations of
+   `±100` in a 200-trade tape yield weight `0` / stats `(0, 1)`, while a fully reported column keeps its fitted
+   mean. Verified to fail under the old rule.
+
+**Decisions recorded**
+
+- **The dividend column is inert, and that is correct.** The exchange's dividends table lists only about a year
+  of ex-dates, and the 70% training slice ends `2025-03-03`, so no training trade can observe a trailing yield.
+  Live dividend influence stays with the **structural** tilt in `ProbabilisticEdgeService`; the learned column
+  starts pricing when the training slice itself reaches December 2025. Nothing was faked to make it learn.
+- **The ±12pp widening does not ship.** All four Brier scores improved, but the funded-policy expectancy gate
+  still fails on DAY/WEEK/MONTH, and `MONTH` was demoted from `LEARNED` (its old `0.25016` row predated the
+  `< 0.25` gate). A wider tilt bound only `YEAR` could use would be manufacturing confidence.
+- **Coverage is a gate, not a hope.** Any factor seen in fewer than 25 training trades is weightless by
+  construction, so a short feed history can never silently become a coefficient.
+
+**Next**
+
+1. Revisit the ±12pp widening only when more than one book clears the funded-policy expectancy gate; the weekly
+   scheduler refit will pick up the deeper dividend history by itself.
+2. Inspect the golden diff after a future refit — none today: the goldens are JSON replays and never read
+   `pse_signals.db` (all four still match).
+3. Pillar 3 only after label/ledger parity is settled (`ComputeRecommendedTrimShares` can return **0**, and a
+   half-banked target inflates `ValidationWinRate`, which `LiveDriftPolicy` throttles against).
+4. Pillar 1B (`CorporateActionAdjuster`) still needs a terminal `CORPORATE_ACTION` outcome rule; the dividends
+   feed cannot supply a ratio (cash only).
+
+## Session note (2026-11-28) — dividend truth (Pillar 1A) and entry geometry (Pillar 2A)
+
+The four-pillar plan ("capital preservation → long-horizon PSE wealth compounding") was reviewed against
+the source and the live tape; this pass ships the two slices that no open decision blocked. **Split
+adjustment, the ±12pp tilt widening, Pillar 3 and Pillar 4 are deliberately untouched.**
+
+| Command | Result |
+| --- | --- |
+| `cd backend && dotnet build PseSignalDesk.slnx --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test tests/PseSignalDesk.Tests/PseSignalDesk.Tests.csproj --nologo -v q` | `Passed! - Failed: 0, Passed: 577, Skipped: 1, Total: 578` (8 s) — 561 → 577, **+16**, all Golden tests green |
+| `cd frontend && npx tsc --noEmit && npm test` | `tsc` clean, `ℹ tests 90 · ℹ pass 90 · ℹ fail 0` — untouched |
+| live `:5299` on a **copy** of `pse_signals.db` | `GET /api/research/{JFC,GLO,SCC,MAC,TEL}` → 200 ×5; trailing per share **JFC 5.55 / GLO 100.00 / TEL 92.00 / MAC 0.11 / SCC `null`**, yields 3.78 / 7.78 / 9.78 / 3.37 / — % |
+| same instance, `GET /api/health/feeds` | **7 feeds**, `PseEdgeDividends Ok` (4 successes, 1 skip, 0 failures) |
+| live Edge cross-check | JFC `2.11 + 1.33 + 2.11` = 5.55 ✓; GLO `4 × Php25` = 100 with `GLOBA`/`GLOBB` coupons excluded ✓; TEL `2 × P46.00` = 92 ✓; SCC `no data.` ✓; every row of 12 checked names is `Type of Dividend = Cash` |
+| `lsof -ti :5299` | empty — operator's `:5236` instance/DB untouched |
+
+**What changed**
+
+1. **`PseEdgeDividendSource`** (Infrastructure, `internal`): `POST companyPage/dividends_and_rights_list.ax?DividendsOrRights=Dividends`
+   with `cmpy_id`; **`COMMON` + `Cash` only** (JFC prints `JFCPB` at Php10.60 beside `COMMON` at Php2.11);
+   defensive peso parser (`Php2.11`, `Php 0.11`, `P0.133/Share`, `Php0.11733697`, bare `0.63`; rejects `N/A`,
+   `%` coupons, prose); `Nov 23, 2026` / `May 04, 2026` / `Jul 2, 2026` ex-dates; one circular = one
+   declaration; same-ex-date declarations summed; future ex-dates dropped; `no data.` → skip (null yield,
+   never 0%). Cached `PseEdgeDividendsCacheMinutes` (360) so four horizon runs download it once.
+2. **`PseMarketDataProvider.WithEdgeDividendsAsync`** merges only when the chart carries **no** dividends, so a
+   live Yahoo answer always wins; soft failure, ledgered under the new `FeedSource.PseEdgeDividends`. The read
+   rides with `EnablePseEdgeHistory` (Edge off = zero Edge traffic) and `EnablePseEdgeDividends` is the narrower
+   rollback.
+3. **`QuantitativeFilterService.ScoreEntryGeometrySleeve`**: `(Close − Ema20) / Atr14` — `≥ 2.5` ATRs costs 6 on
+   DAY/WEEK/MONTH (YEAR exempt), `−0.5 … 1.0` ATRs above a rising `Sma200` earns 5 on WEEK/MONTH/YEAR (DAY
+   exempt). Persisted inputs only: no fetch, no migration.
+4. **`TrainedModelFeatures` 12 → 14**: `dist_from_ema20_atr` + `trailing_dividend_yield_pct` appended.
+   `ResidualLogOdds` resolves weights by key, so a 12-key stored fit prices identically (pinned by a test) and
+   the next refit learns two more weights. `rsi_14` was **not** added — it is perfectly collinear with the
+   existing `rsi_distance_from_50`.
+
+**Decisions recorded**
+
+- **Cash only, no split inference.** Every row of the dividends table is `Type of Dividend = Cash` and MAC's
+  21% stock dividend is not published there at all, so `CorporateActionAdjuster` remains the only path to
+  adjusted prices — and it still needs a terminal `CORPORATE_ACTION` outcome rule before it can grade stored
+  history.
+- **Yahoo wins when it answers.** The Edge table fills a gap; it never overrides a feed that reported, so the
+  yield cannot depend on fetch order.
+- **Feature columns append, never reorder.** `ResidualLogOdds` keys by name, which is what makes the growth
+  backward compatible without a `FeatureKeysJson` migration.
+
+**Next** — superseded by the refit note above, which ran the `train-all`, recorded the before/after Brier and decided the ±12pp widening (**not shipped**).
+
+1. Pillar 3 only after the label/ledger parity question is settled (`ComputeRecommendedTrimShares` can return
+   **0**, and a half-banked target inflates `ValidationWinRate`, which `LiveDriftPolicy` throttles against).
+2. Pillar 4: inspect the golden diff after the refit (none — the goldens never read `pse_signals.db`).
+
 
 ## Session note (2026-11-28) — an empty Ollama answer no longer fails the run
 

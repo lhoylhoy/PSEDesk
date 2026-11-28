@@ -117,6 +117,76 @@ public sealed class LearnedEdgeModelTests
         Assert.Equal(baseline.WinProbability, learned.WinProbability);
         Assert.Equal(0m, learned.LearnedEdgeTilt);
     }
+    [Fact]
+    public void TrainedModelFeatures_append_the_entry_and_income_columns_without_reordering_the_first_twelve()
+    {
+        // A stored fit addresses its weights by key, so the twelve original columns have to keep
+        // both their order and their names; only the tail may grow.
+        Assert.Equal(14, TrainedModelFeatures.Length);
+        Assert.Equal(TrainedModelFeatures.Length, TrainedModelFeatures.Keys.Length);
+        Assert.Equal(TrainedModelFeatures.Keys.Length, TrainedModelFeatures.Labels.Length);
+        Assert.Equal("relative_strength_63d", TrainedModelFeatures.Keys[0]);
+        Assert.Equal("log10_turnover_20d", TrainedModelFeatures.Keys[11]);
+        Assert.Equal("dist_from_ema20_atr", TrainedModelFeatures.Keys[12]);
+        Assert.Equal("trailing_dividend_yield_pct", TrainedModelFeatures.Keys[13]);
+    }
+
+    [Fact]
+    public void TrainedModelFeatures_reads_the_entry_distance_and_leaves_an_unreported_yield_null()
+    {
+        var metric = new StockDailyMetric
+        {
+            ClosePrice = 100m,
+            Ema20 = 90m,
+            Atr14 = 2m,
+            Rsi14 = 55m,
+            TrailingDividendYieldPct = 3.5m
+        };
+
+        var features = TrainedModelFeatures.FromMetric(metric);
+
+        Assert.Equal(14, features.Length);
+        Assert.Equal(5m, features[12]);
+        Assert.Equal(3.5m, features[13]);
+
+        // Unreported stays null: a payer the feed did not see is not a 0% payer.
+        metric.TrailingDividendYieldPct = null;
+        Assert.Null(TrainedModelFeatures.FromMetric(metric)[13]);
+
+        // A zero daily range cannot express a distance, so it is not reported as 0 ATRs.
+        metric.Atr14 = 0m;
+        Assert.Null(TrainedModelFeatures.FromMetric(metric)[12]);
+    }
+
+    [Fact]
+    public void ResidualTilt_still_prices_a_fit_stored_before_the_new_columns_existed()
+    {
+        // A promoted model trained on the original twelve keys has no weight for the appended two.
+        // The engine must skip them (mean imputation) rather than misalign the older weights.
+        var legacyWeights = TrainedModelFeatures.Keys.Take(12).ToDictionary(
+            key => key,
+            key => key == TiltKey ? 1.0d : 0.0d,
+            StringComparer.Ordinal);
+        var legacyStats = TrainedModelFeatures.Keys.Take(12).ToDictionary(
+            key => key,
+            _ => new FeatureStat(0d, 1d),
+            StringComparer.Ordinal);
+
+        var legacy = LearnedEdgeModel.FromActive(BuildModel(
+            isActive: true,
+            weightsJson: TrainedModelJson.WriteWeights(legacyWeights),
+            statsJson: TrainedModelJson.WriteStats(legacyStats)))!;
+        var current = LearnedEdgeModel.FromActive(BuildModel(isActive: true))!;
+
+        var features = NeutralFeatures();
+        features[0] = 0.4m;
+        features[12] = 9m;
+        features[13] = 40m;
+
+        Assert.Equal(current.ResidualTilt(0.5m, features), legacy.ResidualTilt(0.5m, features));
+    }
+
+
 
     private static SetupEdgeRequest StrongRequest() => new(
         EntryPrice: 100m,
@@ -131,7 +201,7 @@ public sealed class LearnedEdgeModelTests
         WeinsteinStage: "STAGE_2",
         BreadthAboveSma50Pct: 66m);
 
-    /// <summary>All twelve factors at their training mean, so only the tilted one can move.</summary>
+    /// <summary>All fourteen factors at their training mean, so only the tilted one can move.</summary>
     private static decimal?[] NeutralFeatures()
     {
         var features = new decimal?[TrainedModelFeatures.Length];

@@ -4,14 +4,19 @@ using PseSignalDesk.Domain.Entities;
 namespace PseSignalDesk.Application.Models;
 
 /// <summary>
-/// The twelve scale-free factor inputs the money-manager model learns on. Every value is a
+/// The fourteen scale-free factor inputs the money-manager model learns on. Every value is a
 /// ratio, a percentage or a bounded score, so the same weight means the same thing whether
 /// it is applied to a PHP 1 small cap or a PHP 400 large cap. A missing input is kept null
 /// and imputed to the training mean at inference time — it is never guessed as zero.
+/// <para>
+/// The last two columns were added after the first twelve were promoted. Appending is safe for a
+/// stored model: the live engine looks each weight up by key, so a fit that has no weight for a
+/// new column contributes nothing for it instead of misaligning the older ones.
+/// </para>
 /// </summary>
 public static class TrainedModelFeatures
 {
-    public const int Length = 12;
+    public const int Length = 14;
 
     /// <summary>Stable JSON keys. Order is the model's column order and must never change.</summary>
     public static readonly string[] Keys =
@@ -27,7 +32,9 @@ public static class TrainedModelFeatures
         "stage_2",
         "above_sma_150",
         "rsi_distance_from_50",
-        "log10_turnover_20d"
+        "log10_turnover_20d",
+        "dist_from_ema20_atr",
+        "trailing_dividend_yield_pct"
     };
 
     public static readonly string[] Labels =
@@ -43,8 +50,11 @@ public static class TrainedModelFeatures
         "Weinstein Stage 2",
         "Trading above the 150D average",
         "RSI14 distance from 50",
-        "Log10 of 20D turnover"
+        "Log10 of 20D turnover",
+        "Distance above EMA20 (in ATR)",
+        "Trailing 12M cash dividend yield (%)"
     };
+
 
     public static string LabelFor(string key)
     {
@@ -74,7 +84,15 @@ public static class TrainedModelFeatures
             metric.Rsi14 - 50m,
             metric.AvgTurnover20dPhp > 0m
                 ? decimal.Round((decimal)Math.Log10((double)metric.AvgTurnover20dPhp), 6)
-                : null);
+                : null,
+            // How far the close sits above its short mean, in units of its own daily range: a
+            // scale-free measure of whether the entry is a pullback or a chase. Both inputs are
+            // already persisted, so this needs no extra fetch.
+            metric.Ema20 > 0m && metric.Atr14 > 0m
+                ? decimal.Round((metric.ClosePrice - metric.Ema20) / metric.Atr14, 6)
+                : null,
+            // Unreported stays null (mean-imputed) instead of being read as a 0% payer.
+            metric.TrailingDividendYieldPct);
     }
 
     /// <summary>
@@ -94,7 +112,9 @@ public static class TrainedModelFeatures
         decimal? stage2,
         decimal? aboveSma150,
         decimal? rsiDistanceFrom50,
-        decimal? log10Turnover20d) =>
+        decimal? log10Turnover20d,
+        decimal? distFromEma20Atr,
+        decimal? trailingDividendYieldPct) =>
         new[]
         {
             relativeStrength63d,
@@ -108,9 +128,12 @@ public static class TrainedModelFeatures
             stage2,
             aboveSma150,
             rsiDistanceFrom50,
-            log10Turnover20d
+            log10Turnover20d,
+            distFromEma20Atr,
+            trailingDividendYieldPct
         };
 }
+
 
 /// <summary>Mean and scale of one feature, fitted on the training slice only.</summary>
 public sealed record FeatureStat(double Mean, double Scale);

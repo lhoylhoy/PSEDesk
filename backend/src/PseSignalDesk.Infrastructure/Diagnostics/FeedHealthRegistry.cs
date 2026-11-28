@@ -25,6 +25,7 @@ public sealed class FeedHealthRegistry : IFeedHealthRegistry
     {
         FeedSource.PseEdgeHistory,
         FeedSource.PseEdgeDisclosures,
+        FeedSource.PseEdgeDividends,
         FeedSource.YahooCharts,
         FeedSource.MacroDials,
         FeedSource.QuotationReport

@@ -42,6 +42,18 @@ public sealed class MoneyManagerTrainingService
     /// <summary>Minimum held-out trades before a learned model can be promoted.</summary>
     public const int MinimumValidationTrials = 25;
 
+    /// <summary>
+    /// Minimum training trades that must <b>observe</b> a factor before it may carry a weight.
+    /// An unreported input is mean-imputed to zero, so a column the training slice barely saw is
+    /// a column the fit cannot actually learn from: standardising it from a handful of rows and
+    /// letting it price live picks would be a guess wearing a coefficient. It is stored with a
+    /// neutral mean, unit scale and a zero weight instead, which makes live inference unable to
+    /// read it at all. This is what keeps a column with short feed history — the exchange's
+    /// dividends table only lists about a year of ex-dates, so the trailing-yield column is
+    /// invisible to a 70% slice that ends before those declarations — honestly inert.
+    /// </summary>
+    public const int MinimumFeatureObservations = 25;
+
     /// <summary>Share of the labelled trades kept for fitting; the rest is the held-out slice.</summary>
     public const decimal TrainFraction = 0.70m;
 
@@ -782,9 +794,10 @@ public sealed class MoneyManagerTrainingService
             return BuildPriorFallback(horizon, ordered, nowUtc, embargo);
         }
 
-        var (means, scales) = FitFeatureStats(train);
-        var trainX = train.Select(trade => Standardize(trade.Features, means, scales)).ToArray();
-        var validationX = validation.Select(trade => Standardize(trade.Features, means, scales)).ToArray();
+        var (means, scales, observed) = FitFeatureStats(train);
+        var usable = observed.Select(count => count >= MinimumFeatureObservations).ToArray();
+        var trainX = train.Select(trade => Standardize(trade.Features, means, scales, usable)).ToArray();
+        var validationX = validation.Select(trade => Standardize(trade.Features, means, scales, usable)).ToArray();
         var trainY = train.Select(trade => trade.Won ? 1d : 0d).ToArray();
         var validationY = validation.Select(trade => trade.Won ? 1d : 0d).ToArray();
 
@@ -856,7 +869,12 @@ public sealed class MoneyManagerTrainingService
 
         for (var index = 0; index < TrainedModelFeatures.Length; index++)
         {
-            weights[TrainedModelFeatures.Keys[index]] = Math.Round(best.Fitted.Weights[index], 6);
+            // A factor the training slice barely observed was given an all-zero design column, so
+            // it carries no weight and is stored with the neutral mean/scale above. Live inference
+            // therefore cannot price a pick on a column the fit could not learn.
+            weights[TrainedModelFeatures.Keys[index]] = usable[index]
+                ? Math.Round(best.Fitted.Weights[index], 6)
+                : 0d;
 
             // A factor that never showed up is stored with a neutral mean and unit scale, so
             // inference imputes zero contribution instead of dividing by an empty range.
@@ -1039,12 +1057,17 @@ public sealed class MoneyManagerTrainingService
 
     /// <summary>
     /// Mean and sample standard deviation are fitted on the training slice only. Computing
-    /// them on the whole history would leak held-out scale into the fit.
+    /// them on the whole history would leak held-out scale into the fit. The returned count is
+    /// how many training trades actually observed each column; below
+    /// <see cref="MinimumFeatureObservations"/> the column keeps a neutral mean and unit scale,
+    /// because a distribution fitted on a handful of rows would standardise a live value into a
+    /// number the model never saw.
     /// </summary>
-    private static (double[] Means, double[] Scales) FitFeatureStats(IReadOnlyList<TrainingTrial> train)
+    private static (double[] Means, double[] Scales, int[] Observed) FitFeatureStats(IReadOnlyList<TrainingTrial> train)
     {
         var means = new double[TrainedModelFeatures.Length];
         var scales = new double[TrainedModelFeatures.Length];
+        var counts = new int[TrainedModelFeatures.Length];
 
         for (var index = 0; index < TrainedModelFeatures.Length; index++)
         {
@@ -1058,9 +1081,11 @@ public sealed class MoneyManagerTrainingService
                 }
             }
 
-            if (observed.Count < 2)
+            counts[index] = observed.Count;
+
+            if (observed.Count < MinimumFeatureObservations)
             {
-                means[index] = observed.Count == 1 ? observed[0] : 0d;
+                means[index] = 0d;
                 scales[index] = 1d;
                 continue;
             }
@@ -1072,20 +1097,22 @@ public sealed class MoneyManagerTrainingService
             scales[index] = variance > 0d ? Math.Sqrt(variance) : 1d;
         }
 
-        return (means, scales);
+        return (means, scales, counts);
     }
 
     /// <summary>
     /// Standardizes one trade. A missing input is mean-imputed on the training distribution,
-    /// which lands at zero after scaling: the model abstains instead of guessing a level.
+    /// which lands at zero after scaling: the model abstains instead of guessing a level. A
+    /// column the training slice did not observe enough to fit is zeroed outright, so the
+    /// optimizer cannot spend a coefficient on it.
     /// </summary>
-    private static double[] Standardize(decimal?[] features, double[] means, double[] scales)
+    private static double[] Standardize(decimal?[] features, double[] means, double[] scales, bool[] usable)
     {
         var row = new double[TrainedModelFeatures.Length];
 
         for (var index = 0; index < row.Length; index++)
         {
-            row[index] = features[index] is decimal value
+            row[index] = usable[index] && features[index] is decimal value
                 ? ((double)value - means[index]) / scales[index]
                 : 0d;
         }

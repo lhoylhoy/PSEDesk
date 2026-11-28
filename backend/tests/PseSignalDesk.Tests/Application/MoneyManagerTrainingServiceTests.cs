@@ -9,7 +9,7 @@ namespace PseSignalDesk.Tests.Application;
 /// <summary>
 /// The trainer is the only component allowed to invent weights, so its contract is strict:
 /// no live history is a hard failure, every horizon keeps exactly one row, the stored JSON
-/// always carries all twelve factors, and a model that has not earned its promotion is stored
+/// always carries every feature key, and a model that has not earned its promotion is stored
 /// inactive instead of quietly pricing live picks.
 /// </summary>
 public sealed class MoneyManagerTrainingServiceTests
@@ -183,6 +183,69 @@ public sealed class MoneyManagerTrainingServiceTests
         var model = MoneyManagerTrainingService.Fit(SignalHorizon.DAY, trials);
 
         Assert.False(model.IsActive);
+    }
+
+    /// <summary>
+    /// A factor the training slice barely observed cannot price a live pick. The trailing dividend
+    /// yield is the live case: the exchange's dividends table only lists about a year of ex-dates,
+    /// so a 70% slice that ends before those declarations sees it in a handful of trades while the
+    /// held-out slice sees it everywhere. Standardising it from those few rows (a distribution the
+    /// model never faced) and letting the optimizer spend a coefficient on it would be a guess
+    /// wearing a number, so it is stored with a neutral mean, unit scale and a zero weight.
+    /// </summary>
+    [Fact]
+    public void Fit_gives_no_weight_to_a_factor_the_training_slice_barely_observed()
+    {
+        var start = new DateOnly(2024, 1, 2);
+        var trials = new List<MoneyManagerTrainingService.TrainingTrial>(200);
+        var yieldIndex = Array.IndexOf(TrainedModelFeatures.Keys, "trailing_dividend_yield_pct");
+
+        for (var i = 0; i < 200; i++)
+        {
+            var entry = start.AddDays(i * 2);
+            var won = i % 2 == 0;
+            var features = new decimal?[TrainedModelFeatures.Length];
+
+            for (var f = 0; f < features.Length; f++)
+            {
+                features[f] = won ? 1m : -1m;
+            }
+
+            // A factor that is reported everywhere and carries a real distribution, so the floor
+            // below is proven to be a floor rather than a blanket zeroing.
+            features[0] = i;
+
+            // Five declarations across 200 trades, four of them inside the training slice, and wide
+            // enough that a distribution fitted on them would be nonsense (±100 against a ±5% live
+            // range). Under the old rule those four rows were enough to standardise the column.
+            features[yieldIndex] = i % 40 == 0 ? (i % 80 == 0 ? 100m : -100m) : null;
+
+            trials.Add(new MoneyManagerTrainingService.TrainingTrial(
+                $"T{i:000}",
+                entry,
+                entry.AddDays(1),
+                won,
+                won ? 1.8m : -1.0m,
+                NetRiskReward: 2.0m,
+                StructuralPrior: 0.50m,
+                features));
+        }
+
+        var model = MoneyManagerTrainingService.Fit(SignalHorizon.DAY, trials);
+        var weights = TrainedModelJson.ReadWeights(model.WeightsJson);
+        var stats = TrainedModelJson.ReadStats(model.FeatureStatsJson);
+
+        // 200 trials at a 70% split means the first 140 fit the weights: the column was observed
+        // four times there, which is under the floor and therefore inert by construction.
+        Assert.True(model.TrainSampleCount >= MoneyManagerTrainingService.MinimumTrainingTrialsForFit);
+        Assert.Equal(60, model.ValidationSampleCount);
+        Assert.Equal(0d, weights["trailing_dividend_yield_pct"]);
+        Assert.Equal(new FeatureStat(0d, 1d), stats["trailing_dividend_yield_pct"]);
+
+        // The floor is not a blanket: a column every trade reported keeps its fitted distribution.
+        Assert.NotEqual(0d, stats["relative_strength_63d"].Mean);
+        Assert.Equal(TrainedModelFeatures.Keys.Length, weights.Count);
+        Assert.Equal(TrainedModelFeatures.Keys.Length, stats.Count);
     }
 
     [Fact]

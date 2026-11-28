@@ -476,7 +476,65 @@ public sealed class QuantitativeFilterService
             _ => ScoreYearSleeve(metric)
         };
 
+        score += ScoreEntryGeometrySleeve(metric, profile);
+
         return Math.Clamp(score + ScoreSharedSleeve(metric), 0m, 100m);
+    }
+
+    /// <summary>
+    /// How many ATRs above its 20-day mean a close can sit before the entry is a chase rather
+    /// than a pullback.
+    /// </summary>
+    private const decimal ExtendedFromEma20Atr = 2.5m;
+
+    /// <summary>
+    /// The pullback band, in ATRs around EMA20, that a long book wants to buy inside of.
+    /// </summary>
+    private const decimal PullbackLowAtr = -0.5m;
+
+    private const decimal PullbackHighAtr = 1.0m;
+
+    /// <summary>
+    /// Where the close sits relative to its own short mean, measured in its own daily range.
+    /// <para>
+    /// The other sleeves describe the business and the trend; this one describes the <em>entry</em>.
+    /// A close three ATRs above EMA20 is a name whose next two weeks of noise is mostly give-back,
+    /// so the daily, weekly and monthly books pay six points for chasing it — the yearly book does
+    /// not, because a position it intends to hold through a cycle is not entered for the next
+    /// month's range and the drawdown/quality sleeves already price a late entry.
+    /// </para>
+    /// <para>
+    /// The mirror case is the pullback: a close between half an ATR below and one ATR above its
+    /// 20-day mean, in a name still above its 200-day average, is where a long horizon gets paid
+    /// for buying a trend rather than a breakout. Both facts are read from columns the metric
+    /// already stores, so the sleeve costs no extra fetch and cannot disagree with the prompt.
+    /// </para>
+    /// </summary>
+    private static decimal ScoreEntryGeometrySleeve(StockDailyMetric metric, HorizonProfile profile)
+    {
+        if (metric.Ema20 <= 0m || metric.Atr14 <= 0m)
+        {
+            return 0m;
+        }
+
+        var distance = (metric.ClosePrice - metric.Ema20) / metric.Atr14;
+        var score = 0m;
+
+        if (distance >= ExtendedFromEma20Atr && profile.Horizon != SignalHorizon.YEAR)
+        {
+            score -= 6m;
+        }
+
+        if (distance >= PullbackLowAtr &&
+            distance <= PullbackHighAtr &&
+            metric.Sma200 > 0m &&
+            metric.ClosePrice > metric.Sma200 &&
+            profile.Horizon != SignalHorizon.DAY)
+        {
+            score += 5m;
+        }
+
+        return score;
     }
 
     private static decimal ScoreRsiSleeve(StockDailyMetric metric, HorizonProfile profile)
