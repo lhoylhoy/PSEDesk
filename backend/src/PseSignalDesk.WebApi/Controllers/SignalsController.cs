@@ -33,6 +33,7 @@ public sealed class SignalsController : ControllerBase
     private readonly IMarketDataProvider _marketData;
     private readonly DeskWorkGate _workGate;
     private readonly ILogger<SignalsController> _logger;
+    private readonly PromptEvalService? _promptEval;
 
     public SignalsController(
         ISignalRepository repository,
@@ -44,7 +45,8 @@ public sealed class SignalsController : ControllerBase
         MoneyManagerTrainingService training,
         IMarketDataProvider marketData,
         DeskWorkGate workGate,
-        ILogger<SignalsController> logger)
+        ILogger<SignalsController> logger,
+        PromptEvalService? promptEval = null)
     {
         _repository = repository;
         _pipeline = pipeline;
@@ -56,6 +58,7 @@ public sealed class SignalsController : ControllerBase
         _marketData = marketData;
         _workGate = workGate;
         _logger = logger;
+        _promptEval = promptEval;
     }
 
     /// <summary>
@@ -410,6 +413,88 @@ public sealed class SignalsController : ControllerBase
     }
 
     /// <summary>
+    /// Offline walk-forward benchmark of the configured LLM ranker against the deterministic Quant
+    /// Top-10 baseline over sampled historical sessions. Graded strictly causally on real forward
+    /// OHLC bars.
+    /// </summary>
+    [HttpPost("eval-llm")]
+    [EnableRateLimiting(DeskRateLimitPolicies.Expensive)]
+    public async Task<ActionResult<PromptEvalResultDto>> EvalLlm(
+        [FromQuery] SignalHorizon horizon = SignalHorizon.WEEK,
+        [FromQuery] int sessions = PromptEvalService.DefaultSessions,
+        [FromQuery] int? lookbackDays = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (_promptEval is null)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "LLM evaluation unavailable",
+                detail: "PromptEvalService is not registered in this host.");
+        }
+
+        horizon = NormalizeHorizon(horizon);
+
+        if (sessions < 1 || sessions > PromptEvalService.MaxSessions)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Session count out of range",
+                Detail = $"Pass sessions between 1 and {PromptEvalService.MaxSessions}."
+            });
+        }
+
+        if (!DeskRequestLimits.IsLookbackAllowed(lookbackDays))
+        {
+            return LookbackOutOfRange();
+        }
+
+        if (!_workGate.TryEnter())
+        {
+            return WorkAlreadyRunning();
+        }
+
+        try
+        {
+            var result = await _promptEval.EvaluateAsync(
+                horizon,
+                sessions,
+                ManilaTimeZone.TodayPht(),
+                lookbackDays,
+                cancellationToken);
+
+            return Ok(result);
+        }
+        catch (OllamaConfigurationException ex)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Ollama Cloud is not configured",
+                detail: ex.Message);
+        }
+        catch (MarketDataUnavailableException ex)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Benchmark data unavailable",
+                detail: ex.Message);
+        }
+        catch (SignalGenerationException ex)
+        {
+            _logger.LogWarning(ex, "LLM benchmark failed for {Horizon}.", horizon);
+            return Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                title: "Signal generation failed",
+                detail: ex.Message);
+        }
+        finally
+        {
+            _workGate.Exit();
+        }
+    }
+
+    /// <summary>
     /// Runs the live quant filter + signal engine for a date (defaults to the latest
     /// stored session, otherwise today in PHT). Market data is fetched from Yahoo
     /// Finance and PSE Edge; there is no demo seed and no offline engine.
@@ -631,7 +716,8 @@ public sealed class SignalsController : ControllerBase
         // render "Take Trade" numbers without the browser ever doing the arithmetic. One book
         // read feeds every pick, and each pick is sized for its own sector and pyramid state.
         var book = await _portfolio.GetBookSizingSnapshotAsync(cancellationToken, horizon);
-        var runDto = run is null ? null : SignalRunMapper.ToDto(run, metricsByTicker, book);
+        var warnings = run is null ? null : SignalPipelineService.BuildDataQualityWarnings(snapshot, metrics);
+        var runDto = run is null ? null : SignalRunMapper.ToDto(run, metricsByTicker, book, warnings);
 
         // The trust pulse is the desk's own report card. A ledger read must never take the
         // whole terminal down, so any failure other than cancellation hides the pulse

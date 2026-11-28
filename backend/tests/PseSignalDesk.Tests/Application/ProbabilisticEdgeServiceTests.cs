@@ -365,6 +365,59 @@ public sealed class ProbabilisticEdgeServiceTests
         Assert.True(farAboveTreasuries > withoutRates);
     }
 
+    [Fact]
+    public void EvaluateSetup_suppresses_learned_model_tilt_and_kelly_scale_in_bearish_regime()
+    {
+        var weights = TrainedModelFeatures.Keys.ToDictionary(
+            key => key,
+            key => key == "relative_strength_63d" ? 1.2d : 0d,
+            StringComparer.Ordinal);
+        var stats = TrainedModelFeatures.Keys.ToDictionary(
+            key => key,
+            _ => new FeatureStat(0d, 1d),
+            StringComparer.Ordinal);
+        var learned = new LearnedEdgeModel("WEEK", 0d, weights, stats, KellyFractionMultiplier: 0.15m);
+        var features = new decimal?[TrainedModelFeatures.Length];
+        features[0] = 2m;
+
+        var bearishBaseline = _service.EvaluateSetup(BuildStrongRequest(traps: null) with
+        {
+            MarketRegime = MarketRegime.BEARISH
+        });
+        var bearishWithModel = _service.EvaluateSetup(BuildStrongRequest(traps: null) with
+        {
+            MarketRegime = MarketRegime.BEARISH,
+            LearnedModel = learned,
+            LearnedFeatures = features
+        });
+
+        Assert.Equal(0m, bearishWithModel.LearnedEdgeTilt);
+        Assert.Equal(bearishBaseline.WinProbability, bearishWithModel.WinProbability);
+        Assert.Equal(bearishBaseline.QuarterKellyFraction, bearishWithModel.QuarterKellyFraction);
+    }
+
+    [Fact]
+    public void EvaluateSetup_uses_barrier_stats_payoff_ratio_when_supplied()
+    {
+        var baseline = _service.EvaluateSetup(BuildStrongRequest(traps: null));
+        var expiryHeavy = _service.EvaluateSetup(BuildStrongRequest(traps: null) with
+        {
+            BarrierStats = new BarrierStatistics(
+                Trials: 30,
+                Wins: 15,
+                TargetHits: 4,
+                StopOuts: 10,
+                Expiries: 16,
+                WinRate: 0.50m,
+                AverageWinR: 0.85m,
+                AverageLossR: 0.90m)
+        });
+
+        Assert.Equal(0.90m, expiryHeavy.ExpectedLossR);
+        Assert.True(expiryHeavy.ExpiryRate > 0.50m);
+        Assert.True(expiryHeavy.ExpectedValueR < baseline.ExpectedValueR);
+    }
+
     private static SetupEdgeRequest BuildStrongRequest(IReadOnlyList<PseTrapFlag>? traps) =>
         new(
             EntryPrice: 100m,

@@ -220,6 +220,13 @@ public sealed class MoneyManagerTrainingService
 
             var prefilter = PrefixPrefilter.Build(bars);
             var ema20 = BuildEma20Series(bars);
+            var causalBaseRates = ProbabilisticEdgeService.AllHorizons.ToDictionary(
+                horizon => horizon,
+                horizon => BuildCausalEmpiricalWinRates(
+                    bars,
+                    prefilter.Sma50Series,
+                    prefilter.Atr14Series,
+                    HorizonProfile.For(horizon)));
             var prefix = new List<OhlcvBar>(bars.Count);
             var indexPrefix = new List<OhlcvBar>(indexBars.Count);
             var indexCursor = 0;
@@ -286,7 +293,12 @@ public sealed class MoneyManagerTrainingService
                         outcome.Value.Won,
                         outcome.Value.RealizedR,
                         outcome.Value.NetRiskReward,
-                        ComputeStructuralPriorProbability(metric, profile, outcome.Value, regime),
+                        ComputeStructuralPriorProbability(
+                            metric,
+                            profile,
+                            outcome.Value,
+                            regime,
+                            causalBaseRates[horizon][index]),
                         features));
                 }
             }
@@ -310,7 +322,8 @@ public sealed class MoneyManagerTrainingService
         StockDailyMetric metric,
         HorizonProfile profile,
         TrainingOutcome outcome,
-        MarketRegime? regime)
+        MarketRegime? regime,
+        decimal? causalEmpiricalWinRate = null)
     {
         var disclosures = MarketDataMapper.DeserializeDisclosures(metric.RecentDisclosuresJson);
         var trapFlags = PseDisclosureClassifier.DetectTrapFlags(disclosures);
@@ -329,7 +342,7 @@ public sealed class MoneyManagerTrainingService
             ConvictionScore: 50m,
             regime ?? MarketRegime.NEUTRAL,
             profile,
-            EmpiricalWinRate: null,
+            EmpiricalWinRate: causalEmpiricalWinRate,
             RelativeStrength63d: metric.RelativeStrength63d,
             VolatilityContractionRatio: metric.VolatilityContractionRatio,
             WeinsteinStage: metric.WeinsteinStage,
@@ -345,9 +358,12 @@ public sealed class MoneyManagerTrainingService
             Sector: metric.Sector)).WinProbability;
     }
 
-    private static bool IsEligible(StockDailyMetric metric, HorizonProfile profile)
+    internal static bool IsEligible(StockDailyMetric metric, HorizonProfile profile)
     {
-        if (metric.AvgTurnover20dPhp < MinimumTurnoverPhp ||
+        if (!QuantitativeFilterService.MeetsLiquidityFloor(
+                metric.AvgTurnover20dPhp,
+                metric.MedianTurnover20dPhp,
+                metric.ActiveTradingDays20d) ||
             metric.ClosePrice <= metric.Sma50 ||
             metric.ClosePrice <= metric.Sma200)
         {
@@ -391,7 +407,7 @@ public sealed class MoneyManagerTrainingService
     /// The stop is checked before the target on every bar (daily OHLC cannot order a
     /// same-session touch) and a window that expires unresolved is graded on the net close.
     /// </summary>
-    private static TrainingOutcome? SimulateBarrier(
+    internal static TrainingOutcome? SimulateBarrier(
         IReadOnlyList<OhlcvBar> bars,
         int entryIndex,
         IReadOnlyList<decimal?> ema20,
@@ -412,11 +428,13 @@ public sealed class MoneyManagerTrainingService
             ? PseBoardLotService.NormalizeTradePlanWithinStaticLimits(rawEntry, rawEntry, rawStop, rawTarget)
             : PseBoardLotService.NormalizeTradePlan(rawEntry, rawStop, rawTarget);
 
+        var tradeDate = bars[entryIndex].Date;
         var feeRate = PseBoardLotService.ComputeEffectiveRoundTripFeeRate(
             plan.Entry,
             DefaultPositionBudgetPhp,
             metric.AvgTurnover20dPhp,
-            metric.AtrPct);
+            metric.AtrPct,
+            tradeDate);
 
         var netRisk = PseBoardLotService.ComputeNetRiskPerShare(plan.Entry, plan.StopLoss, feeRate);
         var netReward = PseBoardLotService.ComputeNetRewardPerShare(plan.Entry, plan.Target, feeRate);
@@ -428,16 +446,17 @@ public sealed class MoneyManagerTrainingService
 
         var netRiskReward = decimal.Round(netReward / netRisk, 2, MidpointRounding.AwayFromZero);
         var breakEvenStop = PseBoardLotService.ComputeBreakEvenStopPrice(plan.Entry);
-        var (buyRate, sellRate) = PseBoardLotService.SplitRoundTripFee(feeRate);
+        var (buyRate, sellRate) = PseBoardLotService.SplitRoundTripFee(feeRate, tradeDate);
         var stop = plan.StopLoss;
 
         for (var offset = 1; offset <= profile.ForwardWindowBars; offset++)
         {
             var bar = bars[entryIndex + offset];
 
-            if (bar.Low <= stop)
+            // A session that gaps through the stop fills at the open, not the resting level.
+            if (PseBoardLotService.ResolveStopFillPrice(stop, bar.Open, bar.Low) is decimal stopFill)
             {
-                var stopR = NetRealizedR(plan.Entry, stop, buyRate, sellRate, netRisk);
+                var stopR = NetRealizedR(plan.Entry, stopFill, buyRate, sellRate, netRisk);
 
                 return new TrainingOutcome(
                     bar.Date,
@@ -632,6 +651,10 @@ public sealed class MoneyManagerTrainingService
                 volumeAverage);
         }
 
+        internal decimal?[] Sma50Series => _sma50;
+
+        internal decimal?[] Atr14Series => _atr14;
+
         /// <summary>Mirrors the live gate closely enough to keep the expensive pass rare.</summary>
         public bool Passes(int index, decimal minimumVolumeRatio)
         {
@@ -725,7 +748,7 @@ public sealed class MoneyManagerTrainingService
     /// them. Training trades whose forward window had not cleared before the first held-out
     /// entry are purged, and one extra forward window of embargo is left between the slices.
     /// </summary>
-    private TrainedHorizonModel Fit(SignalHorizon horizon, IReadOnlyList<TrainingTrial> trials)
+    internal static TrainedHorizonModel Fit(SignalHorizon horizon, IReadOnlyList<TrainingTrial> trials)
     {
         var profile = HorizonProfile.For(horizon);
         var nowUtc = DateTime.UtcNow;
@@ -779,6 +802,12 @@ public sealed class MoneyManagerTrainingService
         var baselineBrier = BrierScore(baselineProbabilities, validationY);
         var baselineLogLoss = LogLoss(baselineProbabilities, validationY);
 
+        var priorProbabilities = validation.Select(trade => (double)trade.StructuralPrior).ToArray();
+        var priorBrier = BrierScore(priorProbabilities, validationY);
+        var priorLogLoss = LogLoss(priorProbabilities, validationY);
+        var effectiveBaselineBrier = Math.Min(baselineBrier, priorBrier);
+        var effectiveBaselineLogLoss = Math.Min(baselineLogLoss, priorLogLoss);
+
         // Hyper-parameter selection may not read the slice that grades the model. Selecting lambda
         // on the held-out Brier turned the promotion test into a peek (pick the strength that
         // flatters the very trades used to justify going live), so lambda is now chosen on an
@@ -793,8 +822,12 @@ public sealed class MoneyManagerTrainingService
             (double)selectedLambda,
             sampleWeights: trainWeights,
             offsets: trainOffsets);
+
+        // Grade the exact blended and +/-6pp clamped residual probability that live serving emits.
         var validationProbabilities = validationX
-            .Select((row, index) => LogisticModelTrainer.Predict(fitted, row, validationOffsets[index]))
+            .Select((row, index) => ApplyDeployedResidual(
+                (double)validation[index].StructuralPrior,
+                LogisticModelTrainer.Predict(fitted, row, validationOffsets[index])))
             .ToArray();
 
         var best = new FitChoice(
@@ -813,8 +846,9 @@ public sealed class MoneyManagerTrainingService
 
         var isActive = validation.Count >= MinimumValidationTrials &&
                        train.Count + validation.Count >= MinimumTrials &&
-                       trainedBrier < baselineBrier &&
-                       best.LogLoss <= baselineLogLoss &&
+                       trainedBrier < effectiveBaselineBrier &&
+                       trainedBrier < 0.25d &&
+                       best.LogLoss <= effectiveBaselineLogLoss &&
                        policyExpectancyR > 0m;
 
         var weights = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -842,9 +876,9 @@ public sealed class MoneyManagerTrainingService
             TrainSampleCount = train.Count,
             ValidationSampleCount = validation.Count,
             EmbargoBars = embargo,
-            BaselineBrierScore = decimal.Round((decimal)baselineBrier, 6, MidpointRounding.AwayFromZero),
+            BaselineBrierScore = decimal.Round((decimal)effectiveBaselineBrier, 6, MidpointRounding.AwayFromZero),
             TrainedBrierScore = decimal.Round((decimal)trainedBrier, 6, MidpointRounding.AwayFromZero),
-            BaselineLogLoss = decimal.Round((decimal)baselineLogLoss, 6, MidpointRounding.AwayFromZero),
+            BaselineLogLoss = decimal.Round((decimal)effectiveBaselineLogLoss, 6, MidpointRounding.AwayFromZero),
             TrainedLogLoss = decimal.Round((decimal)best.LogLoss, 6, MidpointRounding.AwayFromZero),
             ValidationWinRate = decimal.Round(WinRate(validation), 4, MidpointRounding.AwayFromZero),
             ValidationExpectancyR = decimal.Round(ExpectancyR(validation), 4, MidpointRounding.AwayFromZero),
@@ -855,6 +889,17 @@ public sealed class MoneyManagerTrainingService
             FeatureStatsJson = TrainedModelJson.WriteStats(stats),
             IsActive = isActive
         };
+    }
+
+    private static double ApplyDeployedResidual(double priorProbability, double rawPosterior)
+    {
+        var prior = Math.Clamp(priorProbability, 0.01d, 0.99d);
+        var tilt = Math.Clamp(
+            (rawPosterior - prior) * (double)LearnedEdgeModel.BlendWeight,
+            -(double)LearnedEdgeModel.MaximumTilt,
+            (double)LearnedEdgeModel.MaximumTilt);
+
+        return Math.Clamp(prior + tilt, 0.05d, 0.95d);
     }
 
     /// <summary>
@@ -903,7 +948,9 @@ public sealed class MoneyManagerTrainingService
                 offsets: fitIndices.Select(index => trainOffsets[index]).ToArray());
 
             var probabilities = gradeIndices
-                .Select(index => LogisticModelTrainer.Predict(fitted, trainX[index], trainOffsets[index]))
+                .Select(index => ApplyDeployedResidual(
+                    (double)train[index].StructuralPrior,
+                    LogisticModelTrainer.Predict(fitted, trainX[index], trainOffsets[index])))
                 .ToArray();
             var labels = gradeIndices.Select(index => trainY[index]).ToArray();
             var brier = BrierScore(probabilities, labels);
@@ -1358,7 +1405,7 @@ public sealed class MoneyManagerTrainingService
     }
 
     /// <summary>One resolved historical trade with the factor snapshot taken at its entry.</summary>
-    private sealed record TrainingTrial(
+    internal sealed record TrainingTrial(
         string Ticker,
         DateOnly EntryDate,
         DateOnly ExitDate,
@@ -1373,7 +1420,7 @@ public sealed class MoneyManagerTrainingService
     /// friction-inclusive reward/risk that plan offered, and the effective round-trip rate that
     /// produced <see cref="RealizedR"/>.
     /// </summary>
-    private readonly record struct TrainingOutcome(
+    internal readonly record struct TrainingOutcome(
         DateOnly ExitDate,
         bool Won,
         decimal RealizedR,
@@ -1382,6 +1429,108 @@ public sealed class MoneyManagerTrainingService
         decimal Target,
         decimal NetRiskReward,
         decimal FeeRate);
+
+    private static decimal?[] BuildCausalEmpiricalWinRates(
+        IReadOnlyList<OhlcvBar> bars,
+        decimal?[] sma50,
+        decimal?[] atr14,
+        HorizonProfile profile)
+    {
+        var rates = new decimal?[bars.Count];
+        if (bars.Count < ProbabilisticEdgeService.MinimumHistoryBars)
+        {
+            return rates;
+        }
+
+        var stopMultiple = profile.AtrStopMultiplier > 0m ? profile.AtrStopMultiplier : ProbabilisticEdgeService.StopAtrMultiple;
+        var targetMultiple = profile.AtrTargetMultiplier > 0m ? profile.AtrTargetMultiplier : ProbabilisticEdgeService.TargetAtrMultiple;
+        var barrierWindow = Math.Max(1, profile.ForwardWindowBars);
+
+        var knownTrials = new int[bars.Count];
+        var knownWins = new int[bars.Count];
+
+        for (var i = 50; i + barrierWindow < bars.Count; i++)
+        {
+            if (atr14[i] is not decimal atrValue || atrValue <= 0m)
+            {
+                continue;
+            }
+
+            var entry = bars[i].Close;
+            if (entry <= 0m || sma50[i] is not decimal average || entry <= average)
+            {
+                continue;
+            }
+
+            var stop = entry - (stopMultiple * atrValue);
+            var target = entry + (targetMultiple * atrValue);
+            if (stop <= 0m || !PseBoardLotService.IsTradablePrice(entry))
+            {
+                continue;
+            }
+
+            var tradeDate = bars[i].Date;
+            var feeRate = PseBoardLotService.RoundTripFeeRateOn(tradeDate);
+            var netRisk = PseBoardLotService.ComputeNetRiskPerShare(entry, stop, feeRate);
+            if (netRisk <= 0m)
+            {
+                continue;
+            }
+
+            var (buyRate, sellRate) = PseBoardLotService.SplitRoundTripFee(feeRate, tradeDate);
+            decimal? realizedR = null;
+            var resolvedBarIndex = i + barrierWindow;
+
+            for (var forward = i + 1; forward <= i + barrierWindow; forward++)
+            {
+                var bar = bars[forward];
+
+                if (PseBoardLotService.ResolveStopFillPrice(stop, bar.Open, bar.Low) is decimal stopFill)
+                {
+                    realizedR = ((stopFill * (1m - sellRate)) - (entry * (1m + buyRate))) / netRisk;
+                    resolvedBarIndex = forward;
+                    break;
+                }
+
+                if (bar.High >= target)
+                {
+                    realizedR = ((target * (1m - sellRate)) - (entry * (1m + buyRate))) / netRisk;
+                    resolvedBarIndex = forward;
+                    break;
+                }
+            }
+
+            if (realizedR is null)
+            {
+                var expiryClose = bars[i + barrierWindow].Close;
+                realizedR = ((expiryClose * (1m - sellRate)) - (entry * (1m + buyRate))) / netRisk;
+            }
+
+            knownTrials[resolvedBarIndex]++;
+            if (realizedR > 0m)
+            {
+                knownWins[resolvedBarIndex]++;
+            }
+        }
+
+        var cumulativeTrials = 0;
+        var cumulativeWins = 0;
+
+        for (var index = 0; index < bars.Count; index++)
+        {
+            cumulativeTrials += knownTrials[index];
+            cumulativeWins += knownWins[index];
+
+            if (index + 1 >= ProbabilisticEdgeService.MinimumHistoryBars && cumulativeTrials > 0)
+            {
+                var shrunk = (cumulativeWins + (ProbabilisticEdgeService.NeutralPriorWinRate * ProbabilisticEdgeService.PriorSampleSize))
+                             / (cumulativeTrials + ProbabilisticEdgeService.PriorSampleSize);
+                rates[index] = decimal.Round(shrunk, 4, MidpointRounding.AwayFromZero);
+            }
+        }
+
+        return rates;
+    }
 
     private sealed record FitChoice(
         LogisticModelTrainer.FitResult Fitted,

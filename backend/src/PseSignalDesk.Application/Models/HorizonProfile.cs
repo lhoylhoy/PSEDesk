@@ -83,8 +83,9 @@ public sealed record HorizonProfile(
         new HorizonProfile(
             SignalHorizon.MONTH,
             Mission:
-                "One to six month position book. Own quality compounders and macro beneficiaries while " +
-                "the earnings cycle and BSP policy direction stay supportive; size for volatility.",
+                "One to six month position book. Own smooth-trending leaders and macro/sector-rotation " +
+                "beneficiaries near 52-week highs with controlled drawdowns, supportive cash yield where " +
+                "reported, and clean PSE Edge disclosures; size for volatility.",
             MinHistoryBars: 200,
             RsiIdealLow: 40m,
             RsiIdealHigh: 65m,
@@ -101,8 +102,9 @@ public sealed record HorizonProfile(
         new HorizonProfile(
             SignalHorizon.YEAR,
             Mission:
-                "Multi-year compounding book. Prefer high return on capital, sane leverage and a PEG " +
-                "near or below one; ignore intraday noise and let the business carry the position.",
+                "Multi-year compounding book. Prefer smooth institutional uptrends (high trend efficiency), " +
+                "low 52-week drawdowns, defensive beta, supportive cash dividend yield where reported, and " +
+                "clean corporate disclosures; ignore short-term noise.",
             MinHistoryBars: 200,
             RsiIdealLow: 35m,
             RsiIdealHigh: 60m,

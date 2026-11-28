@@ -265,6 +265,7 @@ builder.Services.AddScoped<TickerResearchService>();
 builder.Services.AddScoped<DailyQuotationImportService>();
 builder.Services.AddScoped<BacktestService>();
 builder.Services.AddScoped<MoneyManagerTrainingService>();
+builder.Services.AddScoped<PromptEvalService>();
 builder.Services.AddHostedService<KnowledgeBaseInitializer>();
 builder.Services.AddHostedService<DailySignalSchedulerService>();
 

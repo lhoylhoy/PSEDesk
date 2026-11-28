@@ -201,8 +201,8 @@ export function ModelTrainerPanel({ horizon, viewMode = 'simple' }: ModelTrainer
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-2xl type-body measure text-fg-muted">
           {simple
-            ? `The desk trains its own scoring robot on the ${meta.friendlyTab.toLowerCase()} record it has already graded, then tests it on picks it never saw. It only gets to change your odds if it beats a plain baseline out of sample — otherwise the standard rules keep pricing everything.`
-            : `One L2-regularised logistic model per horizon, fitted on the desk's own ATR-barrier history, standardised on training-slice means and embargoed by ${meta.holding} of forward bars. Weights go live only when the purged held-out slice clears the sample gate and beats the neutral prior's Brier score. Learned odds are bounded to ±6 points, so a model can inform the prior but never dominate it.`}
+            ? `This trains the desk’s local 12-factor statistical odds model (not the Ollama Cloud LLM) on the ${meta.friendlyTab.toLowerCase()} barrier history, then tests it on unseen trades. It only tilts win probabilities when it beats the baseline out of sample.`
+            : `Local L2-regularised logistic residual model per horizon (separate from the Ollama Cloud LLM ranker), fitted on ATR-barrier history, standardised on training-slice means and embargoed by ${meta.holding} of forward bars. Weights go live only when the purged held-out slice clears the sample gate, beats both the neutral baseline and 0.250 coin-flip Brier, and yields positive policy expectancy.`}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="primary" busy={busy === 'one'} onClick={() => retrain('one')}>

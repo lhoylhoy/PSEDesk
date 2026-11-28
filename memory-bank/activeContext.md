@@ -1,8 +1,24 @@
 # Active Context — PSE Signal Desk
 
-**Last updated:** 2026-11-26 (LLM measurement + structured-output pass: run provenance, `QuantPreScore`/`QuantRank` persistence, model-vs-quant scorecard, JSON-schema `format`, sampling/context controls, dead response fields removed — backend **548 + 1 skipped**, frontend **87**)
-**Last feature pass:** 2026-11-26 (the LLM pass, then the `More ▾` stacking fix, then wayfinding, abuse-protection hardening, per-company PSE Edge disclosures, feed health ledger, hand cursor, row-opens-modal, typography, signal list, typeface, compliance hardening, responsive pass, brand mark + icon set, header visual organization, UI/UX legibility pass, fast-model fix, Yahoo-delisting pass, accuracy pass, live-drift wiring, performance pass and the feed-diagnostics pass — same day)
-**Current task:** slices 1–2 of 4 are done and verified; the **measurement half of slice 4** (provenance + quant rank + model-vs-quant scorecard) and the **prompt/client cleanup** are now landed. Still open in slice 4: opt-in prompt archive (`Signals:ArchivePrompts`) and `POST /api/signals/eval-prompt-replay`. Slice 3 (surface unenforced trap flags) is planned, not started. Everything is landed but **not committed** — the operator asked for no commits unless explicitly requested.
+**Last updated:** 2026-11-28 (Forecast accuracy Phases 1–3: trainer CMEPA/gap-stop/liquidity/promotion-gate/causal-prior fixes, BEARISH OOD guard, live `BarrierStats` wiring, horizon-score prompt ordering + ATR reference anchors + F-03 fencing, RAG embedding repair, `PromptEvalService` + `POST /api/signals/eval-llm`, Scorecard/Trainer UI clarity — backend **558 + 1 skipped**, frontend **87**)
+**Last feature pass:** 2026-11-28 (Forecast accuracy Phases 1–3, following the 2026-11-26 LLM measurement pass)
+**Current task:** Phases 1–3 of the forecast accuracy remediation & LLM benchmarking plan are implemented and verified (uncommitted per repo convention). Phase 4 (corporate-action split adjuster, dividend feed audit, and live DB migration/retrain + live `eval-llm` run once `OLLAMA_API_KEY` is set) remains open.
+
+## Session note (2026-11-28) — Forecast accuracy remediation & LLM benchmark harness (Phases 1–3)
+
+Prompted by "is our LLM properly trained to be accurate on its forecasts?". Audited the codebase and `pse_signals.db`: the Ollama Cloud LLM is an untrained prompt/RAG ranker with 0 graded picks in the store, while the 12-feature L2 logistic trainer had 6 mathematical/parity bugs (including `MONTH` promoted at `0.2502` Brier, worse than a 0.25 coin flip, because it compared only against a degraded constant train-slice mean).
+
+| Command | Result |
+| --- | --- |
+| `dotnet build backend/PseSignalDesk.slnx --no-restore --nologo -v q` | `Build succeeded. 0 Warning(s) 0 Error(s)` |
+| `dotnet test backend/PseSignalDesk.slnx --no-build --nologo -v q` | `Passed! - Failed: 0, Passed: 558, Skipped: 1, Total: 559` (8 s) — 548 → 558, **+10**, all Golden tests green |
+| `cd frontend && npx tsc --noEmit && npm test && npm run build` | `tsc` clean, `ℹ tests 87 · ℹ pass 87 · ℹ fail 0`, Vite build clean (`✓ 135 modules transformed`) |
+
+**What changed**
+
+1. **Statistical trainer & probability engine (Phase 1).** `MoneyManagerTrainingService` now charges date-correct CMEPA tax (`tradeDate`) and fills gap-down stops at `bar.Open` (`ResolveStopFillPrice`), enforces `MeetsLiquidityFloor` in `IsEligible`, supplies O(n) causal prefix `EmpiricalWinRate` to `ComputeStructuralPriorProbability` to remove negative intercept skew, scores inner/outer validation with the deployed `BlendWeight`/`MaximumTilt` residual formula, and requires `trainedBrier < min(baselineBrier, priorBrier)`, `trainedBrier < 0.25`, `trainedLogLoss <= min(baselineLogLoss, priorLogLoss)`, and `policyExpectancyR > 0`. `TrainedModelPresenter` reports the exact failing gate. `ProbabilisticEdgeService` suppresses bull/neutral learned tilts and Kelly scaling during `MarketRegime.BEARISH`. `SignalOutcomeService` uses `ResolveStopFillPrice` on post-entry gap-downs and date-correct fees. `SignalPipelineService` (fresh fetch) and `TickerResearchService` wire `BarrierStatistics` (and `LearnedFeatures` in research) without altering `StockDailyMetric` or breaking golden snapshots.
+2. **LLM prompt, RAG grounding & F-03 safety (Phase 2).** `MarketDataMapper.ToCandidate` attaches `HorizonScore` and tick-valid ATR reference plans; `SignalPipelineService` and `OllamaPromptBuilder` preserve horizon-adjusted `ComputeHorizonScore` ordering (fixing the raw `QuantPreScore` mismatch), emit `DATA_QUALITY_WARNINGS`, fence untrusted disclosures/playbooks/notes/prior theses in `<untrusted_data>` tags (F-03), and align `MONTH`/`YEAR` missions with available inputs. `KnowledgeBase:MaxSnippets` increased `6 → 10` (`MandatorySnippetCount` `2 → 4`), `IndexBuiltInAsync` re-embeds unchanged built-in docs with null vectors once embeddings are configured, and `OllamaSignalEngine` supports opt-in `OllamaCloud:ArchivePrompts`.
+3. **Offline LLM benchmark & UI transparency (Phase 3).** Added `PromptEvalService` + `POST /api/signals/eval-llm` (`DeskRateLimitPolicies.Expensive`, `DeskWorkGate`, 1..20 sessions) to grade LLM Top-10/Top-3 vs. Pure Quant Top-10/Top-3 causally on real forward OHLC bars. Updated `ScorecardDialog` to surface `rankingQuality` (LLM vs. Quant Top-3 + Spearman ρ) and `ModelTrainerPanel` to distinguish the local statistical odds model from the Ollama Cloud LLM ranker.
 
 ## Session note (2026-11-26) — the LLM pass: measure the ranking, then clean the contract
 

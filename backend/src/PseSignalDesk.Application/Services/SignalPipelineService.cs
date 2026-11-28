@@ -66,6 +66,7 @@ public sealed class SignalPipelineService
             ? Array.Empty<StockDailyMetric>()
             : await _repository.GetMetricsAsync(runDate, cancellationToken);
         var freshFetch = false;
+        IReadOnlyDictionary<string, BarrierStatistics>? barrierStatsByTicker = null;
 
         if (snapshot is null || metrics.Count == 0)
         {
@@ -96,6 +97,14 @@ public sealed class SignalPipelineService
                 throw new MarketDataUnavailableException(
                     $"None of the {batch.Stocks.Count} live tickers had enough history to compute the 200-day trend for {runDate:yyyy-MM-dd}.");
             }
+
+            var fetchProfile = HorizonProfile.For(horizon);
+            barrierStatsByTicker = batch.Stocks
+                .Where(stock => stock.Bars.Count >= ProbabilisticEdgeService.MinimumHistoryBars)
+                .ToDictionary(
+                    stock => stock.Ticker,
+                    stock => ProbabilisticEdgeService.ComputeBarrierStatistics(stock.Bars, fetchProfile),
+                    StringComparer.OrdinalIgnoreCase);
 
             // Attribution before disqualification: the market-wide Edge page has no company
             // column, so the screened names are re-read through their own company listing. This
@@ -199,6 +208,7 @@ public sealed class SignalPipelineService
 
         var previousRun = await _repository.GetPreviousRunAsync(runDate, horizon, cancellationToken);
         var playbooks = await RetrievePlaybooksAsync(horizon, candidates, cancellationToken);
+        var dataQualityWarnings = BuildDataQualityWarnings(snapshot, horizonMetrics);
         var request = BuildRequest(
             snapshot,
             horizon,
@@ -208,7 +218,8 @@ public sealed class SignalPipelineService
             marketBreadth,
             sectorRotation,
             await LoadDeskMemoryAsync(horizon, cancellationToken),
-            await LoadTrainedModelSummaryAsync(horizon, cancellationToken));
+            await LoadTrainedModelSummaryAsync(horizon, cancellationToken),
+            dataQualityWarnings);
         var result = await _signalEngine.GenerateSignalAsync(request, cancellationToken);
 
         var run = BuildRun(
@@ -225,7 +236,8 @@ public sealed class SignalPipelineService
             snapshot.Us10YClosePct,
             snapshot.NetForeignFlowPhp,
             await LoadLearnedEdgeModelAsync(horizon, cancellationToken),
-            await LoadCalibrationOffsetPctAsync(horizon, cancellationToken));
+            await LoadCalibrationOffsetPctAsync(horizon, cancellationToken),
+            barrierStatsByTicker);
 
         // Provenance travels with the book: which model, which prompt, which sampling settings
         // and what it cost. Without it a ranking can never be compared with another one.
@@ -262,7 +274,35 @@ public sealed class SignalPipelineService
             }
         }
 
-        return SignalRunMapper.ToDto(run, metricsByTicker, book);
+        return SignalRunMapper.ToDto(run, metricsByTicker, book, dataQualityWarnings);
+    }
+
+    public static IReadOnlyList<string> BuildDataQualityWarnings(
+        DailyMarketSnapshot? snapshot,
+        IReadOnlyList<StockDailyMetric> metrics)
+    {
+        var warnings = new List<string>(3);
+
+        if (snapshot is not null && (snapshot.PseiClose <= 0m || snapshot.PseiSma50 <= 0m))
+        {
+            warnings.Add(
+                "PSEi level or moving averages are unreported (proxy fallback active); treat index trend signals cautiously.");
+        }
+
+        if (snapshot is not null && snapshot.NetForeignFlowPhp is null)
+        {
+            warnings.Add(
+                "Official PSE Daily Quotation Report foreign flow is unreported for this session; do not infer foreign buying or selling.");
+        }
+
+        if (metrics.Count > 0 &&
+            metrics.All(metric => MarketDataMapper.DeserializeDisclosures(metric.RecentDisclosuresJson).Count == 0))
+        {
+            warnings.Add(
+                "Zero PSE Edge disclosures were attributed this session; disclosure-based trap flags are unenforced.");
+        }
+
+        return warnings;
     }
 
     /// <summary>
@@ -328,8 +368,10 @@ public sealed class SignalPipelineService
         MarketBreadth breadth,
         IReadOnlyList<SectorRotationDto> sectorRotation,
         DeskMemorySummary? deskMemory = null,
-        TrainedModelSummaryDto? learnedModel = null)
+        TrainedModelSummaryDto? learnedModel = null,
+        IReadOnlyList<string>? dataQualityWarnings = null)
     {
+        var profile = HorizonProfile.For(horizon);
         var yesterday = previousRun is null
             ? new List<PriorSignalInput>()
             : previousRun.Items
@@ -354,7 +396,8 @@ public sealed class SignalPipelineService
             snapshot.UsdPhp,
             candidates.Select(candidate => MarketDataMapper.ToCandidate(
                 candidate,
-                SectorRotationService.QuadrantFor(sectorRotation, candidate.Sector))).ToList(),
+                SectorRotationService.QuadrantFor(sectorRotation, candidate.Sector),
+                profile)).ToList(),
             yesterday,
             playbooks,
             Breadth: breadth,
@@ -367,7 +410,8 @@ public sealed class SignalPipelineService
             EpheChange20dPct: snapshot.EpheChange20dPct,
             ForeignFlowSource: snapshot.ForeignFlowSource,
             DeskMemory: deskMemory,
-            LearnedModel: learnedModel);
+            LearnedModel: learnedModel,
+            DataQualityWarnings: dataQualityWarnings);
     }
 
     /// <summary>
@@ -612,19 +656,16 @@ public sealed class SignalPipelineService
         decimal? us10YClosePct,
         decimal? marketNetForeignFlowPhp,
         LearnedEdgeModel? learnedModel,
-        decimal calibrationOffsetPct)
+        decimal calibrationOffsetPct,
+        IReadOnlyDictionary<string, BarrierStatistics>? barrierStatsByTicker = null)
     {
         var profile = HorizonProfile.For(horizon);
         var metricByTicker = metrics.ToDictionary(m => m.Ticker, StringComparer.OrdinalIgnoreCase);
         var candidateByTicker = candidates.ToDictionary(c => c.Ticker, StringComparer.OrdinalIgnoreCase);
 
-        // The prompt prints the candidate table ordered by quant score (then turnover, then
-        // ticker), so this is the ordinal the model actually saw. Persisting it is what lets the
-        // scorecard compare the model's order with the screen's own instead of guessing.
+        // Preserve the exact horizon-adjusted screen order (ComputeHorizonScore, then turnover,
+        // then ticker) that the prompt prints, so QuantRank agrees with the table the model saw.
         var quantRankByTicker = candidates
-            .OrderByDescending(c => c.QuantPreScore)
-            .ThenByDescending(c => c.AvgTurnover20dPhp)
-            .ThenBy(c => c.Ticker, StringComparer.Ordinal)
             .Select((candidate, index) => (candidate.Ticker, Rank: index + 1))
             .ToDictionary(entry => entry.Ticker, entry => entry.Rank, StringComparer.OrdinalIgnoreCase);
         var priorByTicker = previousRun?.Items.ToDictionary(i => i.Ticker, StringComparer.OrdinalIgnoreCase)
@@ -755,6 +796,14 @@ public sealed class SignalPipelineService
                 ? netForeign / metric.AvgTurnover20dPhp
                 : (decimal?)null;
 
+            BarrierStatistics? barrierStats = null;
+            if (barrierStatsByTicker is not null &&
+                barrierStatsByTicker.TryGetValue(item.Ticker, out var resolvedStats) &&
+                resolvedStats.Trials > 0)
+            {
+                barrierStats = resolvedStats;
+            }
+
             var assessment = _edge.EvaluateSetup(new SetupEdgeRequest(
                 item.EntryPrice,
                 item.StopLoss,
@@ -781,7 +830,8 @@ public sealed class SignalPipelineService
                 Us10YClosePct: us10YClosePct,
                 Sector: metric.Sector,
                 LearnedModel: learnedModel,
-                LearnedFeatures: TrainedModelFeatures.FromMetric(metric)));
+                LearnedFeatures: TrainedModelFeatures.FromMetric(metric),
+                BarrierStats: barrierStats));
 
             item.NetRiskRewardRatio = assessment.NetRiskReward;
             item.WinProbability = assessment.WinProbability;

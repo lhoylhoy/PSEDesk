@@ -1,3 +1,6 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -218,10 +221,56 @@ public sealed class SqliteKnowledgeServiceTests : IDisposable
             Assert.Equal(0, second.DocumentsIndexed);
             Assert.Equal(1, second.DocumentsSkipped);
             Assert.Equal(0, second.ChunksIndexed);
+
+            // Once embeddings become configured, an unchanged built-in doc with null vectors must be re-embedded.
+            var embeddingHandler = new StubEmbeddingHandler();
+            var embeddingService = new SqliteKnowledgeService(
+                _repository,
+                new OllamaEmbeddingClient(
+                    new HttpClient(embeddingHandler),
+                    Options.Create(new OllamaCloudOptions
+                    {
+                        BaseUrl = "https://ollama.test",
+                        ApiKey = "test-key",
+                        EmbeddingModel = "nomic-embed-text"
+                    }),
+                    NullLogger<OllamaEmbeddingClient>.Instance),
+                Options.Create(new KnowledgeBaseOptions
+                {
+                    RootPath = "knowledge-base",
+                    MaxSnippets = 6,
+                    MaxChunkCharacters = 600,
+                    EnableEmbeddings = true,
+                    IndexOnStartup = false
+                }),
+                new FakeHostEnvironment(root),
+                NullLogger<SqliteKnowledgeService>.Instance);
+
+            var third = await embeddingService.IndexBuiltInAsync();
+            Assert.Equal(1, third.DocumentsUpdated);
+            Assert.Equal(1, third.ChunksEmbedded);
         }
         finally
         {
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private sealed class StubEmbeddingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                embeddings = new[] { new[] { 0.1f, 0.2f, 0.3f } }
+            });
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            });
         }
     }
 

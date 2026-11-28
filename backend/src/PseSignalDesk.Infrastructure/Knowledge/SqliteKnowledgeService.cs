@@ -19,7 +19,7 @@ namespace PseSignalDesk.Infrastructure.Knowledge;
 public sealed class SqliteKnowledgeService : IKnowledgeRetrievalService
 {
     private const double ReciprocalRankConstant = 60d;
-    private const int MandatorySnippetCount = 2;
+    private const int MandatorySnippetCount = 4;
     private const int MaxSnippetCap = 12;
 
     private readonly IKnowledgeRepository _repository;
@@ -335,6 +335,9 @@ public sealed class SqliteKnowledgeService : IKnowledgeRetrievalService
             .ToList();
 
         var selected = new List<int>(maxSnippets);
+        var mandatoryBudget = maxSnippets <= 1
+            ? maxSnippets
+            : Math.Min(MandatorySnippetCount, maxSnippets - 1);
 
         foreach (var index in order)
         {
@@ -345,7 +348,7 @@ public sealed class SqliteKnowledgeService : IKnowledgeRetrievalService
 
             selected.Add(index);
 
-            if (selected.Count >= Math.Min(MandatorySnippetCount, maxSnippets))
+            if (selected.Count >= mandatoryBudget)
             {
                 break;
             }
@@ -466,8 +469,15 @@ public sealed class SqliteKnowledgeService : IKnowledgeRetrievalService
 
                 var hash = KnowledgeDocumentParser.ContentHash(raw);
                 var existing = await _repository.FindBySlugAsync(parsed.Slug, cancellationToken);
+                var missingEmbeddings = _options.EnableEmbeddings &&
+                                        _embeddings.IsConfigured &&
+                                        existing is not null &&
+                                        existing.Chunks.Any(chunk => chunk.EmbeddingBlob is null || chunk.EmbeddingBlob.Length < 4);
 
-                if (existing is not null && existing.Source == "builtin" && existing.ContentHash == hash)
+                if (existing is not null &&
+                    existing.Source == "builtin" &&
+                    existing.ContentHash == hash &&
+                    !missingEmbeddings)
                 {
                     skipped++;
                     continue;

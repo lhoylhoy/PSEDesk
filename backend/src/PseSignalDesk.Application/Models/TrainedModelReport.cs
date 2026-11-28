@@ -1,3 +1,4 @@
+using PseSignalDesk.Application.Services;
 using PseSignalDesk.Domain.Entities;
 
 namespace PseSignalDesk.Application.Models;
@@ -99,9 +100,7 @@ public static class TrainedModelPresenter
               $"({improvement:+0.0;-0.0}% better). Live sizing uses a " +
               $"{model.OptimalKellyFractionMultiplier:0.00}x Kelly fraction" +
               (topFactor is null ? "." : $", leaning hardest on {topFactor.Label.ToLowerInvariant()}.")
-            : $"Fitted on {model.TrainSampleCount} trades but rejected: the held-out Brier of {model.TrainedBrierScore:0.000} " +
-              $"did not beat the {model.BaselineBrierScore:0.000} neutral prior over {model.ValidationSampleCount} " +
-              "validation trades. Live pricing stays on the structural prior until a larger sample earns the upgrade.";
+            : DescribeRejection(model);
 
         return new TrainedModelSummaryDto(
             horizon,
@@ -162,5 +161,43 @@ public static class TrainedModelPresenter
                         MidpointRounding.AwayFromZero),
                 entry.Value > 0d ? "SUPPORTS" : entry.Value < 0d ? "DAMPENS" : "NEUTRAL"))
             .ToList();
+    }
+
+    private static string DescribeRejection(TrainedHorizonModel model)
+    {
+        var totalSamples = model.TrainSampleCount + model.ValidationSampleCount;
+        if (model.TrainSampleCount == 0 ||
+            model.ValidationSampleCount < MoneyManagerTrainingService.MinimumValidationTrials ||
+            totalSamples < MoneyManagerTrainingService.MinimumTrials)
+        {
+            return $"Fitted on {model.TrainSampleCount} train / {model.ValidationSampleCount} held-out trades, " +
+                   $"below the {MoneyManagerTrainingService.MinimumTrials}-total / " +
+                   $"{MoneyManagerTrainingService.MinimumValidationTrials}-validation sample gate. " +
+                   "Live pricing stays on the structural prior until more history accumulates.";
+        }
+
+        if (model.TrainedBrierScore >= 0.25m)
+        {
+            return $"Fitted on {model.TrainSampleCount} trades but rejected: held-out Brier {model.TrainedBrierScore:0.000} " +
+                   "did not beat a 0.250 coin-flip ceiling over " +
+                   $"{model.ValidationSampleCount} validation trades. Live pricing stays on the structural prior.";
+        }
+
+        if (model.TrainedBrierScore >= model.BaselineBrierScore)
+        {
+            return $"Fitted on {model.TrainSampleCount} trades but rejected: the held-out Brier of {model.TrainedBrierScore:0.000} " +
+                   $"did not beat the {model.BaselineBrierScore:0.000} baseline over {model.ValidationSampleCount} " +
+                   "validation trades. Live pricing stays on the structural prior until a larger sample earns the upgrade.";
+        }
+
+        if (model.TrainedLogLoss > model.BaselineLogLoss)
+        {
+            return $"Fitted on {model.TrainSampleCount} trades but rejected: held-out log-loss {model.TrainedLogLoss:0.000} " +
+                   $"exceeded the {model.BaselineLogLoss:0.000} baseline over {model.ValidationSampleCount} validation trades. " +
+                   "Live pricing stays on the structural prior.";
+        }
+
+        return $"Fitted on {model.TrainSampleCount} trades (held-out Brier {model.TrainedBrierScore:0.000} vs {model.BaselineBrierScore:0.000}), " +
+               "but funded validation trades failed the positive expectancy gate. Live pricing stays on the structural prior.";
     }
 }

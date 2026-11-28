@@ -9,6 +9,7 @@ import type {
   LatestSignalsResponse,
   OrderTicket,
   ProblemDetails,
+  PromptEvalResult,
   QuotationReportImportResult,
   SignalRun,
   SignalScorecard,
@@ -219,6 +220,18 @@ export const signalsApi = {
    */
   deskMemory(horizon: Horizon, signal?: AbortSignal): Promise<DeskMemorySummary> {
     return request<DeskMemorySummary>(`/api/signals/desk-memory?${horizonQuery(horizon)}`, { signal });
+  },
+
+  /**
+   * Offline walk-forward comparison of the LLM ranker against the deterministic Quant Top-10
+   * baseline across sampled historical sessions.
+   */
+  evalLlm(horizon: Horizon, sessions = 5, lookbackDays?: number): Promise<PromptEvalResult> {
+    const lookback = lookbackDays ? `&lookbackDays=${lookbackDays}` : '';
+    return request<PromptEvalResult>(
+      `/api/signals/eval-llm?${horizonQuery(horizon)}&sessions=${sessions}${lookback}`,
+      { method: 'POST' },
+    );
   },
 };
 

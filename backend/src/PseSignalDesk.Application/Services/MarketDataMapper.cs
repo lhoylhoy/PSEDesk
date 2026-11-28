@@ -131,12 +131,57 @@ public static class MarketDataMapper
         }
     }
 
-    public static SignalCandidateInput ToCandidate(StockDailyMetric metric, string? sectorQuadrant = null)
+    public static SignalCandidateInput ToCandidate(
+        StockDailyMetric metric,
+        string? sectorQuadrant = null,
+        HorizonProfile? profile = null)
     {
         var disclosures = DeserializeDisclosures(metric.RecentDisclosuresJson);
         var limits = metric.ClosePrice > 0m
             ? PseBoardLotService.GetStaticPriceLimits(metric.ClosePrice)
             : null;
+
+        decimal? horizonScore = null;
+        decimal? refEntry = null;
+        decimal? refStop = null;
+        decimal? refTarget = null;
+        decimal? refNetRr = null;
+
+        if (profile is not null)
+        {
+            horizonScore = decimal.Round(
+                QuantitativeFilterService.ComputeHorizonScore(metric, profile),
+                2,
+                MidpointRounding.AwayFromZero);
+
+            if (metric.ClosePrice > 0m && metric.Atr14 > 0m)
+            {
+                var rawEntry = PseBoardLotService.RoundToValidTick(metric.ClosePrice);
+                var rawStop = rawEntry - (profile.AtrStopMultiplier * metric.Atr14);
+                var rawTarget = rawEntry + (profile.AtrTargetMultiplier * metric.Atr14);
+                var plan = profile.Horizon == Domain.Enums.SignalHorizon.DAY
+                    ? PseBoardLotService.NormalizeTradePlanWithinStaticLimits(rawEntry, rawEntry, rawStop, rawTarget)
+                    : PseBoardLotService.NormalizeTradePlan(rawEntry, rawStop, rawTarget);
+
+                if (plan.Entry > 0m && plan.StopLoss > 0m && plan.Target > plan.Entry)
+                {
+                    var effectiveFeeRate = PseBoardLotService.ComputeEffectiveRoundTripFeeRate(
+                        plan.Entry,
+                        SignalPipelineService.DefaultPositionBudgetPhp,
+                        metric.AvgTurnover20dPhp,
+                        metric.AtrPct);
+
+                    refEntry = plan.Entry;
+                    refStop = plan.StopLoss;
+                    refTarget = plan.Target;
+                    refNetRr = PseBoardLotService.ComputeNetRiskReward(
+                        plan.Entry,
+                        plan.StopLoss,
+                        plan.Target,
+                        effectiveFeeRate);
+                }
+            }
+        }
 
         return new SignalCandidateInput(
             metric.Ticker,
@@ -184,7 +229,12 @@ public static class MarketDataMapper
                     PseBoardLotService.ComputeTickSpreadRate(metric.ClosePrice) * 100m,
                     4,
                     MidpointRounding.AwayFromZero)
-                : null);
+                : null,
+            HorizonScore: horizonScore,
+            ReferenceEntryPrice: refEntry,
+            ReferenceStopLoss: refStop,
+            ReferenceTargetPrice: refTarget,
+            ReferenceNetRiskReward: refNetRr);
     }
 
     public static TechnicalMetricsDto ToMetricsDto(StockDailyMetric metric) => new(

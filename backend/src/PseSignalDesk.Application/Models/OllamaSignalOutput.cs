@@ -130,7 +130,8 @@ public sealed record OllamaSignalRequest(
     // The desk's own graded record plus the model that currently prices the book. Both are
     // optional: a desk with no resolved picks prints nothing instead of inventing a record.
     DeskMemorySummary? DeskMemory = null,
-    TrainedModelSummaryDto? LearnedModel = null);
+    TrainedModelSummaryDto? LearnedModel = null,
+    IReadOnlyList<string>? DataQualityWarnings = null);
 
 public sealed record SignalCandidateInput(
     string Ticker,
@@ -175,7 +176,12 @@ public sealed record SignalCandidateInput(
     decimal? Beta252d = null,
     decimal? MaxDrawdown252dPct = null,
     string? SectorQuadrant = null,
-    decimal? TickSpreadPct = null);
+    decimal? TickSpreadPct = null,
+    decimal? HorizonScore = null,
+    decimal? ReferenceEntryPrice = null,
+    decimal? ReferenceStopLoss = null,
+    decimal? ReferenceTargetPrice = null,
+    decimal? ReferenceNetRiskReward = null);
 
 public sealed record PriorSignalInput(
     string Ticker,

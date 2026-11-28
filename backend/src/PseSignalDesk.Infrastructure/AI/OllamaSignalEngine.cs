@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PseSignalDesk.Application.Interfaces;
@@ -38,6 +39,7 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
     private readonly OllamaCloudOptions _options;
     private readonly SignalJsonParser _parser;
     private readonly ILogger<OllamaSignalEngine> _logger;
+    private readonly string _archiveRoot;
 
     /// <summary>
     /// A <see cref="OllamaCloudOptions.FastExtractionModel"/> the endpoint does not serve is a
@@ -57,12 +59,14 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
         HttpClient httpClient,
         IOptions<OllamaCloudOptions> options,
         SignalJsonParser parser,
-        ILogger<OllamaSignalEngine> logger)
+        ILogger<OllamaSignalEngine> logger,
+        IHostEnvironment? environment = null)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _parser = parser;
         _logger = logger;
+        _archiveRoot = environment?.ContentRootPath ?? AppContext.BaseDirectory;
     }
 
     public string EngineName => $"Ollama Cloud ({_options.Model})";
@@ -133,7 +137,57 @@ public sealed class OllamaSignalEngine : IOllamaSignalEngine
             completion.SchemaConstrained,
             !string.IsNullOrWhiteSpace(enriched.FastExtractionSummary));
 
+        await ArchivePromptAsync(enriched, systemPrompt, userPrompt, completion.Content, metadata, cancellationToken);
+
         return new OllamaSignalResult(parse.Output!, metadata);
+    }
+
+    private async Task ArchivePromptAsync(
+        OllamaSignalRequest request,
+        string systemPrompt,
+        string userPrompt,
+        string rawResponse,
+        OllamaGenerationMetadata metadata,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.ArchivePrompts || string.IsNullOrWhiteSpace(_options.PromptArchiveDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            var directory = Path.IsPathRooted(_options.PromptArchiveDirectory)
+                ? _options.PromptArchiveDirectory
+                : Path.Combine(_archiveRoot, _options.PromptArchiveDirectory);
+            Directory.CreateDirectory(directory);
+
+            var shortHash = metadata.PromptHash.Length >= 12 ? metadata.PromptHash[..12] : metadata.PromptHash;
+            var path = Path.Combine(directory, $"{request.TradeDate:yyyy-MM-dd}_{request.Horizon}_{shortHash}.json");
+            var payload = JsonSerializer.Serialize(new
+            {
+                request.TradeDate,
+                Horizon = request.Horizon.ToString(),
+                metadata.Model,
+                metadata.PromptHash,
+                metadata.Temperature,
+                metadata.Seed,
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                RawResponse = rawResponse,
+                ArchivedAtUtc = DateTime.UtcNow
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+
+            await File.WriteAllTextAsync(path, payload, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not archive prompt for {Date} {Horizon}.", request.TradeDate, request.Horizon);
+        }
     }
 
     /// <summary>

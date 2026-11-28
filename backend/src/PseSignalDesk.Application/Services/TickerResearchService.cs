@@ -122,11 +122,16 @@ public sealed class TickerResearchService
             ? PseBoardLotService.NormalizeTradePlanWithinStaticLimits(rawEntry, rawEntry, rawStop, rawTarget)
             : PseBoardLotService.NormalizeTradePlan(rawEntry, rawStop, rawTarget);
 
-        // The base rate must describe the barrier geometry of the horizon being researched,
-        // so it is recomputed from the ticker's own series with that horizon's own profile.
-        var empiricalWinRate = bars is not null
-            ? ProbabilisticEdgeService.ComputeEmpiricalBaseRate(bars, profile)
-            : metric.EmpiricalWinRate;
+        // The base rate and payoff distribution must describe the barrier geometry of the horizon
+        // being researched, so both are recomputed from the ticker's own series with that horizon's profile.
+        var barrierStats = bars is not null
+            ? ProbabilisticEdgeService.ComputeBarrierStatistics(bars, profile)
+            : BarrierStatistics.None;
+        var empiricalWinRate = barrierStats.Trials > 0
+            ? barrierStats.WinRate
+            : bars is not null
+                ? null
+                : metric.EmpiricalWinRate;
 
         var disclosures = MarketDataMapper.DeserializeDisclosures(metric.RecentDisclosuresJson);
         var trapFlags = PseDisclosureClassifier.DetectTrapFlags(disclosures);
@@ -185,7 +190,9 @@ public sealed class TickerResearchService
             NetForeignTurnoverRatio: foreignTurnoverRatio,
             Us10YClosePct: latestSnapshot?.Us10YClosePct,
             Sector: metric.Sector,
-            LearnedModel: learnedModel));
+            LearnedModel: learnedModel,
+            LearnedFeatures: TrainedModelFeatures.FromMetric(metric),
+            BarrierStats: barrierStats.Trials > 0 ? barrierStats : null));
 
         OrderTicketDto? ticket = null;
 

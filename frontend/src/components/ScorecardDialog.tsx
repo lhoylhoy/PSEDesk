@@ -411,6 +411,48 @@ export function ScorecardDialog({ open, onOpenChange, horizon, viewMode = 'simpl
                 </p>
               </section>
             </div>
+
+            <section className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="type-eyebrow text-fg-subtle">
+                  {simple ? 'Did the AI beat the plain screen?' : 'LLM vs. Quant screen · ranking attribution'}
+                </h3>
+                {scorecard.rankingQuality?.meanSpearmanRho != null ? (
+                  <Tooltip label="Spearman rank correlation between the LLM's order and the quant screen's order among the picks it made. 1.00 = identical order; 0 = independent.">
+                    <span className="tabular text-2xs text-fg-muted" tabIndex={0}>
+                      Spearman ρ {scorecard.rankingQuality.meanSpearmanRho.toFixed(2)} ·{' '}
+                      {formatInteger(scorecard.rankingQuality.runsMeasured)} run(s)
+                    </span>
+                  </Tooltip>
+                ) : null}
+              </div>
+              {!scorecard.rankingQuality ? (
+                <p className="mt-2 text-xs text-fg-subtle">
+                  No graded run carries quant-rank provenance yet. Once runs generated after the provenance
+                  upgrade finish their holding window (or via POST /api/signals/eval-llm), this panel compares
+                  the LLM Top 3 against the deterministic Quant Top 3.
+                </p>
+              ) : (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg border border-line/60 bg-ink-900/60 px-3 py-2">
+                    <p className="type-eyebrow text-fg-subtle">LLM Top 3</p>
+                    <p className="tabular mt-1 text-xs text-fg-muted">
+                      {scorecard.rankingQuality.modelTop3Resolved > 0
+                        ? `${formatProbability(scorecard.rankingQuality.modelTop3WinRate)} win · ${formatR(scorecard.rankingQuality.modelTop3AverageRealizedNetR)} avg · n=${formatInteger(scorecard.rankingQuality.modelTop3Resolved)}`
+                        : 'No Top-3 picks resolved yet'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-line/60 bg-ink-900/60 px-3 py-2">
+                    <p className="type-eyebrow text-fg-subtle">Quant Screen Top 3</p>
+                    <p className="tabular mt-1 text-xs text-fg-muted">
+                      {scorecard.rankingQuality.quantTop3Resolved > 0
+                        ? `${formatProbability(scorecard.rankingQuality.quantTop3WinRate)} win · ${formatR(scorecard.rankingQuality.quantTop3AverageRealizedNetR)} avg · n=${formatInteger(scorecard.rankingQuality.quantTop3Resolved)}`
+                        : 'No Quant Top-3 picks resolved yet'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </section>
             </OptionalDisclosure>
 
             <section className="mt-4 rounded-xl border border-line/70 bg-ink-850/60 p-3">

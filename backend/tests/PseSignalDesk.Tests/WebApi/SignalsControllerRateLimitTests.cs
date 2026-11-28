@@ -17,6 +17,7 @@ public sealed class SignalsControllerRateLimitTests
     [InlineData(nameof(SignalsController.RunBacktest))]
     [InlineData(nameof(SignalsController.Train))]
     [InlineData(nameof(SignalsController.TrainAll))]
+    [InlineData(nameof(SignalsController.EvalLlm))]
     public void Expensive_endpoint_carries_the_shared_rate_limit_policy(string action)
     {
         var method = typeof(SignalsController).GetMethod(action, BindingFlags.Public | BindingFlags.Instance);

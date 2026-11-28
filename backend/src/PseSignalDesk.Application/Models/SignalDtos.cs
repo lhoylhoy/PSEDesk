@@ -154,7 +154,8 @@ public sealed record SignalRunDto(
     MarketBreadthDto? Breadth,
     // How the book was produced (model, prompt fingerprint, sampling settings, cost). Null on
     // runs stored before provenance tracking, so an old run simply shows no provenance.
-    ModelProvenanceDto? ModelProvenance = null);
+    ModelProvenanceDto? ModelProvenance = null,
+    IReadOnlyList<string>? DataQualityWarnings = null);
 
 /// <summary>
 /// The provenance of one generation: which engine and model, the prompt fingerprint, the

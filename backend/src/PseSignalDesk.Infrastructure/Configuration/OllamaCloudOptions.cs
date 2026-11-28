@@ -79,6 +79,14 @@ public sealed class OllamaCloudOptions
     /// </summary>
     public bool UseStructuredOutput { get; set; } = true;
 
+    /// <summary>
+    /// When true, persists the exact system prompt, user prompt and raw assistant response per
+    /// generation under <see cref="PromptArchiveDirectory"/> for offline replay and prompt audits.
+    /// </summary>
+    public bool ArchivePrompts { get; set; }
+
+    public string PromptArchiveDirectory { get; set; } = "prompt-archive";
+
     public bool HasApiKey => !string.IsNullOrWhiteSpace(ApiKey);
 
     public bool HasFastExtractionModel => !string.IsNullOrWhiteSpace(FastExtractionModel);

@@ -620,13 +620,15 @@ public sealed class ProbabilisticEdgeService
 
         // The self-trained money-manager model: only a promoted model is ever present here,
         // and it may move the odds by at most six points from the prior it was fitted against.
-        // The model learned the *residual* over this structural prior (its intercept and weights
-        // were fitted with logit(prior) as an offset), so applying the residual here updates the
-        // probability instead of counting stage/RS/VCP/ATR/accumulation a second time.
+        // The trainer fits only on non-bearish sessions, so applying a bull/neutral learned residual
+        // in a BEARISH regime would extrapolate out of distribution.
         var learnedTilt = 0m;
-        if (request.LearnedModel is not null && request.LearnedFeatures is not null)
+        var applyLearnedModel = request.LearnedModel is not null &&
+                                request.LearnedFeatures is not null &&
+                                request.MarketRegime != MarketRegime.BEARISH;
+        if (applyLearnedModel)
         {
-            learnedTilt = request.LearnedModel.ResidualTilt(probability, request.LearnedFeatures);
+            learnedTilt = request.LearnedModel!.ResidualTilt(probability, request.LearnedFeatures!);
             probability += learnedTilt;
         }
 
@@ -669,7 +671,7 @@ public sealed class ProbabilisticEdgeService
 
         // A promoted model also owns how much of full Kelly the desk should stake. The
         // Quarter-Kelly figure is the neutral reference, so 0.25x leaves it unchanged.
-        if (request.LearnedModel is { } learnedModel && learnedModel.KellyScale > 0m)
+        if (applyLearnedModel && request.LearnedModel is { } learnedModel && learnedModel.KellyScale > 0m)
         {
             kelly = decimal.Round(kelly * learnedModel.KellyScale, 6, MidpointRounding.AwayFromZero);
         }

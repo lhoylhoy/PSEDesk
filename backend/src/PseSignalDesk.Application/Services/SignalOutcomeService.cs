@@ -147,20 +147,46 @@ public sealed class SignalOutcomeService
             return true;
         }
 
+        var entrySessionDate = window[entryIndex].TradeDate;
+        netRiskPerShare = PseBoardLotService.ComputeNetRiskPerShare(
+            item.EntryPrice,
+            item.StopLoss,
+            PseBoardLotService.RoundTripFeeRateOn(entrySessionDate));
+        if (netRiskPerShare <= 0m)
+        {
+            return false;
+        }
+
         for (var index = entryIndex; index < window.Count; index++)
         {
             var session = window[index];
             var high = session.HighPrice ?? session.ClosePrice;
             var low = session.LowPrice ?? session.ClosePrice;
 
-            if (low <= item.StopLoss)
+            // On bars after the fill bar, an overnight gap through the stop fills at the open; on
+            // the fill bar itself only a session that opened above entry can gap through the stop
+            // after filling the limit order, whereas an open already below entry keeps the resting stop.
+            decimal? stopFill;
+            if (index > entryIndex || (session.OpenPrice is decimal open && open > item.EntryPrice))
+            {
+                stopFill = PseBoardLotService.ResolveStopFillPrice(
+                    item.StopLoss,
+                    session.OpenPrice ?? session.ClosePrice,
+                    low);
+            }
+            else
+            {
+                stopFill = low <= item.StopLoss ? item.StopLoss : null;
+            }
+
+            if (stopFill is decimal stopExitPrice)
             {
                 ApplyResolution(
                     item,
                     SignalOutcomeStatus.LOSS_STOP,
                     session.TradeDate,
-                    item.StopLoss,
-                    NetRealizedR(item.EntryPrice, item.StopLoss, netRiskPerShare),
+                    stopExitPrice,
+                    NetRealizedR(item.EntryPrice, stopExitPrice, netRiskPerShare, session.TradeDate),
                     index + 1);
                 return true;
             }
@@ -175,7 +201,7 @@ public sealed class SignalOutcomeService
                     SignalOutcomeStatus.WIN_TARGET,
                     session.TradeDate,
                     item.TargetPrice,
-                    NetRealizedR(item.EntryPrice, item.TargetPrice, netRiskPerShare),
+                    NetRealizedR(item.EntryPrice, item.TargetPrice, netRiskPerShare, session.TradeDate),
                     index + 1);
                 return true;
             }
@@ -189,7 +215,7 @@ public sealed class SignalOutcomeService
         }
 
         var last = window[^1];
-        var expiryR = NetRealizedR(item.EntryPrice, last.ClosePrice, netRiskPerShare);
+        var expiryR = NetRealizedR(item.EntryPrice, last.ClosePrice, netRiskPerShare, last.TradeDate);
 
         ApplyResolution(
             item,
@@ -223,7 +249,11 @@ public sealed class SignalOutcomeService
     /// charged its own rate — commission and VAT on the buy, plus the 0.10% stock transaction tax
     /// on the sell — because the sell leg is roughly four times the buy leg.
     /// </summary>
-    private static decimal NetRealizedR(decimal entry, decimal exit, decimal netRiskPerShare)
+    private static decimal NetRealizedR(
+        decimal entry,
+        decimal exit,
+        decimal netRiskPerShare,
+        DateOnly? exitDate = null)
     {
         if (entry <= 0m || exit <= 0m)
         {
@@ -232,7 +262,7 @@ public sealed class SignalOutcomeService
 
         var netPerShare = (exit - entry) -
                           (entry * PseBoardLotService.BuyLegFeeRate) -
-                          (exit * PseBoardLotService.SellLegFeeRate);
+                          (exit * PseBoardLotService.SellLegFeeRateOn(exitDate));
 
         return decimal.Round(netPerShare / netRiskPerShare, 4, MidpointRounding.AwayFromZero);
     }

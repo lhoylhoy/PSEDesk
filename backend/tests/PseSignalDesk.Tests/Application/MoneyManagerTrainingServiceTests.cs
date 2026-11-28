@@ -78,6 +78,145 @@ public sealed class MoneyManagerTrainingServiceTests
         Assert.Equal(SignalHorizon.MONTH, repository.SavedModels[0].Horizon);
     }
 
+    [Fact]
+    public void SimulateBarrier_charges_pre_cmepa_tax_and_fills_gap_down_stops_at_open()
+    {
+        var profile = HorizonProfile.For(SignalHorizon.WEEK);
+        var metric = new StockDailyMetric
+        {
+            Ticker = "ICT",
+            ClosePrice = 100m,
+            Atr14 = 2m,
+            AtrPct = 2m,
+            AvgTurnover20dPhp = 50_000_000m,
+            MedianTurnover20dPhp = 50_000_000m,
+            ActiveTradingDays20d = 20
+        };
+
+        var preCmepaBars = new List<OhlcvBar>
+        {
+            new(new DateOnly(2024, 6, 3), 100m, 101m, 99m, 100m, 1_000_000),
+            new(new DateOnly(2024, 6, 4), 94m, 95m, 93m, 94m, 1_000_000),
+            new(new DateOnly(2024, 6, 5), 95m, 96m, 94m, 95m, 1_000_000)
+        };
+        var postCmepaBars = new List<OhlcvBar>
+        {
+            new(new DateOnly(2025, 8, 4), 100m, 101m, 99m, 100m, 1_000_000),
+            new(new DateOnly(2025, 8, 5), 94m, 95m, 93m, 94m, 1_000_000),
+            new(new DateOnly(2025, 8, 6), 95m, 96m, 94m, 95m, 1_000_000)
+        };
+        var ema20 = new decimal?[] { 99m, 98m, 98m };
+
+        var preOutcome = MoneyManagerTrainingService.SimulateBarrier(preCmepaBars, 0, ema20, metric, profile);
+        var postOutcome = MoneyManagerTrainingService.SimulateBarrier(postCmepaBars, 0, ema20, metric, profile);
+
+        Assert.NotNull(preOutcome);
+        Assert.NotNull(postOutcome);
+        // Stop was 97.00, session gapped open to 94.00 -> realized loss must be materially worse than -1.0R.
+        Assert.True(preOutcome!.Value.RealizedR < -1.5m);
+        Assert.True(postOutcome!.Value.RealizedR < -1.5m);
+        // Pre-CMEPA charged 0.60% STT vs 0.10% post-CMEPA, so its effective fee rate is 50 bps higher.
+        Assert.Equal(0.0050m, preOutcome.Value.FeeRate - postOutcome.Value.FeeRate);
+    }
+
+    [Fact]
+    public void IsEligible_enforces_median_turnover_and_active_trading_days()
+    {
+        var profile = HorizonProfile.For(SignalHorizon.WEEK);
+        var spikedOnlyMetric = new StockDailyMetric
+        {
+            Ticker = "THIN",
+            ClosePrice = 10m,
+            Sma50 = 9m,
+            Sma200 = 8m,
+            Rsi14 = 55m,
+            VolumeRatioVs20d = 1.5m,
+            AtrPct = 2.0m,
+            WeinsteinStage = "STAGE_2",
+            AvgTurnover20dPhp = 10_000_000m,
+            MedianTurnover20dPhp = 1_500_000m,
+            ActiveTradingDays20d = 12
+        };
+
+        Assert.False(MoneyManagerTrainingService.IsEligible(spikedOnlyMetric, profile));
+    }
+
+    [Fact]
+    public void Fit_rejects_model_whose_held_out_brier_exceeds_coin_flip_or_prior()
+    {
+        var trials = new List<MoneyManagerTrainingService.TrainingTrial>(120);
+        var start = new DateOnly(2024, 1, 2);
+
+        for (var i = 0; i < 120; i++)
+        {
+            var entry = start.AddDays(i * 2);
+            var exit = entry.AddDays(1);
+            // Make training labels 80% winners so constant base rate is ~0.80, while validation flips to 50/50
+            // (so constant baseRate has terrible Brier ~0.34 while prior at 0.50 has Brier 0.25).
+            var inValidation = i >= 84;
+            var won = inValidation ? (i % 2 == 0) : (i % 5 != 0);
+            var features = new decimal?[TrainedModelFeatures.Length];
+            for (var f = 0; f < features.Length; f++)
+            {
+                features[f] = won ? 1m : -1m;
+            }
+            if (inValidation)
+            {
+                // Anti-correlated on validation so trained Brier >= 0.25 even if it beats stale constant baseRate.
+                for (var f = 0; f < features.Length; f++)
+                {
+                    features[f] = won ? -1m : 1m;
+                }
+            }
+
+            trials.Add(new MoneyManagerTrainingService.TrainingTrial(
+                $"T{i:000}",
+                entry,
+                exit,
+                won,
+                won ? 1.8m : -1.0m,
+                NetRiskReward: 2.0m,
+                StructuralPrior: 0.50m,
+                features));
+        }
+
+        var model = MoneyManagerTrainingService.Fit(SignalHorizon.DAY, trials);
+
+        Assert.False(model.IsActive);
+    }
+
+    [Fact]
+    public void TrainedModelPresenter_explains_expectancy_rejection_when_brier_beat_baseline()
+    {
+        var model = new TrainedHorizonModel
+        {
+            Horizon = SignalHorizon.DAY,
+            TrainedAtUtc = DateTime.UtcNow,
+            TrainStartDate = new DateOnly(2024, 1, 1),
+            TrainEndDate = new DateOnly(2025, 1, 1),
+            ValidationStartDate = new DateOnly(2025, 2, 1),
+            ValidationEndDate = new DateOnly(2026, 1, 1),
+            TrainSampleCount = 100,
+            ValidationSampleCount = 40,
+            EmbargoBars = 3,
+            BaselineBrierScore = 0.231m,
+            TrainedBrierScore = 0.229m,
+            BaselineLogLoss = 0.656m,
+            TrainedLogLoss = 0.651m,
+            ValidationWinRate = 0.35m,
+            ValidationExpectancyR = -0.19m,
+            ValidationProfitFactor = 0.52m,
+            OptimalKellyFractionMultiplier = 0.15m,
+            IsActive = false
+        };
+
+        var dto = TrainedModelPresenter.ToDto(model, "DAY");
+
+        Assert.Equal(TrainedModelStatus.PriorFallback, dto.Status);
+        Assert.Contains("positive expectancy gate", dto.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("did not beat the", dto.Summary, StringComparison.Ordinal);
+    }
+
     private static MoneyManagerTrainingService CreateService(
         IReadOnlyList<OhlcvBar> bars,
         ISignalRepository repository)

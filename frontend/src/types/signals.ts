@@ -320,6 +320,8 @@ export interface SignalRun {
   breadth: MarketBreadth | null;
   /** How the book was generated: model, prompt fingerprint, sampling settings, cost. */
   modelProvenance?: ModelProvenance | null;
+  /** Session-level data completeness warnings (e.g. proxy PSEi, unreported DQR flow, zero disclosures). */
+  dataQualityWarnings?: string[] | null;
 }
 
 /**
@@ -769,5 +771,51 @@ export interface DeskMemorySummary {
   worstSectors: SectorMemory[];
   topFactors: LearnedFactorWeight[];
   recentStopOuts: LossPostMortem[];
+}
+
+export interface PromptEvalCohortSummary {
+  totalPicks: number;
+  filledPicks: number;
+  unfilledPicks: number;
+  fillRate: number;
+  winRate: number;
+  meanRealizedNetR: number;
+  profitFactor: number;
+  brierScore: number;
+  top3Resolved: number;
+  top3WinRate: number;
+  top3MeanRealizedNetR: number;
+}
+
+export interface PromptEvalSession {
+  tradeDate: string;
+  regime: string;
+  candidateCount: number;
+  llmPickCount: number;
+  quantPickCount: number;
+  spearmanRho: number | null;
+  llmMeanRealizedNetR: number;
+  quantMeanRealizedNetR: number;
+  latencyMs: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+}
+
+export interface PromptEvalResult {
+  horizon: Horizon | string;
+  engine: string;
+  model: string;
+  sessionsRequested: number;
+  sessionsEvaluated: number;
+  llmSummary: PromptEvalCohortSummary;
+  quantBaselineSummary: PromptEvalCohortSummary;
+  meanSpearmanRho: number | null;
+  deltaWinRatePct: number;
+  deltaMeanRealizedNetR: number;
+  deltaBrierScore: number;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalLatencyMs: number;
+  sessions: PromptEvalSession[];
 }
 

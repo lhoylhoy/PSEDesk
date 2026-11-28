@@ -17,7 +17,8 @@ public static class SignalRunMapper
     public static SignalRunDto ToDto(
         SignalRun run,
         IReadOnlyDictionary<string, StockDailyMetric> metricsByTicker,
-        BookSizingSnapshot? book = null)
+        BookSizingSnapshot? book = null,
+        IReadOnlyList<string>? dataQualityWarnings = null)
     {
         var items = run.Items
             .OrderBy(i => i.Rank)
@@ -153,7 +154,8 @@ public static class SignalRunMapper
                     run.CompletionTokens,
                     run.PromptCharacters,
                     run.SchemaConstrained,
-                    run.FastExtractionApplied));
+                    run.FastExtractionApplied),
+            DataQualityWarnings: dataQualityWarnings is { Count: > 0 } ? dataQualityWarnings : null);
     }
 
     public static IReadOnlyList<string> ReadCitations(string? json)

@@ -53,6 +53,32 @@ public sealed class SignalOutcomeServiceTests
     }
 
     [Fact]
+    public void ResolveItem_fills_post_entry_gap_down_stop_at_open_price()
+    {
+        var item = BuildItem();
+        var forward = new List<StockDailyMetric>
+        {
+            BuildSession(RunDate.AddDays(1), close: 101m, high: 101.5m, low: 99.8m),
+            new StockDailyMetric
+            {
+                TradeDate = RunDate.AddDays(2),
+                Ticker = "ICT",
+                OpenPrice = 91m,
+                HighPrice = 92m,
+                LowPrice = 90m,
+                ClosePrice = 91m
+            }
+        };
+
+        var resolved = SignalOutcomeService.ResolveItem(item, forward, forwardWindowBars: 10);
+
+        Assert.True(resolved);
+        Assert.Equal(SignalOutcomeStatus.LOSS_STOP, item.OutcomeStatus);
+        Assert.Equal(91m, item.OutcomeExitPrice);
+        Assert.True(item.RealizedNetR < -1.5m);
+    }
+
+    [Fact]
     public void ResolveItem_marks_the_expiry_close_when_neither_barrier_is_hit()
     {
         var item = BuildItem();
